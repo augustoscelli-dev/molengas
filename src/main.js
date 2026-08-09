@@ -693,7 +693,22 @@ const MAPAS = [
         }
         p.needsUpdate = true;
       };
-      // (o "morro" agora e feito de casas empilhadas; a paisagem vem do fundo 2D)
+      // CENARIO detalhado do Rio (diorama) — morro ao fundo, tingido de verde (vegetacao)
+      new GLTFLoader().load(ASSET('assets/modelos/rio-cenario.glb'), (gltf) => {
+        const s = gltf.scene;
+        const b = new THREE.Box3().setFromObject(s), sz = new THREE.Vector3(); b.getSize(sz);
+        s.scale.setScalar(22 / Math.max(sz.x, sz.z));
+        const b2 = new THREE.Box3().setFromObject(s);
+        s.position.set(0, -b2.min.y - 2.5, -17);
+        const verde = new THREE.Color(0x5f7a44);
+        s.traverse((o) => {
+          if (o.isMesh) {
+            o.castShadow = true; o.receiveShadow = true;
+            o.material = o.material.clone(); o.material.color.lerp(verde, 0.55);
+          }
+        });
+        scene.add(s); m.meshes.push(s);
+      });
       // CASAS destrutiveis: mistura de modelos de favela (cor aplicada por codigo).
       // Cada casa e um prop agarravel/socavel -> arranque uma e jogue no rival.
       const cores = [0xff6b6b, 0xffd166, 0x06d6a0, 0x4d96ff, 0xf78fb3, 0xffa552, 0xf4f4f4];
