@@ -738,7 +738,7 @@ function dessaturar(cor, t) {
   return (Math.min(255, f(r)) << 16) | (Math.min(255, f(g)) << 8) | Math.min(255, f(b));
 }
 
-function buildVisual(skin, fase = 0) {
+function buildVisual(skin, fase = 0, slot = 0) {
   const meshes = { _skin: skin, _fase: fase };
   const mats = {};
   // Fábrica de materiais por estilo
@@ -785,7 +785,10 @@ function buildVisual(skin, fase = 0) {
       if (spec.name === 'torso') {
         obj = new THREE.Group();
         obj._baseS = [1, 1, 1];
-        new GLTFLoader().load(ASSET('assets/modelos/' + MODELO_GLB + '.glb'), (gltf) => {
+        // ?glb aceita lista por lutador (ex.: jaeger,kaiju); cai no 1o se faltar
+        const nomesGLB = MODELO_GLB.split(',');
+        const nomeGLB = (nomesGLB[slot] || nomesGLB[0] || 'robo').trim();
+        new GLTFLoader().load(ASSET('assets/modelos/' + nomeGLB + '.glb'), (gltf) => {
           const modelo = gltf.scene;
           // Auto-encaixe: escala pra ~2.33 de altura e ancora o tronco a
           // ~55% dos pés (funciona com qualquer GLB, não só o robo).
@@ -1032,7 +1035,7 @@ function montarLutadores(configs) {
     });
     rag.props = mapa.props;
     rag.controle = mapa.controle ?? 1;
-    const meshes = buildVisual(SKINS[cfg.skin], i * 1.9);
+    const meshes = buildVisual(SKINS[cfg.skin], i * 1.9, i);
     return { rag, meshes, cfg, slot: i, vivo: true, score: 0 };
   });
   for (const l of lutadores) l.rag.rivals = lutadores.filter((o) => o !== l).map((o) => o.rag);
@@ -1299,7 +1302,7 @@ function trocarSkin(i, dir) {
   const l = lutadores.find((x) => x.slot === i);
   if (l) {
     destroyVisual(l.meshes);
-    l.meshes = buildVisual(SKINS[selCfg[i].skin], i * 1.9);
+    l.meshes = buildVisual(SKINS[selCfg[i].skin], i * 1.9, i);
     l.cfg.skin = selCfg[i].skin;
   }
   atualizarSelecao();
@@ -1579,7 +1582,7 @@ function receberSnap(m) {
     let v = online.visuais.get(pl.s);
     if (!v || v.skin !== pl.sk) {
       if (v) destroyVisual(v.meshes);
-      v = { skin: pl.sk, meshes: buildVisual(SKINS[pl.sk % SKINS.length], pl.s * 1.9) };
+      v = { skin: pl.sk, meshes: buildVisual(SKINS[pl.sk % SKINS.length], pl.s * 1.9, pl.s) };
       online.visuais.set(pl.s, v);
     }
   }
