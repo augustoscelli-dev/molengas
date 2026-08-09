@@ -664,13 +664,13 @@ const MAPAS = [
         }
         p.needsUpdate = true;
       };
-      // CENARIO do Rio (diorama 3D) — a base visual do mapa (como voce curtiu no print)
+      // CENARIO do Rio (diorama 3D) — pequeno, LA NO FUNDO, so como moldura distante
       new GLTFLoader().load(ASSET('assets/modelos/rio-cenario.glb'), (gltf) => {
         const s = gltf.scene;
         const b = new THREE.Box3().setFromObject(s), sz = new THREE.Vector3(); b.getSize(sz);
-        s.scale.setScalar(16 / Math.max(sz.x, sz.z));
+        s.scale.setScalar(13 / Math.max(sz.x, sz.z));
         const b2 = new THREE.Box3().setFromObject(s);
-        s.position.set(0, -b2.min.y - 2.4, -2);
+        s.position.set(0, -b2.min.y - 2, -15);
         s.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
         scene.add(s); m.meshes.push(s);
       });
@@ -705,8 +705,15 @@ const MAPAS = [
             y += it.h;
           }
         };
-        // so na TERRA (fora do disco de agua, raio > 4.4)
-        torre(-6, -3, 4); torre(6, -3, 4); torre(-6.4, 2.6, 3); torre(6.4, 2.6, 3); torre(0, -6, 4); torre(0, 6, 3);
+        // FAVELA densa: aneis de torres ao redor da agua (TUDO destrutivel).
+        // Mais alta/densa nos aneis externos -> vira o "morro" de casas.
+        const aneis = [{ r: 5.6, n: 8, alt: 2 }, { r: 6.9, n: 10, alt: 3 }, { r: 8.3, n: 12, alt: 3 }];
+        for (const an of aneis) {
+          for (let i = 0; i < an.n; i++) {
+            const ang = (i / an.n) * Math.PI * 2 + an.r; // desalinha os aneis
+            torre(Math.cos(ang) * an.r, Math.sin(ang) * an.r, an.alt + (i % 2));
+          }
+        }
       });
       // Palmeiras decorativas na terra
       carregarGeo('assets/modelos/palmeira-low.glb').then((geo) => {
