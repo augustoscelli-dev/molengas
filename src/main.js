@@ -662,7 +662,19 @@ const MAPAS = [
         s.scale.setScalar(16 / Math.max(size.x, size.z));
         const b2 = new THREE.Box3().setFromObject(s);
         s.position.set(0, -b2.min.y - 2.4, -2);
-        s.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+        // Tom verde (morro verdejante) pra combinar com a pintura do Rio.
+        // Duas faixas: mata mais escura embaixo, verde mais claro no alto.
+        const yTopo = b2.max.y, yBase = b2.min.y, span = Math.max(0.001, yTopo - yBase);
+        const cBaixo = new THREE.Color(0x35521f), cAlto = new THREE.Color(0x6f9a45);
+        s.traverse((o) => {
+          if (!o.isMesh) return;
+          o.castShadow = true; o.receiveShadow = true;
+          const c = new THREE.Vector3(); new THREE.Box3().setFromObject(o).getCenter(c);
+          const t = Math.min(1, Math.max(0, (c.y - yBase) / span));
+          o.material = new THREE.MeshStandardMaterial({
+            color: cBaixo.clone().lerp(cAlto, t), roughness: 0.95, metalness: 0, flatShading: true,
+          });
+        });
         scene.add(s); m.meshes.push(s);
       });
       // CASAS destrutiveis (mistura dos 4 modelos, coloridas) nas BORDAS/pe do morro
