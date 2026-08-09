@@ -632,6 +632,72 @@ const MAPAS = [
       m.reset = () => resetBlocos(m);
     },
   },
+  {
+    nome: 'RIO',
+    build(m) {
+      // Colisor de chao (todos ficam de pe; agua/terra sao visuais)
+      chaoFixo(m, 13, 10, new THREE.MeshBasicMaterial({ visible: false }));
+      // TERRA: chao visual (areia) em volta — onde ficam as casas destrutiveis
+      const terra = new THREE.Mesh(
+        new THREE.PlaneGeometry(28, 22),
+        new THREE.MeshStandardMaterial({ color: 0x9c7a4d, roughness: 0.96 }),
+      );
+      terra.rotation.x = -Math.PI / 2; terra.receiveShadow = true; scene.add(terra); m.meshes.push(terra);
+      // AGUA no CENTRO (arena principal da luta) — disco azul com ondas
+      const gAgua = new THREE.CircleGeometry(4.4, 72);
+      const agua = new THREE.Mesh(gAgua, new THREE.MeshStandardMaterial({
+        color: 0x2f86b8, transparent: true, opacity: 0.85, roughness: 0.12, metalness: 0.1,
+      }));
+      agua.rotation.x = -Math.PI / 2; agua.position.y = 0.05; agua.receiveShadow = true;
+      scene.add(agua); m.meshes.push(agua);
+      const aro = new THREE.Mesh(
+        new THREE.RingGeometry(4.4, 4.75, 72),
+        new THREE.MeshStandardMaterial({ color: 0xe6d3a6, roughness: 0.9 }),
+      );
+      aro.rotation.x = -Math.PI / 2; aro.position.y = 0.03; scene.add(aro); m.meshes.push(aro);
+      const baseA = gAgua.attributes.position.array.slice();
+      m.update = (t) => {
+        const p = gAgua.attributes.position;
+        for (let i = 0; i < p.count; i++) {
+          const x = baseA[i * 3], y = baseA[i * 3 + 1];
+          p.array[i * 3 + 2] = Math.sin(x * 0.9 + t * 1.7) * 0.05 + Math.cos(y * 1.0 + t * 1.3) * 0.045;
+        }
+        p.needsUpdate = true;
+      };
+      // Cenario do Rio ao fundo (diorama decimado)
+      new GLTFLoader().load(ASSET('assets/modelos/rio-cenario.glb'), (gltf) => {
+        const s = gltf.scene;
+        const b = new THREE.Box3().setFromObject(s), sz = new THREE.Vector3(); b.getSize(sz);
+        s.scale.setScalar(20 / Math.max(sz.x, sz.z));
+        const b2 = new THREE.Box3().setFromObject(s);
+        s.position.set(0, -b2.min.y - 3.2, -6);
+        s.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+        scene.add(s); m.meshes.push(s);
+      });
+      // CASAS destrutiveis na TERRA (bordas): corra ate a terra, arranque um bloco e jogue no rival
+      const cores = [0xff6b6b, 0xffd166, 0x06d6a0, 0x4d96ff, 0xf78fb3, 0xffa552, 0xe6e6e6];
+      const torre = (px, pz, alt) => {
+        for (let col = 0; col < 2; col++) for (let a = 0; a < alt; a++) {
+          const x = px + (col - 0.5) * 0.57, yy = 0.22 + a * 0.44;
+          const rb = world.createRigidBody(
+            RAPIER.RigidBodyDesc.dynamic().setTranslation(x, yy, pz).setLinearDamping(0.15).setAngularDamping(0.35),
+          );
+          world.createCollider(
+            RAPIER.ColliderDesc.cuboid(0.28, 0.21, 0.28).setMass(3).setFriction(0.7).setCollisionGroups(PROP_GROUPS), rb,
+          );
+          const me = new THREE.Mesh(
+            new THREE.BoxGeometry(0.56, 0.42, 0.56),
+            new THREE.MeshStandardMaterial({ color: cores[(a + col) % cores.length], roughness: 0.8 }),
+          );
+          me.castShadow = true; me.receiveShadow = true; scene.add(me);
+          m.bodies.push(rb); m.meshes.push(me); m.syncPairs.push([rb, me]); m.props.push(rb); m._blocos.push([rb, x, yy, pz]);
+        }
+      };
+      // so na TERRA (fora do disco de agua, raio > 4.4)
+      torre(-6, -3, 4); torre(6, -3, 4); torre(-6.4, 2.6, 3); torre(6.4, 2.6, 3); torre(0, -6, 4); torre(0, 6, 3);
+      m.reset = () => resetBlocos(m);
+    },
+  },
 ];
 
 let mapaIdx = 0;
