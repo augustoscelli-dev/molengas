@@ -918,6 +918,7 @@ function buildVisual(skin, fase = 0, slot = 0) {
             }
           });
           obj.add(modelo);
+          registrarFlashMats(meshes); // materiais do GLB chegam async
         });
       } else {
         obj = new THREE.Group();
@@ -1080,6 +1081,7 @@ function buildVisual(skin, fase = 0, slot = 0) {
     meshes[spec.name] = obj;
   }
   skin.extras(THREE, { head: meshes._headAnchor ?? meshes.head, torso: meshes.torso, pelvis: meshes.pelvis });
+  registrarFlashMats(meshes);
   return meshes;
 }
 
@@ -1094,6 +1096,27 @@ function destroyVisual(meshes) {
   }
 }
 
+// Flash de dano: coleta os materiais do lutador que têm canal emissivo, guardando
+// o valor base pra restaurar. Funciona em todos os estilos (vinil/toon/standard/GLB).
+const COR_FLASH = new THREE.Color(1.0, 0.55, 0.5); // branco-quente avermelhado (dor)
+function registrarFlashMats(meshes) {
+  const mats = [], visto = new Set();
+  for (const spec of PARTS) {
+    const root = meshes[spec.name];
+    if (!root || !root.traverse) continue;
+    root.traverse((o) => {
+      const lista = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : [];
+      for (const mat of lista) {
+        if (!mat || !mat.emissive || mat.__outline || visto.has(mat)) continue;
+        visto.add(mat);
+        mats.push({ mat, base: mat.emissive.clone(), baseInt: mat.emissiveIntensity ?? 1 });
+      }
+    });
+  }
+  meshes._flashMats = mats;
+  meshes._flashOn = false;
+}
+
 function syncVisual(rag, meshes, now) {
   for (const spec of PARTS) {
     const b = rag.parts[spec.name];
@@ -1106,6 +1129,21 @@ function syncVisual(rag, meshes, now) {
   // Respiração + squash & stretch no corpo
   const desdeHit = now - rag.lastHitLandedAt;
   const k = desdeHit >= 0 && desdeHit < 0.18 ? 0.22 * (1 - desdeHit / 0.18) : 0;
+  // Flash de dano: o corpo inteiro brilha (branco-quente) ao levar um golpe e some rápido
+  if (meshes._flashMats) {
+    const FL = 0.16;
+    const fInt = desdeHit >= 0 && desdeHit < FL ? (1 - desdeHit / FL) : 0;
+    if (fInt > 0) {
+      meshes._flashOn = true;
+      for (const fm of meshes._flashMats) {
+        fm.mat.emissive.copy(fm.base).lerp(COR_FLASH, fInt);
+        fm.mat.emissiveIntensity = fm.baseInt + fInt * 1.7;
+      }
+    } else if (meshes._flashOn) { // restaura uma vez quando o flash acaba
+      meshes._flashOn = false;
+      for (const fm of meshes._flashMats) { fm.mat.emissive.copy(fm.base); fm.mat.emissiveIntensity = fm.baseInt; }
+    }
+  }
   const bs = meshes.torso._baseS ?? [1, 1, 1];
   meshes.torso.scale.set(
     bs[0] * (1 + k),
@@ -1612,6 +1650,7 @@ function handleRounds(now) {
         l.rag.stats.quedas++;
         som.queda();
         som.vozChoro(VOZES[l.slot]);
+        trauma = 1; hitStop = Math.max(hitStop, 0.11); // baque forte no nocaute/ring-out
         l.rag.rivals = [];
         for (const o of lutadores) o.rag.rivals = lutadores.filter((x) => x !== o && x.vivo).map((x) => x.rag);
       }
@@ -1814,7 +1853,7 @@ function frameOnline(t, fdt) {
   camPos.lerp(target, 0.05);
   camera.position.copy(camPos);
   camera.lookAt(midX * 0.6, 0.8, midZ * 0.3);
-  const shake = trauma * trauma * 0.2;
+  const shake = trauma * trauma * 0.26;
   camera.position.x += Math.sin(t * 0.061) * shake;
   camera.position.y += Math.cos(t * 0.047) * shake * 0.7;
   r3.render(scene, camera);
@@ -1827,6 +1866,7 @@ let acc = 0;
 let last = performance.now();
 let simNow = 0;
 let trauma = 0;
+let hitStop = 0; // freeze-frame: congela a física por alguns ms no impacto (peso)
 const camPos = new THREE.Vector3(0, 6, 10);
 
 function frame(t) {
@@ -1855,6 +1895,7 @@ function frame(t) {
   }
 
   acc += fdt;
+  if (hitStop > 0) { hitStop -= fdt; acc = 0; } // congela a simulação (freeze-frame), sem acumular catch-up
   while (acc >= FIXED_DT) {
     acc -= FIXED_DT;
     simNow += FIXED_DT;
@@ -1913,7 +1954,9 @@ function frame(t) {
       powFx(pos);
       som.acerto();
       som.vozDor(VOZES[l.slot]);
-      trauma = Math.min(1, trauma + 0.55);
+      // Golpe mais forte (quanto mais grogue, maior o baque) sacode e congela mais
+      trauma = Math.min(1, trauma + 0.5 + p.dano * 0.06);
+      hitStop = Math.max(hitStop, 0.05 + p.dano * 0.012);
     }
     if (p.stunUntil > 0 && p.stunUntil > (p._stunVisto ?? 0)) {
       p._stunVisto = p.stunUntil;
@@ -1926,7 +1969,7 @@ function frame(t) {
       som.agarra();
       if (p.hangingOnLedge()) som.vozUe(VOZES[l.slot]);
     }
-    if (p.lastThrowAt > (p._sArr ?? -1)) { p._sArr = p.lastThrowAt; som.arremesso(); }
+    if (p.lastThrowAt > (p._sArr ?? -1)) { p._sArr = p.lastThrowAt; som.arremesso(); trauma = Math.min(1, trauma + 0.4); hitStop = Math.max(hitStop, 0.06); }
     if (p.lastDashAt > (p._sDash ?? -1)) {
       p._sDash = p.lastDashAt;
       som.arremesso();
@@ -1975,7 +2018,7 @@ function frame(t) {
     camera.position.copy(camPos);
     camera.lookAt(midX * 0.6, 0.8, midZ * 0.3);
   }
-  const shake = trauma * trauma * 0.2;
+  const shake = trauma * trauma * 0.26;
   camera.position.x += Math.sin(t * 0.061) * shake;
   camera.position.y += Math.cos(t * 0.047) * shake * 0.7;
 
