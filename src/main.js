@@ -9,6 +9,7 @@ import { readGamepad, mergeInput } from './gamepad.js';
 await RAPIER.init();
 
 const WIN_SCORE = 5;
+const IDLE_IN = { move: { x: 0, z: 0 }, punch: false, grab: false, jump: false };
 
 // Na versão publicada (arquivo único), os assets viram data-URIs injetados aqui.
 const ASSET = (p) => (globalThis.MOLENGAS_ASSETS && globalThis.MOLENGAS_ASSETS[p]) || p;
@@ -17,16 +18,16 @@ const store = {
   get(k) { try { return localStorage.getItem(k); } catch { return null; } },
   set(k, v) { try { localStorage.setItem(k, v); } catch {} },
 };
+const PARAMS = new URLSearchParams(location.search);
 
 // ---------- Física ----------
 const world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
 const GROUND_GROUPS = (0x0001 << 16) | 0xffff;
-const PROP_GROUPS = (0x0008 << 16) | 0x000f;
-
-const p1 = new Ragdoll(RAPIER, world, { x: -2.2, z: 0, heading: Math.PI / 2, memberships: 0x0002, filter: 0x0001 | 0x0004 | 0x0008 });
-const p2 = new Ragdoll(RAPIER, world, { x: 2.2, z: 0, heading: -Math.PI / 2, memberships: 0x0004, filter: 0x0001 | 0x0002 | 0x0008 });
-p1.opponent = p2;
-p2.opponent = p1;
+const PLAYER_BITS = [0x0002, 0x0004, 0x0020, 0x0040];
+const TODOS_PLAYERS = 0x0066;
+const PROP_GROUPS = (0x0008 << 16) | (0x0001 | 0x0008 | TODOS_PLAYERS);
+// spawn [x, z] + de frente pro centro
+const SPAWNS = [[-2.2, 0], [2.2, 0], [0, -2.6], [0, 2.6]];
 
 // ---------- Cena ----------
 const scene = new THREE.Scene();
@@ -37,8 +38,6 @@ const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 20
 camera.position.set(0, 6, 10);
 
 function criarRenderer() {
-  // O contexto WebGL pode falhar por estado do navegador (GPU travada etc.) —
-  // tenta configurações cada vez mais conservadoras antes de desistir.
   const tentativas = [
     { antialias: true },
     { antialias: false },
@@ -53,18 +52,18 @@ function criarRenderer() {
     '"Usar aceleração gráfica" em chrome://settings/system e teste get.webgl.org (deve mostrar um cubo girando).',
   );
 }
-const renderer = criarRenderer();
-renderer.setSize(innerWidth, innerHeight);
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.12;
-document.body.appendChild(renderer.domElement);
+const r3 = criarRenderer();
+r3.setSize(innerWidth, innerHeight);
+r3.setPixelRatio(Math.min(devicePixelRatio, 2));
+r3.shadowMap.enabled = true;
+r3.shadowMap.type = THREE.PCFSoftShadowMap;
+r3.toneMapping = THREE.ACESFilmicToneMapping;
+r3.toneMappingExposure = 1.12;
+document.body.appendChild(r3.domElement);
 addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth, innerHeight);
+  r3.setSize(innerWidth, innerHeight);
 });
 
 scene.add(new THREE.HemisphereLight(0xccccff, 0x443344, 1.05));
@@ -249,7 +248,6 @@ const MAPAS = [
       scene.add(deck);
       m.meshes.push(deck);
       m.syncPairs.push([plat, deck]);
-      // Fulcro visual
       const fulcro = new THREE.Mesh(new THREE.ConeGeometry(0.8, 1.2, 4), toonMat(THREE, 0x8a4f9e));
       fulcro.position.y = -1.2;
       scene.add(fulcro);
@@ -302,11 +300,13 @@ function setMapa(idx) {
   mapaIdx = ((idx % MAPAS.length) + MAPAS.length) % MAPAS.length;
   mapa = { bodies: [], meshes: [], syncPairs: [], props: [], bolas: [], _caixotes: [], reset: null, update: null };
   MAPAS[mapaIdx].build(mapa);
-  p1.props = p2.props = mapa.props;
-  p1.reset();
-  p2.reset();
+  for (const l of lutadores) {
+    l.rag.props = mapa.props;
+    l.rag.reset();
+    l.vivo = true;
+  }
   const el = document.getElementById('mapa');
-  if (el) el.textContent = 'MAPA: ' + MAPAS[mapaIdx].nome + ' · tecla 3 troca';
+  if (el) el.textContent = 'MAPA: ' + MAPAS[mapaIdx].nome;
 }
 
 // ---------- Show de luzes e confete ----------
@@ -368,8 +368,6 @@ const CATEGORIA = {
   upperArmL: 'arms', upperArmR: 'arms', forearmL: 'arms', forearmR: 'arms',
   thighL: 'legs', thighR: 'legs', calfL: 'legs', calfR: 'legs',
 };
-
-// Gordurinha visual por categoria (a física continua com as medidas originais)
 const FOFURA = { arms: 1.28, legs: 1.22 };
 
 function clarear(cor, t) {
@@ -412,7 +410,7 @@ function buildVisual(skin, fase = 0) {
       pescoco.position.y = -0.15;
       obj.add(pescoco);
     } else if (spec.name === 'torso') {
-      // Tronco = ovo gorducho com barriguinha (ou textura de roupa, se a skin tiver)
+      // Barril arredondado (estilo Gang Beasts), não bola
       let matTorso = matFor('torso');
       if (skin.texturaTorso) {
         skin._texTorso ||= (() => {
@@ -426,7 +424,6 @@ function buildVisual(skin, fase = 0) {
         matTorso = toonMat(THREE, 0xffffff);
         matTorso.map = skin._texTorso;
       }
-      // Barril arredondado (estilo Gang Beasts), não bola
       obj = new THREE.Mesh(new THREE.CapsuleGeometry(0.185, 0.18, 6, 16), matTorso);
       obj.scale.set(1.15, 1.05, 0.9);
       obj.castShadow = true;
@@ -496,70 +493,9 @@ function destroyVisual(meshes) {
   }
 }
 
-const lerSkin = (k, padrao) => {
-  const v = parseInt(store.get(k), 10);
-  return (Number.isFinite(v) ? v : padrao) % SKINS.length;
-};
-const skinIdx = [lerSkin('molengas_skin0', 2), lerSkin('molengas_skin1', 6)];
-// ?skins=4,7 na URL força as fantasias (debug/screenshot)
-const skinsParam = new URLSearchParams(location.search).get('skins');
-if (skinsParam) {
-  const [a, b] = skinsParam.split(',').map((n) => parseInt(n, 10));
-  if (Number.isFinite(a)) skinIdx[0] = a % SKINS.length;
-  if (Number.isFinite(b)) skinIdx[1] = b % SKINS.length;
-}
-const visuals = [null, null];
-function setSkin(i, idx) {
-  skinIdx[i] = ((idx % SKINS.length) + SKINS.length) % SKINS.length;
-  store.set('molengas_skin' + i, skinIdx[i]);
-  if (visuals[i]) destroyVisual(visuals[i]);
-  visuals[i] = buildVisual(SKINS[skinIdx[i]], i * 1.9);
-  updateScore();
-}
-addEventListener('keydown', (e) => {
-  if (e.code === 'Digit1') setSkin(0, skinIdx[0] + 1);
-  if (e.code === 'Digit2') setSkin(1, skinIdx[1] + 1);
-  if (e.code === 'Digit3') setMapa(mapaIdx + 1);
-});
-
-function makeDeckTexture() {
-  const c = document.createElement('canvas');
-  c.width = 1024; c.height = 768;
-  const g = c.getContext('2d');
-  // tábuas com variação de tom
-  const tons = ['#eccb79', '#e5c06a', '#f0d287', '#e2ba5e', '#eac672', '#e8c46d', '#f2d68e', '#e0b75a'];
-  for (let i = 0; i < 8; i++) {
-    g.fillStyle = tons[i];
-    g.fillRect(i * 128, 0, 128, 768);
-    g.fillStyle = 'rgba(120,80,20,0.35)';
-    g.fillRect(i * 128, 0, 5, 768);
-  }
-  // frisos horizontais sutis (emendas das tábuas, desencontradas)
-  g.fillStyle = 'rgba(120,80,20,0.22)';
-  for (let i = 0; i < 8; i++) {
-    for (let y = ((i * 7) % 4) * 96 + 60; y < 768; y += 384) g.fillRect(i * 128, y, 128, 4);
-  }
-  // borda dupla: vermelha + friso creme
-  g.strokeStyle = '#c2413b';
-  g.lineWidth = 30;
-  g.strokeRect(30, 30, 1024 - 60, 768 - 60);
-  g.strokeStyle = '#f7ead0';
-  g.lineWidth = 6;
-  g.strokeRect(56, 56, 1024 - 112, 768 - 112);
-  // vinheta suave nas bordas
-  const v = g.createRadialGradient(512, 384, 260, 512, 384, 660);
-  v.addColorStop(0, 'rgba(0,0,0,0)');
-  v.addColorStop(1, 'rgba(70,35,10,0.28)');
-  g.fillStyle = v;
-  g.fillRect(0, 0, 1024, 768);
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  return t;
-}
-
-function syncVisual(ragdoll, meshes, now) {
+function syncVisual(rag, meshes, now) {
   for (const spec of PARTS) {
-    const b = ragdoll.parts[spec.name];
+    const b = rag.parts[spec.name];
     const m = meshes[spec.name];
     const t = b.translation();
     const r = b.rotation();
@@ -569,7 +505,7 @@ function syncVisual(ragdoll, meshes, now) {
   // Respiração sutil
   meshes.torso.scale.y = meshes.torso._baseY * (1 + 0.028 * Math.sin(now * 2.6 + meshes._fase));
   // Squash & stretch da cabeça no impacto
-  const desdeHit = now - ragdoll.lastHitLandedAt;
+  const desdeHit = now - rag.lastHitLandedAt;
   if (desdeHit >= 0 && desdeHit < 0.18) {
     const k = 0.32 * (1 - desdeHit / 0.18);
     meshes.head.scale.set(1.42 * (1 + k), 1.42 * (1 - k * 0.65), 1.42 * (1 + k));
@@ -578,8 +514,97 @@ function syncVisual(ragdoll, meshes, now) {
   }
   // Carinha: nocaute > piscada > normal
   const piscando = ((now + meshes._fase) % 3.4) < 0.13;
-  const variante = ragdoll.isStunned(now) ? 'x' : (piscando ? 'blink' : 'ok');
+  const variante = rag.isStunned(now) ? 'x' : (piscando ? 'blink' : 'ok');
   meshes._face.material.map = getFaceTexture(THREE, meshes._skin.face, variante);
+}
+
+// ---------- Lutadores (2 a 4, humanos e bots) ----------
+// tipos de controle: 'kb1' (WASD+gp0) | 'kb2' (setas+gp1) | 'gp' | 'cpu'
+const VOZES = [0.9, 1.15, 0.75, 1.35]; // timbre por slot
+let lutadores = [];
+
+function montarLutadores(configs) {
+  for (const l of lutadores) {
+    destroyVisual(l.meshes);
+    l.rag.destroy();
+  }
+  lutadores = configs.map((cfg, i) => {
+    const [sx, sz] = SPAWNS[i];
+    const heading = Math.atan2(-sx, -sz);
+    const rag = new Ragdoll(RAPIER, world, {
+      x: sx, z: sz, heading,
+      memberships: PLAYER_BITS[i],
+      filter: 0x0001 | 0x0008 | (TODOS_PLAYERS & ~PLAYER_BITS[i]),
+    });
+    rag.props = mapa.props;
+    const meshes = buildVisual(SKINS[cfg.skin], i * 1.9);
+    return { rag, meshes, cfg, slot: i, vivo: true, score: 0 };
+  });
+  for (const l of lutadores) l.rag.rivals = lutadores.filter((o) => o !== l).map((o) => o.rag);
+}
+
+function inputDoLutador(l) {
+  if (l.cfg.tipo === 'cpu') return botInput(l);
+  if (l.cfg.tipo === 'kb1') return mergeInput(readInput(MAPS.p1), readGamepad(0));
+  if (l.cfg.tipo === 'kb2') return mergeInput(readInput(MAPS.p2), readGamepad(1));
+  return readGamepad(l.cfg.gp) ?? IDLE_IN;
+}
+
+// ---------- Bot ----------
+function botInput(l) {
+  const out = { move: { x: 0, z: 0 }, punch: false, grab: false, jump: false };
+  const me = l.rag.parts.pelvis.translation();
+  const alvos = lutadores.filter((o) => o !== l && o.vivo);
+  if (!alvos.length) return out;
+  let alvo = alvos[0], dAlvo = Infinity;
+  for (const a of alvos) {
+    const ap = a.rag.parts.pelvis.translation();
+    const d = Math.hypot(ap.x - me.x, ap.z - me.z);
+    if (d < dAlvo) { dAlvo = d; alvo = a; }
+  }
+  const ap = alvo.rag.parts.pelvis.translation();
+  let dx = ap.x - me.x, dz = ap.z - me.z;
+  // fugir da bola de demolição em velocidade
+  for (const b of mapa.bolas) {
+    const bp = b.translation();
+    const bv = b.linvel();
+    if (Math.hypot(bp.x - me.x, bp.z - me.z) < 1.7 && Math.hypot(bv.x, bv.z) > 2.5) {
+      dx = me.x - bp.x;
+      dz = me.z - bp.z;
+    }
+  }
+  // medo da beirada: longe do centro, puxa pra dentro
+  const rC = Math.hypot(me.x, me.z);
+  if (rC > 3.3) {
+    dx = dx * 0.35 - me.x * 0.65;
+    dz = dz * 0.35 - me.z * 0.65;
+  }
+  const dl = Math.hypot(dx, dz) || 1;
+  if (dAlvo > 0.85 || rC > 3.3) {
+    out.move.x = dx / dl;
+    out.move.z = dz / dl;
+  }
+  // decidir soco ou agarrão quando chega perto
+  if (dAlvo < 0.95 && simNow > (l._botCd ?? 0)) {
+    if (Math.random() < 0.55) {
+      out.punch = true;
+      l._botCd = simNow + 0.9 + Math.random() * 0.7;
+    } else {
+      l._botGrabAte = simNow + 1.3 + Math.random() * 0.6;
+      l._botCd = simNow + 2 + Math.random();
+    }
+  }
+  if (simNow < (l._botGrabAte ?? 0)) {
+    out.grab = true;
+    // agarrou alguém? arrasta pra borda mais próxima
+    if (l.rag.grabJoints[0] || l.rag.grabJoints[1]) {
+      const rl = Math.hypot(me.x, me.z) || 1;
+      out.move.x = me.x / rl;
+      out.move.z = me.z / rl;
+    }
+  }
+  if (l.rag.hangingOnLedge()) out.jump = true;
+  return out;
 }
 
 // ---------- Efeitos de impacto (estrelas, POF!, poeira) ----------
@@ -692,92 +717,199 @@ function updateEfeitos(dt) {
   }
 }
 
-// ---------- HUD / rounds ----------
+function makeDeckTexture() {
+  const c = document.createElement('canvas');
+  c.width = 1024; c.height = 768;
+  const g = c.getContext('2d');
+  const tons = ['#eccb79', '#e5c06a', '#f0d287', '#e2ba5e', '#eac672', '#e8c46d', '#f2d68e', '#e0b75a'];
+  for (let i = 0; i < 8; i++) {
+    g.fillStyle = tons[i];
+    g.fillRect(i * 128, 0, 128, 768);
+    g.fillStyle = 'rgba(120,80,20,0.35)';
+    g.fillRect(i * 128, 0, 5, 768);
+  }
+  g.fillStyle = 'rgba(120,80,20,0.22)';
+  for (let i = 0; i < 8; i++) {
+    for (let y = ((i * 7) % 4) * 96 + 60; y < 768; y += 384) g.fillRect(i * 128, y, 128, 4);
+  }
+  g.strokeStyle = '#c2413b';
+  g.lineWidth = 30;
+  g.strokeRect(30, 30, 1024 - 60, 768 - 60);
+  g.strokeStyle = '#f7ead0';
+  g.lineWidth = 6;
+  g.strokeRect(56, 56, 1024 - 112, 768 - 112);
+  const v = g.createRadialGradient(512, 384, 260, 512, 384, 660);
+  v.addColorStop(0, 'rgba(0,0,0,0)');
+  v.addColorStop(1, 'rgba(70,35,10,0.28)');
+  g.fillStyle = v;
+  g.fillRect(0, 0, 1024, 768);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+// ---------- HUD / seleção / rounds ----------
 const $ = (id) => document.getElementById(id);
-const score = [0, 0];
-let state = 'selecao'; // selecao | intro | luta | ponto | fim
+let state = 'selecao'; // selecao | intro | luta | replay | ponto | fim
 let stateUntil = 0;
 let introStep = 0;
-const sel = { fase: 'skins', conf: [false, false] };
+let pendente = null; // resultado do round esperando o replay acabar
 
-// Som só pode ligar depois de um gesto do usuário (regra do navegador)
-const ligarSom = () => initSom();
+// Som liga no primeiro gesto do usuário (regra do navegador)
+const ligarSom = () => { initSom(); som.musica(state === 'luta' ? 'luta' : 'menu'); };
 addEventListener('pointerdown', ligarSom, { once: true });
 addEventListener('keydown', ligarSom, { once: true });
 
-function atualizarSelecao() {
-  for (const i of [0, 1]) {
-    $('sel-img' + i).src = ASSET(`assets/retratos/${SKINS[skinIdx[i]].id}.jpg`);
-    $('sel-nome' + i).textContent = SKINS[skinIdx[i]].nome;
-    $(i === 0 ? 'sel-p0' : 'sel-p1x').classList.toggle('confirmado', sel.conf[i]);
+// Configuração da seleção: 4 slots
+const lerSkin = (k, padrao) => {
+  const v = parseInt(store.get(k), 10);
+  return (Number.isFinite(v) ? v : padrao) % SKINS.length;
+};
+const selCfg = [
+  { tipo: 'kb1', ativo: true, conf: false, skin: lerSkin('molengas_skin0', 2) },
+  { tipo: 'kb2', ativo: true, conf: false, skin: lerSkin('molengas_skin1', 6) },
+  { tipo: 'gp', gp: 2, ativo: false, conf: false, skin: 4 },
+  { tipo: 'gp', gp: 3, ativo: false, conf: false, skin: 7 },
+];
+let selFase = 'skins'; // skins | mapa
+// ?skins=a,b força as fantasias (debug/screenshot)
+if (PARAMS.get('skins')) {
+  const ns = PARAMS.get('skins').split(',').map((n) => parseInt(n, 10));
+  ns.forEach((n, i) => { if (Number.isFinite(n) && selCfg[i]) selCfg[i].skin = n % SKINS.length; });
+}
+
+function trocarSkin(i, dir) {
+  selCfg[i].skin = ((selCfg[i].skin + dir) % SKINS.length + SKINS.length) % SKINS.length;
+  store.set('molengas_skin' + i, selCfg[i].skin);
+  som.selecionar();
+  // lutador em cena? troca ao vivo
+  const l = lutadores.find((x) => x.slot === i);
+  if (l) {
+    destroyVisual(l.meshes);
+    l.meshes = buildVisual(SKINS[selCfg[i].skin], i * 1.9);
+    l.cfg.skin = selCfg[i].skin;
   }
-  $('sel-mapa').style.display = sel.fase === 'mapa' ? 'block' : 'none';
+  atualizarSelecao();
+}
+
+function atualizarSelecao() {
+  for (let i = 0; i < 4; i++) {
+    const painel = $('sel-p' + i);
+    if (!painel) continue;
+    const c = selCfg[i];
+    painel.classList.toggle('confirmado', c.ativo && c.conf);
+    painel.classList.toggle('vazio', !c.ativo);
+    $('sel-img' + i).src = ASSET(`assets/retratos/${SKINS[c.skin].id}.jpg`);
+    $('sel-img' + i).style.opacity = c.ativo ? 1 : 0.25;
+    $('sel-nome' + i).textContent = c.ativo ? SKINS[c.skin].nome + (c.tipo === 'cpu' ? ' 🤖' : '') : '—';
+  }
+  $('sel-mapa').style.display = selFase === 'mapa' ? 'block' : 'none';
   $('sel-mapa-nome').textContent = MAPAS[mapaIdx].nome;
 }
+function checarFaseMapa() {
+  const ativos = selCfg.filter((c) => c.ativo);
+  if (ativos.length >= 2 && ativos.every((c) => c.conf || c.tipo === 'cpu')) selFase = 'mapa';
+}
+function addBot() {
+  const slot = selCfg.find((c) => !c.ativo);
+  if (!slot) return;
+  slot.ativo = true;
+  slot.tipo = 'cpu';
+  slot.conf = true;
+  slot.skin = Math.floor(Math.random() * SKINS.length);
+  som.confirmar();
+  atualizarSelecao();
+}
 function mostrarSelecao() {
-  score[0] = score[1] = 0;
-  updateScore();
-  sel.fase = 'skins';
-  sel.conf[0] = sel.conf[1] = false;
+  selFase = 'skins';
+  for (const c of selCfg) {
+    c.conf = false;
+    if (c.tipo === 'cpu') { c.ativo = false; c.tipo = 'gp'; }
+  }
   $('selecao').style.display = 'flex';
   showMsg('');
   state = 'selecao';
+  som.musica('menu');
   atualizarSelecao();
 }
 function startIntro(roundN) {
   state = 'intro';
   introStep = 0;
   stateUntil = simNow + 0.9;
+  replayBuf.length = 0;
   showMsg('ROUND ' + roundN);
 }
 function iniciarLuta() {
   $('selecao').style.display = 'none';
-  p1.reset(); p2.reset(); mapa.reset?.();
+  const configs = selCfg.filter((c) => c.ativo).map((c) => ({ ...c }));
+  montarLutadores(configs);
+  mapa.reset?.();
+  updateScore();
   som.confirmar();
+  som.musica('luta');
   startIntro(1);
+}
+
+function updateScore() {
+  if (!lutadores.length) { $('placar').innerHTML = ''; return; }
+  $('placar').innerHTML = lutadores.map((l) => {
+    const s = SKINS[l.cfg.skin];
+    return `<img class="retrato" src="${ASSET(`assets/retratos/${s.id}.jpg`)}" onerror="this.style.display='none'">` +
+      `<span>${l.score}</span>`;
+  }).join(' &nbsp;·&nbsp; ');
+}
+function showMsg(txt, sub = '') {
+  $('msg').innerHTML = txt + (sub ? `<div class="sub">${sub}</div>` : '');
+  $('msg').style.display = txt ? 'block' : 'none';
 }
 
 // Seleção por teclado
 addEventListener('keydown', (e) => {
   if (state !== 'selecao') return;
-  const mexer = (i, dir) => { setSkin(i, skinIdx[i] + dir); som.selecionar(); };
-  if (sel.fase === 'skins') {
-    if (!sel.conf[0] && e.code === 'KeyA') mexer(0, -1);
-    if (!sel.conf[0] && e.code === 'KeyD') mexer(0, 1);
-    if (!sel.conf[0] && e.code === 'KeyF') { sel.conf[0] = true; som.confirmar(); }
-    if (!sel.conf[1] && e.code === 'ArrowLeft') mexer(1, -1);
-    if (!sel.conf[1] && e.code === 'ArrowRight') mexer(1, 1);
-    if (!sel.conf[1] && e.code === 'KeyK') { sel.conf[1] = true; som.confirmar(); }
-    if (sel.conf[0] && sel.conf[1]) sel.fase = 'mapa';
+  if (selFase === 'skins') {
+    if (!selCfg[0].conf && e.code === 'KeyA') trocarSkin(0, -1);
+    if (!selCfg[0].conf && e.code === 'KeyD') trocarSkin(0, 1);
+    if (!selCfg[0].conf && e.code === 'KeyF') { selCfg[0].conf = true; som.confirmar(); }
+    if (!selCfg[1].conf && e.code === 'ArrowLeft') trocarSkin(1, -1);
+    if (!selCfg[1].conf && e.code === 'ArrowRight') trocarSkin(1, 1);
+    if (!selCfg[1].conf && e.code === 'KeyK') { selCfg[1].conf = true; som.confirmar(); }
+    checarFaseMapa();
   } else {
     if (e.code === 'KeyA') { setMapa(mapaIdx - 1); som.selecionar(); }
     if (e.code === 'KeyD') { setMapa(mapaIdx + 1); som.selecionar(); }
+    if (e.code === 'KeyC') addBot();
     if (e.code === 'KeyF') { iniciarLuta(); return; }
   }
   atualizarSelecao();
 });
-// Seleção por gamepad (detecção de borda)
-const gpMenuPrev = [{ x: 0, a: false }, { x: 0, a: false }];
+// Seleção por gamepad (bordas)
+const gpMenuPrev = [{}, {}, {}, {}];
 function menuGamepad() {
-  for (let i = 0; i < 2; i++) {
-    const gp = readGamepad(i);
+  if (state !== 'selecao') return;
+  for (let g = 0; g < 4; g++) {
+    const gp = readGamepad(g);
     if (!gp) continue;
-    const prev = gpMenuPrev[i];
-    const esq = gp.move.x < -0.5 && prev.x >= -0.5;
-    const dir = gp.move.x > 0.5 && prev.x <= 0.5;
+    const prev = gpMenuPrev[g];
+    const esq = gp.move.x < -0.5 && !(prev.x < -0.5);
+    const dir = gp.move.x > 0.5 && !(prev.x > 0.5);
     const a = gp.jump && !prev.a;
     prev.x = gp.move.x;
     prev.a = gp.jump;
-    if (state !== 'selecao') continue;
-    if (sel.fase === 'skins') {
-      if (!sel.conf[i]) {
-        if (esq) { setSkin(i, skinIdx[i] - 1); som.selecionar(); }
-        if (dir) { setSkin(i, skinIdx[i] + 1); som.selecionar(); }
-        if (a) { sel.conf[i] = true; som.confirmar(); }
+    // controles 0/1 comandam os slots 0/1; 2/3 entram nos slots livres
+    const slot = g <= 1 ? selCfg[g] : selCfg.find((c) => c.tipo === 'gp' && c.gp === g);
+    if (!slot) continue;
+    if (selFase === 'skins') {
+      const i = selCfg.indexOf(slot);
+      if (!slot.ativo) {
+        if (a) { slot.ativo = true; som.confirmar(); }
+      } else if (!slot.conf) {
+        if (esq) trocarSkin(i, -1);
+        if (dir) trocarSkin(i, 1);
+        if (a) { slot.conf = true; som.confirmar(); }
       }
-      if (sel.conf[0] && sel.conf[1]) sel.fase = 'mapa';
+      checarFaseMapa();
       atualizarSelecao();
-    } else if (i === 0) {
+    } else if (g === 0) {
       if (esq) { setMapa(mapaIdx - 1); som.selecionar(); }
       if (dir) { setMapa(mapaIdx + 1); som.selecionar(); }
       if (a) { iniciarLuta(); return; }
@@ -786,28 +918,39 @@ function menuGamepad() {
   }
 }
 
-function updateScore() {
-  const s0 = SKINS[skinIdx[0]], s1 = SKINS[skinIdx[1]];
-  $('placar').innerHTML =
-    `<img class="retrato" src="${ASSET(`assets/retratos/${s0.id}.jpg`)}" onerror="this.style.display='none'">` +
-    `<span style="color:#ff8080">${s0.nome} ${score[0]}</span> &nbsp;×&nbsp; ` +
-    `<span style="color:#80c0ff">${score[1]} ${s1.nome}</span>` +
-    `<img class="retrato" src="${ASSET(`assets/retratos/${s1.id}.jpg`)}" onerror="this.style.display='none'">`;
+// ---------- Replay em câmera lenta ----------
+const REPLAY_FRAMES = 150; // ~2.5s a 60fps
+const replayBuf = [];
+let replayT = 0;
+function corposDoReplay() {
+  const corpos = [];
+  for (const l of lutadores) for (const spec of PARTS) corpos.push([l.rag.parts[spec.name], l.meshes[spec.name]]);
+  for (const [b, m] of mapa.syncPairs) corpos.push([b, m]);
+  return corpos;
 }
-function showMsg(txt, sub = '') {
-  $('msg').innerHTML = txt + (sub ? `<div class="sub">${sub}</div>` : '');
-  $('msg').style.display = txt ? 'block' : 'none';
+function gravarReplay() {
+  const snap = [];
+  for (const [b] of corposDoReplay()) {
+    const t = b.translation();
+    const q = b.rotation();
+    snap.push(t.x, t.y, t.z, q.x, q.y, q.z, q.w);
+  }
+  replayBuf.push(snap);
+  if (replayBuf.length > REPLAY_FRAMES) replayBuf.shift();
 }
-setSkin(0, skinIdx[0]);
-setSkin(1, skinIdx[1]);
-setMapa(parseInt(new URLSearchParams(location.search).get('mapa'), 10) || 0);
-if (new URLSearchParams(location.search).has('direto')) {
-  // dev: pula a tela de seleção
-  $('selecao').style.display = 'none';
-  state = 'luta';
-} else {
-  mostrarSelecao();
+function aplicarReplay(idx) {
+  const snap = replayBuf[idx];
+  if (!snap) return;
+  let o = 0;
+  for (const [, m] of corposDoReplay()) {
+    m.position.set(snap[o], snap[o + 1], snap[o + 2]);
+    m.quaternion.set(snap[o + 3], snap[o + 4], snap[o + 5], snap[o + 6]);
+    o += 7;
+  }
 }
+
+// ---------- Rounds ----------
+function vivos() { return lutadores.filter((l) => l.vivo); }
 
 function handleRounds(now) {
   if (state === 'intro') {
@@ -825,32 +968,54 @@ function handleRounds(now) {
     return;
   }
   if (state === 'luta') {
-    const y1 = p1.parts.pelvis.translation().y;
-    const y2 = p2.parts.pelvis.translation().y;
-    if (y1 < -8 || y2 < -8) {
-      const winner = y1 < -8 ? 1 : 0;
-      score[winner]++;
+    for (const l of lutadores) {
+      if (l.vivo && l.rag.parts.pelvis.translation().y < -8) {
+        l.vivo = false;
+        som.queda();
+        som.vozChoro(VOZES[l.slot]);
+        l.rag.rivals = [];
+        for (const o of lutadores) o.rag.rivals = lutadores.filter((x) => x !== o && x.vivo).map((x) => x.rag);
+      }
+    }
+    const v = vivos();
+    if (v.length <= 1) {
+      const winner = v[0] ?? null;
+      if (winner) winner.score++;
       updateScore();
-      state = 'ponto';
-      stateUntil = now + 1.6;
-      const nome = SKINS[skinIdx[winner]].nome;
-      som.queda();
       som.torcidaOh();
-      if (score[winner] >= WIN_SCORE) {
-        state = 'fim';
-        som.vitoria();
-        showMsg('🏆 ' + nome + ' VENCEU!', 'Aperte R pra voltar à seleção');
+      pendente = winner;
+      if (replayBuf.length > 20) {
+        state = 'replay';
+        replayT = 0;
+        showMsg('📹 REPLAY');
       } else {
-        som.ponto();
-        showMsg('PONTO DO ' + nome + '!');
+        fecharRound();
       }
     }
   } else if (state === 'ponto' && now > stateUntil) {
-    p1.reset(); p2.reset(); mapa.reset?.();
-    startIntro(score[0] + score[1] + 1);
+    for (const l of lutadores) { l.rag.reset(); l.vivo = true; }
+    for (const o of lutadores) o.rag.rivals = lutadores.filter((x) => x !== o).map((x) => x.rag);
+    mapa.reset?.();
+    startIntro(lutadores.reduce((s, l) => s + l.score, 0) + 1);
   } else if (state === 'fim' && isDown('KeyR')) {
-    p1.reset(); p2.reset(); mapa.reset?.();
+    for (const l of lutadores) { l.rag.reset(); l.vivo = true; }
+    mapa.reset?.();
     mostrarSelecao();
+  }
+}
+function fecharRound() {
+  const winner = pendente;
+  pendente = null;
+  if (winner && winner.score >= WIN_SCORE) {
+    state = 'fim';
+    som.vitoria();
+    som.vozYay(VOZES[winner.slot]);
+    showMsg('🏆 ' + SKINS[winner.cfg.skin].nome + ' VENCEU!', 'Aperte R pra voltar à seleção');
+  } else {
+    som.ponto();
+    state = 'ponto';
+    stateUntil = simNow + 1.4;
+    showMsg(winner ? 'PONTO DO ' + SKINS[winner.cfg.skin].nome + '!' : 'EMPATE!');
   }
 }
 
@@ -860,30 +1025,44 @@ world.timestep = FIXED_DT;
 let acc = 0;
 let last = performance.now();
 let simNow = 0;
-const PARAMS = new URLSearchParams(location.search);
 let trauma = 0;
 const camPos = new THREE.Vector3(0, 6, 10);
 
 function frame(t) {
   requestAnimationFrame(frame);
   const fdt = Math.min((t - last) / 1000, 0.1);
-  acc += fdt;
   last = t;
 
-  const IDLE_IN = { move: { x: 0, z: 0 }, punch: false, grab: false, jump: false };
+  if (state === 'replay') {
+    replayT += fdt * 0.4; // câmera lenta
+    const idx = Math.floor(replayT * 60);
+    if (idx >= replayBuf.length) {
+      fecharRound();
+    } else {
+      aplicarReplay(idx);
+    }
+    updateEfeitos(fdt);
+    mirarHolofotes(simNow);
+    cairConfetes(fdt, simNow);
+    r3.render(scene, camera);
+    return;
+  }
+
+  acc += fdt;
   while (acc >= FIXED_DT) {
     acc -= FIXED_DT;
     simNow += FIXED_DT;
     const lutando = state === 'luta';
-    p1.update(FIXED_DT, simNow, lutando ? mergeInput(readInput(MAPS.p1), readGamepad(0)) : IDLE_IN);
-    p2.update(FIXED_DT, simNow, lutando ? mergeInput(readInput(MAPS.p2), readGamepad(1)) : IDLE_IN);
+    for (const l of lutadores) {
+      l.rag.update(FIXED_DT, simNow, lutando && l.vivo ? inputDoLutador(l) : IDLE_IN);
+    }
     world.step();
+    if (state === 'luta') gravarReplay();
     handleRounds(simNow);
   }
   menuGamepad();
 
-  syncVisual(p1, visuals[0], simNow);
-  syncVisual(p2, visuals[1], simNow);
+  for (const l of lutadores) syncVisual(l.rag, l.meshes, simNow);
 
   // Objetos do mapa seguem a física
   for (const [body, mesh] of mapa.syncPairs) {
@@ -899,38 +1078,42 @@ function frame(t) {
     const bv = bolaB.linvel();
     if (Math.hypot(bv.x, bv.y, bv.z) < 3) continue;
     const bp = bolaB.translation();
-    for (const p of [p1, p2]) {
-      if (simNow < (p._bolaCd ?? 0)) continue;
-      const tp = p.parts.torso.translation();
+    for (const l of lutadores) {
+      if (simNow < (l._bolaCd ?? 0)) continue;
+      const tp = l.rag.parts.torso.translation();
       if (Math.hypot(bp.x - tp.x, bp.y - tp.y, bp.z - tp.z) < 0.95) {
-        p._bolaCd = simNow + 1.2;
-        p.stun(simNow + 1.1);
-        p.lastHitLandedAt = simNow;
+        l._bolaCd = simNow + 1.2;
+        l.rag.stun(simNow + 1.1);
+        l.rag.lastHitLandedAt = simNow;
         som.bolada();
         trauma = Math.min(1, trauma + 0.5);
       }
     }
   }
 
-  // Efeitos de impacto: estrelas + POF! + chacoalhada quando um soco conecta,
-  // poeira quando alguém desaba
-  for (const p of [p1, p2]) {
+  // Efeitos + sons por lutador
+  for (const l of lutadores) {
+    const p = l.rag;
     if (p.lastHitLandedAt > 0 && p.lastHitLandedAt > (p._fxVisto ?? -1)) {
       p._fxVisto = p.lastHitLandedAt;
       const pos = p.parts.head.translation();
       burstEstrelas(pos);
       powFx(pos);
       som.acerto();
+      som.vozDor(VOZES[l.slot]);
       trauma = Math.min(1, trauma + 0.55);
     }
     if (p.stunUntil > 0 && p.stunUntil > (p._stunVisto ?? 0)) {
       p._stunVisto = p.stunUntil;
       puffFx(p.parts.pelvis.translation());
     }
-    // Ganchos de som (a física marca o instante; aqui a gente toca)
-    if (p.lastPunchStartAt > (p._sSoco ?? -1)) { p._sSoco = p.lastPunchStartAt; som.soco(); }
+    if (p.lastPunchStartAt > (p._sSoco ?? -1)) { p._sSoco = p.lastPunchStartAt; som.soco(); som.vozSoco(VOZES[l.slot]); }
     if (p.lastJumpAt > (p._sPulo ?? -1)) { p._sPulo = p.lastJumpAt; som.pulo(); }
-    if (p.lastGrabAt > (p._sGarra ?? -1)) { p._sGarra = p.lastGrabAt; som.agarra(); }
+    if (p.lastGrabAt > (p._sGarra ?? -1)) {
+      p._sGarra = p.lastGrabAt;
+      som.agarra();
+      if (p.hangingOnLedge()) som.vozUe(VOZES[l.slot]);
+    }
     if (p.lastThrowAt > (p._sArr ?? -1)) { p._sArr = p.lastThrowAt; som.arremesso(); }
   }
   updateEfeitos(fdt);
@@ -939,23 +1122,26 @@ function frame(t) {
 
   // Câmera segue o meio da briga (com chacoalhada nos impactos)
   trauma = Math.max(0, trauma - 2.4 * fdt);
-  const a = p1.parts.pelvis.translation();
-  const b = p2.parts.pelvis.translation();
-  const midX = (a.x + b.x) / 2, midZ = (a.z + b.z) / 2;
-  const spread = Math.min(Math.hypot(a.x - b.x, a.z - b.z), 12);
-  if (PARAMS.has('debug')) {
-    const q = p1.parts.pelvis.rotation();
-    const qh = p1.parts.head.rotation();
-    const yawQ = (r) => {
-      const fx = 2 * (r.x * r.z + r.w * r.y);
-      const fz = 1 - 2 * (r.x * r.x + r.y * r.y);
-      return Math.atan2(fx, fz).toFixed(2);
-    };
-    const d = document.getElementById('debug');
-    d.style.display = 'block';
-    d.textContent = `t=${simNow.toFixed(1)}s heading=${p1.heading.toFixed(2)} pelvisYaw=${yawQ(q)} headYaw=${yawQ(qh)}`;
+  let midX = 0, midZ = 0, spread = 4;
+  const vv = lutadores.length ? (vivos().length ? vivos() : lutadores) : null;
+  if (vv) {
+    let minX = 1e9, maxX = -1e9, minZ = 1e9, maxZ = -1e9;
+    for (const l of vv) {
+      const p = l.rag.parts.pelvis.translation();
+      minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
+      minZ = Math.min(minZ, p.z); maxZ = Math.max(maxZ, p.z);
+    }
+    midX = (minX + maxX) / 2;
+    midZ = (minZ + maxZ) / 2;
+    spread = Math.min(Math.hypot(maxX - minX, maxZ - minZ), 12);
   }
-  // ?zoom na URL = câmera de retrato, pra inspecionar as fantasias de perto
+  if (PARAMS.has('debug') && lutadores[0]) {
+    const q = lutadores[0].rag.parts.pelvis.rotation();
+    const yawQ = (r) => Math.atan2(2 * (r.x * r.z + r.w * r.y), 1 - 2 * (r.x * r.x + r.y * r.y)).toFixed(2);
+    const d = $('debug');
+    d.style.display = 'block';
+    d.textContent = `t=${simNow.toFixed(1)}s estado=${state} vivos=${vivos().length} yaw0=${yawQ(q)}`;
+  }
   if (PARAMS.has('zoom')) {
     camPos.set(midX * 0.6, 1.9, 3.6);
     camera.position.copy(camPos);
@@ -970,15 +1156,35 @@ function frame(t) {
   camera.position.x += Math.sin(t * 0.061) * shake;
   camera.position.y += Math.cos(t * 0.047) * shake * 0.7;
 
-  renderer.render(scene, camera);
+  r3.render(scene, camera);
 }
+
+// ---------- Início ----------
+setMapa(parseInt(PARAMS.get('mapa'), 10) || 0);
+if (PARAMS.has('direto')) {
+  // dev: pula a seleção; ?bots=N adiciona N bots
+  $('selecao').style.display = 'none';
+  const nBots = Math.min(parseInt(PARAMS.get('bots'), 10) || 0, 3);
+  const configs = [{ ...selCfg[0] }, { ...selCfg[1] }];
+  for (let i = 0; i < nBots; i++) configs.push({ tipo: 'cpu', skin: (4 + i * 3) % SKINS.length });
+  montarLutadores(configs.slice(0, 4));
+  updateScore();
+  state = 'luta';
+} else {
+  // dois lutadores de enfeite atrás do menu
+  montarLutadores([{ ...selCfg[0] }, { ...selCfg[1] }]);
+  updateScore();
+  mostrarSelecao();
+}
+
 // ?avancar=N na URL: simula N segundos de física antes do primeiro frame (debug/screenshot)
 const avancar = parseFloat(PARAMS.get('avancar') || '0');
 for (let i = 0; i < avancar * 60; i++) {
   simNow += FIXED_DT;
-  p1.update(FIXED_DT, simNow, readInput(MAPS.p1));
-  p2.update(FIXED_DT, simNow, readInput(MAPS.p2));
+  const lutando = state === 'luta';
+  for (const l of lutadores) l.rag.update(FIXED_DT, simNow, lutando && l.vivo ? inputDoLutador(l) : IDLE_IN);
   world.step();
+  if (state === 'luta') { gravarReplay(); handleRounds(simNow); }
 }
 
 document.getElementById('carregando').style.display = 'none';

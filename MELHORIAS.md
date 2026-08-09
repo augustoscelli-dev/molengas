@@ -4,22 +4,19 @@ Legenda: 💥 impacto alto · 🔨 esforço (P/M/G) · ✅ feito
 
 ## Prioridade alta (próximas 5)
 
-1. 💥 **Bot (CPU)** 🔨M — jogar sozinho! P2 controlado por IA simples:
-   persegue, soca perto, foge da bola, às vezes agarra e arrasta pra
-   borda. Três níveis (mole, médio, brabo). Destrava treinar e testar
-   sem segundo jogador.
-2. 💥 **4 jogadores** 🔨M — mais 2 lutadores locais (controles 3 e 4,
-   ou +2 esquemas de teclado). Todo mundo contra todo mundo = o caos
-   que o Gang Beasts promete. Placar e seleção pra 4.
-3. 💥 **Música + vozes** 🔨M — trilha sintetizada (menu animado, luta
-   tensa) e "vozes" molengas: grunhidos no soco, "uéé?" pendurado na
-   beirada, choro no nocaute (estilo balbucio de Banjo-Kazooie).
-4. **Replay do ponto em câmera lenta** 🔨M — rebobinar os últimos ~2s
-   da queda em slow-mo com zoom antes do "PONTO!" (gera o clipe
-   perfeito pro canal).
-5. **Identidade do link** 🔨P — título/favicon caprichados, meta
-   OpenGraph (imagem bonita quando cola o link no WhatsApp/Discord),
-   e PWA instalável (ícone na área de trabalho, funciona offline).
+1. ✅ **Bot (CPU)** — na fase de mapa, C adiciona bots (até 4 no
+   total); persegue o mais próximo, foge da bola, agarra e arrasta pra
+   borda, se iça da beirada. Nível único "médio" (mole/brabo: futuro).
+2. ✅ **4 jogadores** — briga livre: controles 3/4 entram apertando A
+   na seleção; último de pé pontua; placar/câmera/replay pra N.
+3. ✅ **Música + vozes** — trilha sintetizada (menu 104bpm, luta
+   138bpm: baixo + chimbal) e balbucios por lutador (grunhido no soco,
+   "ai!", "uéé?" na beirada, choro na queda, "yay!" na vitória).
+4. ✅ **Replay do ponto em câmera lenta** — últimos ~2.5s da queda
+   reprisados a 0.4× antes do PONTO!.
+5. ✅ **Identidade do link** — favicon 🥊, OpenGraph com capa gerada
+   no Pollinations (link bonito no WhatsApp/Discord), manifest PWA
+   (instalável) + service worker offline.
 
 ## Modos de jogo
 

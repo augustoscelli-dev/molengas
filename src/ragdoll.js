@@ -63,7 +63,7 @@ export class Ragdoll {
     this.heading0 = heading;
     this.heading = heading;
     this.parts = {};
-    this.opponent = null;
+    this.rivals = []; // outros lutadores (briga livre: pode ter até 3)
     this.props = []; // corpos agarráveis/socáveis da arena (caixotes, bola…)
     this.stunUntil = 0;
     this.punchReadyAt = 0;
@@ -108,6 +108,13 @@ export class Ragdoll {
 
   isStunned(now) { return now < this.stunUntil; }
 
+  destroy() {
+    this.releaseGrabs();
+    for (const spec of PARTS) this.world.removeRigidBody(this.parts[spec.name]);
+    this.parts = {};
+    this.rivals = [];
+  }
+
   stun(until) {
     this.stunUntil = Math.max(this.stunUntil, until);
     this.releaseGrabs();
@@ -134,6 +141,18 @@ export class Ragdoll {
 
   hangingOnLedge() {
     return this.grabJoints.some((g) => g && g.chao);
+  }
+
+  // Rival mais próximo (pela distância entre troncos)
+  nearestRival() {
+    const pp = this.parts.torso.translation();
+    let best = null, bestD = Infinity;
+    for (const r of this.rivals) {
+      const rp = r.parts.torso.translation();
+      const d = Math.hypot(rp.x - pp.x, rp.z - pp.z);
+      if (d < bestD) { bestD = d; best = r; }
+    }
+    return best;
   }
 
   // Distância até a superfície logo abaixo do quadril (chão, plataforma,
@@ -262,8 +281,9 @@ export class Ragdoll {
           }
         }
         // Guarda de boxe: inimigo perto → punhos sobem
-        if (this.opponent && now > this.punchUntil) {
-          const op = this.opponent.parts.torso.translation();
+        const rivalPerto = this.rivals.length ? this.nearestRival() : null;
+        if (rivalPerto && now > this.punchUntil) {
+          const op = rivalPerto.parts.torso.translation();
           if (Math.hypot(op.x - pp.x, op.z - pp.z) < 1.15) {
             for (const h of ['forearmL', 'forearmR']) {
               this.parts[h].applyImpulse({ x: fwdX * 2.5 * dt, y: 5 * dt, z: fwdZ * 2.5 * dt }, true);
@@ -304,20 +324,22 @@ export class Ragdoll {
       for (const h of ['forearmL', 'forearmR']) {
         this.parts[h].applyImpulse({ x: dir[0] * 26 * dt, y: 0, z: dir[2] * 26 * dt }, true);
       }
-      if (!this.punchHit && this.opponent) {
+      if (!this.punchHit && this.rivals.length) {
         outer: for (let side = 0; side < 2; side++) {
           const tip = this.handTip(side);
-          for (const pname of ['head', 'torso', 'pelvis']) {
-            const tb = this.opponent.parts[pname];
-            const tp = tb.translation();
-            const d = Math.hypot(tip[0] - tp.x, tip[1] - tp.y, tip[2] - tp.z);
-            if (d < 0.48) {
-              const strong = pname === 'head';
-              tb.applyImpulse({ x: dir[0] * (strong ? 6.5 : 5), y: strong ? 2.2 : 1.5, z: dir[2] * (strong ? 6.5 : 5) }, true);
-              this.opponent.stun(now + (strong ? 1.35 : 0.4));
-              this.opponent.lastHitLandedAt = now;
-              this.punchHit = true;
-              break outer;
+          for (const rival of this.rivals) {
+            for (const pname of ['head', 'torso', 'pelvis']) {
+              const tb = rival.parts[pname];
+              const tp = tb.translation();
+              const d = Math.hypot(tip[0] - tp.x, tip[1] - tp.y, tip[2] - tp.z);
+              if (d < 0.48) {
+                const strong = pname === 'head';
+                tb.applyImpulse({ x: dir[0] * (strong ? 6.5 : 5), y: strong ? 2.2 : 1.5, z: dir[2] * (strong ? 6.5 : 5) }, true);
+                rival.stun(now + (strong ? 1.35 : 0.4));
+                rival.lastHitLandedAt = now;
+                this.punchHit = true;
+                break outer;
+              }
             }
           }
           // Objetos da arena também levam soco
@@ -335,18 +357,21 @@ export class Ragdoll {
     }
 
     // Agarrar
-    if (input.grab && !stunned && this.opponent) {
-      const ot = this.opponent.parts.torso.translation();
+    if (input.grab && !stunned) {
+      const rivalGrab = this.rivals.length ? this.nearestRival() : null;
+      const ot = rivalGrab ? rivalGrab.parts.torso.translation() : null;
       const situacaoBeirada = toi === null || pp.y < 0.55;
       for (let side = 0; side < 2; side++) {
         if (this.grabJoints[side]) continue;
         const tip = this.handTip(side);
         let best = null, bestD = 0.5;
-        for (const pname of ['head', 'torso', 'pelvis', 'upperArmL', 'upperArmR', 'forearmL', 'forearmR']) {
-          const tb = this.opponent.parts[pname];
-          const tp = tb.translation();
-          const d = Math.hypot(tip[0] - tp.x, tip[1] - tp.y, tip[2] - tp.z);
-          if (d < bestD) { bestD = d; best = tb; }
+        for (const rival of this.rivals) {
+          for (const pname of ['head', 'torso', 'pelvis', 'upperArmL', 'upperArmR', 'forearmL', 'forearmR']) {
+            const tb = rival.parts[pname];
+            const tp = tb.translation();
+            const d = Math.hypot(tip[0] - tp.x, tip[1] - tp.y, tip[2] - tp.z);
+            if (d < bestD) { bestD = d; best = tb; }
+          }
         }
         // Objetos da arena também são agarráveis (caixote, bola…)
         for (const pb of this.props) {
@@ -383,7 +408,7 @@ export class Ragdoll {
               this.lastGrabAt = now;
             }
           }
-        } else if (!situacaoBeirada) {
+        } else if (!situacaoBeirada && ot) {
           // Estica os braços na direção do oponente
           const hp2 = hand.translation();
           const dx = ot.x - hp2.x, dy = ot.y + 0.2 - hp2.y, dz = ot.z - hp2.z;

@@ -4,6 +4,21 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MOLENGAS!</title>
+<meta name="description" content="Briga de bonecos molengas estilo Gang Beasts — direto no navegador. Soque, agarre e jogue os amigos pra fora da arena!">
+<meta name="theme-color" content="#141433">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🥊</text></svg>">
+<link rel="manifest" href="manifest.json">
+<meta property="og:type" content="website">
+<meta property="og:title" content="MOLENGAS! 🥊">
+<meta property="og:description" content="Briga de bonecos molengas estilo Gang Beasts — jogue agora no navegador, de graça!">
+<meta property="og:url" content="https://augustoscelli-dev.github.io/molengas/">
+<meta property="og:image" content="https://augustoscelli-dev.github.io/molengas/assets/capa.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<script>
+  if ('serviceWorker' in navigator && location.protocol === 'https:') {
+    addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
+  }
+</script>
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: #141433; }
   canvas { display: block; }
@@ -43,6 +58,7 @@
     padding: 18px 26px; border-radius: 18px; border: 4px solid rgba(255,255,255,.25);
     background: rgba(255,255,255,.06); }
   .sel-painel.confirmado { border-color: #7ed957; box-shadow: 0 0 22px rgba(126,217,87,.45); }
+  .sel-painel.vazio { opacity: .45; border-style: dashed; }
   .sel-painel img { width: 150px; height: 150px; border-radius: 50%; object-fit: cover;
     border: 3px solid rgba(255,255,255,.5); }
   .sel-vs { font-size: 42px; font-weight: 900; opacity: .85; }
@@ -60,18 +76,27 @@
       <div class="sel-nome" id="sel-nome0"></div>
       <div class="sel-dica">🔴 A · D muda &nbsp;·&nbsp; F confirma</div>
     </div>
-    <div class="sel-vs">VS</div>
-    <div class="sel-painel" id="sel-p1x">
+    <div class="sel-painel" id="sel-p1">
       <img id="sel-img1" alt="">
       <div class="sel-nome" id="sel-nome1"></div>
       <div class="sel-dica">← · → muda &nbsp;·&nbsp; K confirma 🔵</div>
     </div>
+    <div class="sel-painel" id="sel-p2">
+      <img id="sel-img2" alt="">
+      <div class="sel-nome" id="sel-nome2"></div>
+      <div class="sel-dica">🎮 3: aperte A pra entrar</div>
+    </div>
+    <div class="sel-painel" id="sel-p3">
+      <img id="sel-img3" alt="">
+      <div class="sel-nome" id="sel-nome3"></div>
+      <div class="sel-dica">🎮 4: aperte A pra entrar</div>
+    </div>
   </div>
   <div id="sel-mapa" style="display:none">
     <div class="sel-nome">MAPA: <span id="sel-mapa-nome"></span></div>
-    <div class="sel-dica">🔴 A · D muda &nbsp;·&nbsp; F começa a luta!</div>
+    <div class="sel-dica">🔴 A · D muda mapa &nbsp;·&nbsp; C adiciona bot 🤖 &nbsp;·&nbsp; F começa a luta!</div>
   </div>
-  <div class="sel-dica">🎮 controles também funcionam: analógico anda · A pula/confirma · X soca · B agarra</div>
+  <div class="sel-dica">🎮 controles: analógico anda · A pula/confirma · X soca · B agarra</div>
 </div>
 <div id="hud">
   <div id="placar"></div>

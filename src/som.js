@@ -30,6 +30,7 @@ export function initSom() {
   lfo.start();
   src.connect(lp).connect(g).connect(master);
   src.start();
+  musicaAplicar(); // se a música foi pedida antes do som ligar, começa agora
 }
 
 function getNoise() {
@@ -83,7 +84,50 @@ function sopro(dur, { freq = 800, slideTo = null, vol = 0.4, type = 'bandpass', 
   src.stop(t0 + dur + 0.05);
 }
 
+// ---------- Música (baixo + chimbal sintetizados em loop) ----------
+let musTimer = null;
+let musModo = null;
+let musStep = 0;
+const TRILHAS = {
+  // frequências do baixo por colcheia (0 = pausa)
+  menu: { bpm: 104, baixo: [65.4, 0, 82.4, 0, 65.4, 0, 98, 87.3], chimbal: [1, 0, 1, 0, 1, 0, 1, 1] },
+  luta: { bpm: 138, baixo: [55, 55, 65.4, 55, 73.4, 73.4, 65.4, 49], chimbal: [1, 1, 1, 1, 1, 1, 1, 1] },
+};
+function musicaAplicar() {
+  if (musTimer) { clearInterval(musTimer); musTimer = null; }
+  if (!ctx || !musModo) return;
+  const tr = TRILHAS[musModo];
+  musStep = 0;
+  musTimer = setInterval(() => {
+    if (!ctx || ctx.state === 'suspended') return;
+    const i = musStep % 8;
+    const f = tr.baixo[i];
+    if (f) tom(f, 0.16, { type: 'triangle', vol: 0.14 });
+    if (tr.chimbal[i]) sopro(0.03, { freq: 6000, vol: 0.05, type: 'highpass' });
+    if (musModo === 'luta' && musStep % 16 === 14) tom(220, 0.1, { type: 'square', vol: 0.06, slideTo: 330 });
+    musStep++;
+  }, 60000 / tr.bpm / 2);
+}
+function musica(modo) {
+  if (modo === musModo) return;
+  musModo = modo;
+  musicaAplicar();
+}
+
+// ---------- Vozes molengas (balbucios por timbre) ----------
+function voz(fa, fb, dur, pitch = 1, type = 'sawtooth', vol = 0.16) {
+  tom(fa * pitch, dur, { type, vol, slideTo: fb * pitch });
+}
+
 export const som = {
+  musica,
+  vozSoco(p = 1) { voz(150, 95, 0.14, p); },
+  vozDor(p = 1) { voz(520, 240, 0.28, p, 'square', 0.12); },
+  vozUe(p = 1) { voz(300, 560, 0.35, p, 'triangle', 0.18); },
+  vozChoro(p = 1) {
+    [420, 350, 290].forEach((f, i) => tom(f * p, 0.2, { type: 'triangle', vol: 0.13, delay: i * 0.2, slideTo: f * 0.75 * p }));
+  },
+  vozYay(p = 1) { voz(380, 820, 0.45, p, 'triangle', 0.2); },
   soco() { sopro(0.13, { freq: 900, slideTo: 250, vol: 0.35 }); },
   acerto() {
     tom(110, 0.18, { type: 'sine', vol: 0.7, slideTo: 55 });

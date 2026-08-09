@@ -17,7 +17,7 @@ function makeWorld() {
   );
   const p1 = new Ragdoll(RAPIER, world, { x: -2.2, z: 0, heading: Math.PI / 2, memberships: 0x0002, filter: 0x0001 | 0x0004 });
   const p2 = new Ragdoll(RAPIER, world, { x: 2.2, z: 0, heading: -Math.PI / 2, memberships: 0x0004, filter: 0x0001 | 0x0002 });
-  p1.opponent = p2; p2.opponent = p1;
+  p1.rivals = [p2]; p2.rivals = [p1];
   return { world, p1, p2 };
 }
 
