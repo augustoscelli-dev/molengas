@@ -68,8 +68,12 @@ function addOutline(model){
 }
 window.setOutline = (on)=>{ outlineMeshes.forEach(m=>m.visible=on); };
 
+const Q = new URLSearchParams(location.search);
+const MODEL = Q.get('m') || './assets/modelos/jaeger.glb';
+const CENA = Q.has('cena'); // enquadra a cena/diorama inteiro (nao personagem)
+if (CENA) { ground.visible = false; gridRing.visible = false; }
 const loader = new GLTFLoader();
-loader.load('./assets/modelos/jaeger.glb', (gltf)=>{
+loader.load(MODEL, (gltf)=>{
   const model = gltf.scene;
   // stats
   let tris=0, meshes=0; const mats=new Set();
@@ -81,9 +85,19 @@ loader.load('./assets/modelos/jaeger.glb', (gltf)=>{
   const box = new THREE.Box3().setFromObject(model);
   const size = new THREE.Vector3(), center = new THREE.Vector3();
   box.getSize(size); box.getCenter(center);
-  const alvo = 2.4; const s = alvo/(size.y||1);
-  model.scale.setScalar(s);
-  model.position.set(-center.x*s, -box.min.y*s, -center.z*s);
+  let s = 1;
+  if (CENA) {
+    const maxd = Math.max(size.x, size.y, size.z) || 1; s = 4 / maxd;
+    model.scale.setScalar(s);
+    const b2 = new THREE.Box3().setFromObject(model), c2 = new THREE.Vector3(); b2.getCenter(c2);
+    model.position.sub(c2);
+    const r = 4 * 0.6, dist = r / Math.sin((48 * Math.PI / 180) / 2) * 1.2;
+    camera.position.set(dist * 0.55, dist * 0.42, dist * 0.85); camera.lookAt(0, 0, 0);
+  } else {
+    s = 2.4 / (size.y || 1);
+    model.scale.setScalar(s);
+    model.position.set(-center.x * s, -box.min.y * s, -center.z * s);
+  }
   pivot.add(model);
 
   window.__stats = {
@@ -92,7 +106,7 @@ loader.load('./assets/modelos/jaeger.glb', (gltf)=>{
     animacoes: gltf.animations? gltf.animations.length : 0,
     escalaAplicada:+s.toFixed(4),
   };
-  try { addOutline(model); window.setOutline(false); } catch(e){ console.log('outline falhou:', e); }
+  if (!CENA) { try { addOutline(model); window.setOutline(false); } catch(e){ console.log('outline falhou:', e); } }
   window.__ready = true;
 }, undefined, (err)=>{ window.__error = String(err); });
 
