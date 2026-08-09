@@ -1100,6 +1100,57 @@ function buildVisual(skin, fase = 0, slot = 0) {
     return meshes;
   }
 
+  // Estilo J (Jaeger rigado): usa um GLB JÁ RIGADO (esqueleto + skin do Meshy).
+  // Cada osso do Meshy segue rigidamente o corpo da física correspondente; os
+  // pesos de skin do próprio modelo suavizam as juntas → malha inteira, sem solto.
+  if (ESTILO === 'j') {
+    for (const spec of PARTS) { const o = new THREE.Object3D(); scene.add(o); meshes[spec.name] = o; }
+    meshes.torso._baseS = [1, 1, 1];
+    meshes._jrig = null;
+    const nomesGLB = MODELO_GLB.split(',');
+    const nomeGLB = (nomesGLB[slot] || nomesGLB[0] || 'jaeger-rigado').trim();
+    const tinta = new THREE.Color(skin.cores.torso);
+    // De qual corpo da física cada osso do esqueleto Meshy segue:
+    const BONE2BODY = {
+      Hips: 'pelvis', Spine: 'torso', Spine01: 'torso', Spine02: 'torso',
+      neck: 'head', Head: 'head', head_end: 'head', headfront: 'head',
+      LeftShoulder: 'torso', LeftArm: 'upperArmL', LeftForeArm: 'forearmL', LeftHand: 'forearmL',
+      RightShoulder: 'torso', RightArm: 'upperArmR', RightForeArm: 'forearmR', RightHand: 'forearmR',
+      LeftUpLeg: 'thighL', LeftLeg: 'calfL', LeftFoot: 'calfL', LeftToeBase: 'calfL',
+      RightUpLeg: 'thighR', RightLeg: 'calfR', RightFoot: 'calfR', RightToeBase: 'calfR',
+    };
+    new GLTFLoader().load(ASSET('assets/modelos/' + nomeGLB + '.glb'), (gltf) => {
+      const armature = gltf.scene; let skinned = null, skeleton = null;
+      armature.traverse((o) => {
+        if (o.isSkinnedMesh) { skinned = o; skeleton = o.skeleton; }
+        if (o.isMesh) {
+          o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false;
+          const src = Array.isArray(o.material) ? o.material[0] : o.material;
+          if (src) { o.material = src.clone(); if (o.material.color) o.material.color.lerp(tinta, 0.35); }
+        }
+      });
+      if (!skinned) { console.log('estilo j: GLB sem SkinnedMesh (não rigado)'); return; }
+      armature.updateMatrixWorld(true);
+      const box = new THREE.Box3().setFromObject(skinned), sz = new THREE.Vector3(); box.getSize(sz);
+      armature.scale.setScalar(1.9 / (sz.y || 1)); // altura alvo ~1.9
+      scene.add(armature); armature.updateMatrixWorld(true);
+      // bindOffset por osso = inverse(corpo em repouso) * osso no bind (tudo em world/metros)
+      const q0 = new THREE.Quaternion(), one = new THREE.Vector3(1, 1, 1);
+      const driven = [];
+      for (const bone of skeleton.bones) {
+        const bn = BONE2BODY[bone.name]; if (!bn) continue;
+        const spec = PARTS.find((p) => p.name === bn);
+        const restInv = new THREE.Matrix4().compose(new THREE.Vector3(spec.off[0], spec.off[1], spec.off[2]), q0, one).invert();
+        const off = new THREE.Matrix4().multiplyMatrices(restInv, bone.matrixWorld);
+        driven.push({ bone, body: bn, off });
+      }
+      meshes._armature = armature;
+      meshes._jrig = { armature, skinned, skeleton, driven };
+      meshes._flashExtra = [skinned]; registrarFlashMats(meshes);
+    });
+    return meshes;
+  }
+
   // Estilo E (protótipo): a ilustração da API é o personagem — sprite
   // de corpo inteiro colado na física (tomba, gira e amassa junto)
   if (ESTILO === 'e') {
@@ -1273,6 +1324,8 @@ function destroyVisual(meshes) {
     if (sm.geometry) sm.geometry.dispose();
     if (sm.material && !sm.material.map) sm.material.dispose();
   }
+  // Estilo 'j' (Jaeger rigado): remove a armature carregada
+  if (meshes._armature) scene.remove(meshes._armature);
 }
 
 // Flash de dano: coleta os materiais do lutador que têm canal emissivo, guardando
@@ -1344,12 +1397,27 @@ function syncVisual(rag, meshes, now) {
 
 // Estilo 'r' (rigado): depois de mover os ossos, atualiza os esqueletos (senão a
 // malha skinada colapsa). Chamar logo antes do render, com matrizes já frescas.
+const _rgWorld = new THREE.Matrix4(), _rgDesired = new THREE.Matrix4(), _rgInvP = new THREE.Matrix4(), _rgOne = new THREE.Vector3(1, 1, 1);
+const _rgBody = {};
 function atualizarSkins() {
   for (const l of lutadores) {
     const mm = l.meshes;
-    if (!mm || !mm._skel) continue;
-    mm._rootBones.updateMatrixWorld(true);
-    mm._skel.update();
+    if (!mm) continue;
+    if (mm._skel) { mm._rootBones.updateMatrixWorld(true); mm._skel.update(); }
+    if (mm._jrig) {
+      // corpos da física (trackers preenchidos por syncVisual) -> matrizes world
+      for (const spec of PARTS) { const t = mm[spec.name]; _rgBody[spec.name] = (_rgBody[spec.name] || new THREE.Matrix4()).compose(t.position, t.quaternion, _rgOne); }
+      // cada osso segue rigidamente seu corpo (osso.world = corpo.world * bindOffset),
+      // processando pai->filho (skeleton.bones já vem nessa ordem)
+      for (const d of mm._jrig.driven) {
+        _rgDesired.multiplyMatrices(_rgBody[d.body], d.off);
+        _rgInvP.copy(d.bone.parent.matrixWorld).invert();
+        _rgWorld.multiplyMatrices(_rgInvP, _rgDesired);
+        _rgWorld.decompose(d.bone.position, d.bone.quaternion, d.bone.scale);
+        d.bone.updateWorldMatrix(false, false);
+      }
+      mm._jrig.skeleton.update();
+    }
   }
 }
 
