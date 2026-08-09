@@ -5,11 +5,12 @@ import { MAPS, readInput, isDown } from './input.js';
 import { SKINS, getFaceTexture, toonMat, addOutline, vinilMat } from './skins.js';
 import { som, initSom } from './som.js';
 import { readGamepad, mergeInput } from './gamepad.js';
+import { GLTFLoader } from '../libs/jsm/loaders/GLTFLoader.js';
 
 await RAPIER.init();
 
 // Carimbo visível na tela — se o número não bater com o do repo, é cache velho
-const VERSAO = 'v14-feijao';
+const VERSAO = 'v15-cidade';
 
 const WIN_SCORE = 5;
 const IDLE_IN = { move: { x: 0, z: 0 }, punch: false, grab: false, jump: false };
@@ -84,16 +85,25 @@ scene.add(sun);
 // Textura do tablado (usada pelos mapas)
 const deckTex = makeDeckTexture();
 
-// Fundo (arte do Pollinations, se existir; senão fica só o céu)
-new THREE.TextureLoader().load(ASSET('assets/fundo.jpg'), (tex) => {
-  tex.colorSpace = THREE.SRGBColorSpace;
-  const back = new THREE.Mesh(
-    new THREE.PlaneGeometry(150, 62.5),
-    new THREE.MeshBasicMaterial({ map: tex, fog: false }),
-  );
-  back.position.set(0, 6, -42);
-  scene.add(back);
-}, undefined, () => {});
+// Fundo (arte do Pollinations) — trocável por mapa
+const backMesh = new THREE.Mesh(
+  new THREE.PlaneGeometry(150, 62.5),
+  new THREE.MeshBasicMaterial({ color: 0x141433, fog: false }),
+);
+backMesh.position.set(0, 6, -42);
+scene.add(backMesh);
+let fundoPedido = 0;
+function setFundo(caminho) {
+  const meu = ++fundoPedido;
+  new THREE.TextureLoader().load(ASSET(caminho), (tex) => {
+    if (meu !== fundoPedido) return; // chegou atrasado, outro mapa já pediu
+    tex.colorSpace = THREE.SRGBColorSpace;
+    backMesh.material.map = tex;
+    backMesh.material.color.set(0xffffff);
+    backMesh.material.needsUpdate = true;
+  }, undefined, () => {});
+}
+setFundo('assets/fundo.jpg');
 
 // ---------- Mapas ----------
 const texCaixote = (() => {
@@ -212,6 +222,57 @@ const texSumo = (() => {
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
 })();
+
+const texJanelas = (() => {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d');
+  g.fillStyle = '#232a3a';
+  g.fillRect(0, 0, 128, 128);
+  for (let j = 0; j < 5; j++) {
+    for (let i = 0; i < 4; i++) {
+      g.fillStyle = (i * 7 + j * 13) % 5 < 2 ? '#ffd94a' : '#46536b';
+      g.fillRect(10 + i * 30, 10 + j * 24, 18, 14);
+    }
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+})();
+const matBloco = (() => { const m = toonMat(THREE, 0xffffff); m.map = texJanelas; return m; })();
+
+function predio(m, px, pz, alt = 5) {
+  for (let col = 0; col < 2; col++) {
+    for (let andar = 0; andar < alt; andar++) {
+      const x = px + (col - 0.5) * 0.57;
+      const y = 0.22 + andar * 0.44;
+      const b = world.createRigidBody(
+        RAPIER.RigidBodyDesc.dynamic().setTranslation(x, y, pz).setLinearDamping(0.15).setAngularDamping(0.35),
+      );
+      world.createCollider(
+        RAPIER.ColliderDesc.cuboid(0.28, 0.21, 0.28).setMass(3).setFriction(0.7).setCollisionGroups(PROP_GROUPS),
+        b,
+      );
+      const me = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.42, 0.56), matBloco);
+      me.castShadow = true;
+      me.receiveShadow = true;
+      scene.add(me);
+      m.bodies.push(b);
+      m.meshes.push(me);
+      m.syncPairs.push([b, me]);
+      m.props.push(b);
+      m._blocos.push([b, x, y, pz]);
+    }
+  }
+}
+function resetBlocos(m) {
+  for (const [b, x, y, z] of m._blocos) {
+    b.setTranslation({ x, y, z }, true);
+    b.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true);
+    b.setLinvel({ x: 0, y: 0, z: 0 }, true);
+    b.setAngvel({ x: 0, y: 0, z: 0 }, true);
+  }
+}
 
 const MAPAS = [
   {
@@ -540,6 +601,37 @@ const MAPAS = [
       };
     },
   },
+  {
+    nome: 'CIDADE',
+    fundo: 'assets/fundo-cidade.jpg',
+    build(m) {
+      // Robôs gigantes na cidade: os prédios são pilhas de blocos com
+      // física — desabam, voam com socos e viram armas
+      const asfalto = (() => {
+        const c = document.createElement('canvas');
+        c.width = 512; c.height = 384;
+        const g = c.getContext('2d');
+        g.fillStyle = '#3a3d46';
+        g.fillRect(0, 0, 512, 384);
+        g.strokeStyle = '#f2d16b';
+        g.lineWidth = 6;
+        g.setLineDash([26, 22]);
+        g.beginPath(); g.moveTo(0, 192); g.lineTo(512, 192); g.stroke();
+        g.setLineDash([]);
+        g.strokeStyle = '#565963';
+        g.lineWidth = 3;
+        for (const x of [128, 384]) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, 384); g.stroke(); }
+        const t = new THREE.CanvasTexture(c);
+        t.colorSpace = THREE.SRGBColorSpace;
+        return t;
+      })();
+      chaoFixo(m, 6, 4.5, new THREE.MeshStandardMaterial({ map: asfalto, roughness: 0.92 }));
+      for (const [bx, bz, alt] of [[-4.4, -3, 5], [4.4, -3, 5], [-4.4, 3, 4], [4.4, 3, 4], [0, -3.6, 3]]) {
+        predio(m, bx, bz, alt);
+      }
+      m.reset = () => resetBlocos(m);
+    },
+  },
 ];
 
 let mapaIdx = 0;
@@ -550,9 +642,10 @@ function setMapa(idx) {
     for (const me of mapa.meshes) scene.remove(me);
   }
   mapaIdx = ((idx % MAPAS.length) + MAPAS.length) % MAPAS.length;
-  mapa = { bodies: [], meshes: [], syncPairs: [], props: [], bolas: [], _caixotes: [], reset: null, update: null };
+  mapa = { bodies: [], meshes: [], syncPairs: [], props: [], bolas: [], _caixotes: [], _blocos: [], reset: null, update: null };
   MAPAS[mapaIdx].build(mapa);
   mapa.semSoco = !!MAPAS[mapaIdx].semSoco;
+  setFundo(MAPAS[mapaIdx].fundo ?? 'assets/fundo.jpg');
   for (const l of lutadores) {
     l.rag.props = mapa.props;
     l.rag.controle = mapa.controle ?? 1;
@@ -623,6 +716,9 @@ const CATEGORIA = {
   thighL: 'legs', thighR: 'legs', calfL: 'legs', calfR: 'legs',
 };
 const FOFURA = { arms: 1.6, legs: 1.55 };
+// Estilos de personagem em teste (?estilo=a|b|c|d):
+// a=feijão vinil · b=chibi cabeçudo · c=massinha articulada · d=cartum chapado
+const ESTILO = PARAMS.get('estilo') || 'a';
 
 function clarear(cor, t) {
   const f = (v) => Math.round(v + (255 - v) * t);
@@ -632,102 +728,230 @@ function escurecer(cor, t) {
   const f = (v) => Math.round(v * (1 - t));
   return (f((cor >> 16) & 255) << 16) | (f((cor >> 8) & 255) << 8) | f(cor & 255);
 }
+// Puxa a cor pra um tom pastel apagado (estilo Gang Beasts)
+function dessaturar(cor, t) {
+  const r = (cor >> 16) & 255, g = (cor >> 8) & 255, b = cor & 255;
+  const cinza = 0.3 * r + 0.59 * g + 0.11 * b;
+  const f = (v) => Math.round(v + (cinza - v) * t + 18);
+  return (Math.min(255, f(r)) << 16) | (Math.min(255, f(g)) << 8) | Math.min(255, f(b));
+}
 
 function buildVisual(skin, fase = 0) {
   const meshes = { _skin: skin, _fase: fase };
   const mats = {};
-  // Direção aprovada F1: gominha de vinil — opaca (transparência criava
-  // costuras entre as partes), o doce vem do verniz + glow interno
-  const opCorpo = skin.opacidade ?? 1;
-  const matFor = (cat) => mats[cat] ||= vinilMat(THREE, skin.cores[cat], opCorpo);
+  // Fábrica de materiais por estilo
+  const mkMat = (color) => {
+    if (ESTILO === 'c') return new THREE.MeshStandardMaterial({ color: clarear(color, 0.12), roughness: 0.8 });
+    if (ESTILO === 'f') return new THREE.MeshStandardMaterial({ color: dessaturar(color, 0.32), roughness: 0.88 });
+    if (ESTILO === 'd') return toonMat(THREE, color);
+    return vinilMat(THREE, color, 1);
+  };
+  const contorno = (m, esc = 1.035) => (ESTILO === 'c' || ESTILO === 'f' ? m : addOutline(THREE, m, ESTILO === 'd' ? 1.055 : esc));
+  const matFor = (cat) => mats[cat] ||= mkMat(skin.cores[cat]);
   const bolinha = (mat, r, escala) => {
     const b = new THREE.Mesh(new THREE.SphereGeometry(r, 18, 14), mat);
     if (escala) b.scale.set(...escala);
     b.castShadow = true;
-    addOutline(THREE, b);
+    contorno(b);
     return b;
   };
-  // Anatomia Fall Guys aprovada: UM feijãozão liso (cabeça+tronco+quadril
-  // numa casca só, seguindo o tronco da física) + braços e pernas tocos.
+  const fazFace = (r) => new THREE.Mesh(
+    new THREE.CircleGeometry(r, 28),
+    new THREE.MeshBasicMaterial({ map: getFaceTexture(THREE, skin.face, 'ok'), transparent: true }),
+  );
+  const fazTexTorso = () => {
+    skin._texTorso ||= (() => {
+      const c = document.createElement('canvas');
+      c.width = c.height = 256;
+      skin.texturaTorso(c.getContext('2d'));
+      const t = new THREE.CanvasTexture(c);
+      t.colorSpace = THREE.SRGBColorSpace;
+      return t;
+    })();
+    const m = mkMat(0xffffff);
+    m.map = skin._texTorso;
+    return m;
+  };
+  const CHIBI = ESTILO === 'b';
+  const GB = ESTILO === 'f';
+  const ARTIC = ESTILO === 'c' || GB;
+
+  // Estilo G (protótipo): modelo 3D profissional (GLB) colado na física
+  if (ESTILO === 'g') {
+    for (const spec of PARTS) {
+      let obj;
+      if (spec.name === 'torso') {
+        obj = new THREE.Group();
+        obj._baseS = [1, 1, 1];
+        new GLTFLoader().load(ASSET('assets/modelos/robo.glb'), (gltf) => {
+          const modelo = gltf.scene;
+          modelo.scale.setScalar(0.42);
+          modelo.position.y = -1.28; // pés do modelo no chão (tronco fica a ~1.28)
+          const tinta = new THREE.Color(skin.cores.torso);
+          modelo.traverse((o) => {
+            if (o.isMesh) {
+              o.castShadow = true;
+              o.material = o.material.clone();
+              o.material.color.lerp(tinta, 0.45);
+            }
+          });
+          obj.add(modelo);
+        });
+      } else {
+        obj = new THREE.Group();
+      }
+      scene.add(obj);
+      meshes[spec.name] = obj;
+    }
+    return meshes;
+  }
+
+  // Estilo E (protótipo): a ilustração da API é o personagem — sprite
+  // de corpo inteiro colado na física (tomba, gira e amassa junto)
+  if (ESTILO === 'e') {
+    for (const spec of PARTS) {
+      let obj;
+      if (spec.name === 'torso') {
+        const tex = new THREE.TextureLoader().load(ASSET('assets/papel/tubarao-corpo.png'));
+        tex.colorSpace = THREE.SRGBColorSpace;
+        obj = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true }));
+        obj.center.set(0.5, 0.6);
+        obj._baseS = [2.1, 2.1, 1];
+        obj.scale.set(2.1, 2.1, 1);
+        meshes._sprite = obj;
+      } else {
+        obj = new THREE.Group();
+      }
+      scene.add(obj);
+      meshes[spec.name] = obj;
+    }
+    return meshes;
+  }
+
   for (const spec of PARTS) {
     let obj;
     if (spec.name === 'torso') {
-      // O FEIJÃO
-      let matBean = matFor('torso');
-      if (skin.texturaTorso) {
-        skin._texTorso ||= (() => {
-          const c = document.createElement('canvas');
-          c.width = c.height = 256;
-          skin.texturaTorso(c.getContext('2d'));
-          const t = new THREE.CanvasTexture(c);
-          t.colorSpace = THREE.SRGBColorSpace;
-          return t;
-        })();
-        matBean = vinilMat(THREE, 0xffffff, 1);
-        matBean.map = skin._texTorso;
+      const matBean = skin.texturaTorso ? fazTexTorso() : matFor('torso');
+      if (ARTIC) {
+        // corpo articulado gordo (barril; GB com ombros redondos)
+        obj = new THREE.Mesh(new THREE.CapsuleGeometry(GB ? 0.21 : 0.2, GB ? 0.2 : 0.18, 8, 18), matBean);
+        obj._baseS = GB ? [1.18, 1.05, 0.98] : [1.22, 1.08, 0.95];
+        if (GB) {
+          for (const lado of [-1, 1]) {
+            const ombro = new THREE.Mesh(new THREE.SphereGeometry(0.13, 14, 12), matBean);
+            ombro.position.set(lado * 0.18, 0.16, 0);
+            obj.add(ombro);
+          }
+        }
+      } else if (CHIBI) {
+        // corpinho pequeno (a cabeça gigante é a estrela)
+        const geo = new THREE.CapsuleGeometry(0.26, 0.3, 8, 20);
+        geo.translate(0, -0.16, 0);
+        obj = new THREE.Mesh(geo, matBean);
+        obj._baseS = [1, 1, 0.9];
+      } else {
+        // feijão único
+        const geo = new THREE.CapsuleGeometry(0.34, 0.56, 8, 24);
+        geo.translate(0, -0.1, 0);
+        obj = new THREE.Mesh(geo, matBean);
+        obj._baseS = [1, 1.05, 0.92];
       }
-      const geoBean = new THREE.CapsuleGeometry(0.34, 0.56, 8, 24);
-      geoBean.translate(0, -0.1, 0); // desce a barriga pra emendar nas pernas
-      obj = new THREE.Mesh(geoBean, matBean);
-      obj.scale.set(1, 1.05, 0.92);
+      obj.scale.set(...obj._baseS);
       obj.castShadow = true;
-      addOutline(THREE, obj, 1.03);
-      obj._baseY = 1.05;
-      // Carinha no alto do feijão
-      const face = new THREE.Mesh(
-        new THREE.CircleGeometry(0.21, 28),
-        new THREE.MeshBasicMaterial({ map: getFaceTexture(THREE, skin.face, 'ok'), transparent: true }),
-      );
-      face.position.set(0, 0.16, 0.325);
-      face.rotation.x = -0.12;
-      obj.add(face);
-      meshes._face = face;
+      contorno(obj, 1.03);
+      if (!CHIBI && !ARTIC) {
+        const face = fazFace(0.21);
+        face.position.set(0, 0.16, 0.325);
+        face.rotation.x = -0.12;
+        obj.add(face);
+        meshes._face = face;
+      }
       if (!skin.semBarriga) {
         const corBarriga = skin.cores.barriga ?? clarear(skin.cores.torso, 0.38);
-        const barriga = new THREE.Mesh(new THREE.SphereGeometry(0.24, 20, 16), vinilMat(THREE, corBarriga, 1));
-        barriga.position.set(0, -0.16, 0.15);
+        const barriga = new THREE.Mesh(new THREE.SphereGeometry(ARTIC ? 0.16 : CHIBI ? 0.18 : 0.24, 20, 16), mkMat(corBarriga));
+        barriga.position.set(0, -0.12, ARTIC ? 0.1 : CHIBI ? 0.12 : 0.15);
         barriga.scale.set(0.85, 1.05, 0.55);
         obj.add(barriga);
       }
     } else if (spec.shape === 'ball') {
-      // Cabeça física invisível — âncora dos acessórios (chapéus etc.),
-      // rebaixada pra eles brotarem da casca do feijão
       obj = new THREE.Group();
-      obj.scale.setScalar(1.5);
-      const ancora2 = new THREE.Group();
-      ancora2.position.y = -0.14;
-      obj.add(ancora2);
-      meshes._headAnchor = ancora2;
-    } else if (spec.name === 'pelvis' || spec.name.startsWith('upperArm') || spec.name.startsWith('thigh')) {
-      // invisíveis (o feijão cobre); pelvis segue como âncora de caudas
-      obj = new THREE.Group();
+      if (ARTIC || CHIBI) {
+        // cabeça visível (chibi GIGANTE; gang beasts pequena e afundada)
+        obj.scale.setScalar(CHIBI ? 1.9 : GB ? 1.18 : 1.5);
+        const skull = bolinha(matFor('head'), spec.r, [1, GB ? 1.06 : 1.02, 0.96]);
+        skull.position.y = CHIBI ? -0.05 : GB ? -0.11 : -0.03;
+        obj.add(skull);
+        const face = fazFace(spec.r * (GB ? 0.72 : 0.95));
+        face.position.set(0, CHIBI ? -0.06 : GB ? -0.12 : -0.03, spec.r + 0.004);
+        obj.add(face);
+        meshes._face = face;
+        if (ARTIC) {
+          const pescoco = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.125, 0.16, 12), matFor('head'));
+          pescoco.position.y = -0.15;
+          obj.add(pescoco);
+        }
+        meshes._headAnchor = obj;
+      } else {
+        // feijão: cabeça invisível, só âncora de chapéus
+        obj.scale.setScalar(1.5);
+        const ancora2 = new THREE.Group();
+        ancora2.position.y = -0.14;
+        obj.add(ancora2);
+        meshes._headAnchor = ancora2;
+      }
+    } else if (spec.name === 'pelvis') {
+      if (ARTIC) {
+        obj = new THREE.Mesh(new THREE.CapsuleGeometry(0.185, 0.12, 8, 18), matFor('pelvis'));
+        obj.scale.set(1.3, 1.0, 1.1);
+        obj.castShadow = true;
+        contorno(obj);
+      } else {
+        obj = new THREE.Group();
+      }
+    } else if (spec.name.startsWith('upperArm') || spec.name.startsWith('thigh')) {
+      if (ARTIC) {
+        const cat = CATEGORIA[spec.name];
+        const gordo = spec.r * FOFURA[cat];
+        obj = new THREE.Mesh(new THREE.CapsuleGeometry(gordo, spec.hh * 2, 6, 14), matFor(cat));
+        obj.castShadow = true;
+        contorno(obj);
+        for (const py of [spec.hh, -spec.hh]) {
+          const cap = bolinha(matFor(cat), gordo * (GB ? 1.0 : 1.12));
+          cap.position.y = py;
+          obj.add(cap);
+        }
+      } else {
+        obj = new THREE.Group();
+      }
     } else if (spec.name.startsWith('forearm')) {
-      // Bracinho toco + luvona
-      obj = new THREE.Mesh(
-        new THREE.CapsuleGeometry(0.09, 0.16, 6, 12),
-        matFor('arms'),
-      );
+      const grosso = ARTIC ? spec.r * FOFURA.arms : 0.09;
+      obj = new THREE.Mesh(new THREE.CapsuleGeometry(grosso, ARTIC ? spec.hh * 2 : 0.16, 6, 12), matFor('arms'));
       obj.castShadow = true;
-      addOutline(THREE, obj);
-      const mao = bolinha(mats.maos ||= vinilMat(THREE, escurecer(skin.cores.arms, 0.22), 1), 0.13);
-      mao.position.y = -0.14;
+      contorno(obj);
+      const mao = bolinha(mats.maos ||= mkMat(escurecer(skin.cores.arms, GB ? 0.08 : 0.22)), ARTIC ? spec.r * (GB ? 1.6 : 1.9) : 0.13);
+      mao.position.y = ARTIC ? -(spec.hh + spec.r * 0.55) : -0.14;
       obj.add(mao);
     } else {
-      // calf: perninha toco comprida (emenda por baixo do feijão) + botona
-      const geoPerna = new THREE.CapsuleGeometry(0.1, 0.34, 6, 12);
-      geoPerna.translate(0, 0.09, 0);
+      // calf
+      let geoPerna;
+      if (ARTIC) {
+        geoPerna = new THREE.CapsuleGeometry(spec.r * FOFURA.legs, spec.hh * 2, 6, 12);
+      } else {
+        geoPerna = new THREE.CapsuleGeometry(0.1, 0.34, 6, 12);
+        geoPerna.translate(0, 0.09, 0);
+      }
       obj = new THREE.Mesh(geoPerna, matFor('legs'));
       obj.castShadow = true;
-      addOutline(THREE, obj);
+      contorno(obj);
       const pe = new THREE.Mesh(
-        new THREE.CapsuleGeometry(0.095, 0.1, 6, 12),
-        mats.pes ||= vinilMat(THREE, escurecer(skin.cores.legs, 0.22), 1),
+        new THREE.CapsuleGeometry(ARTIC ? 0.082 : 0.095, 0.1, 6, 12),
+        mats.pes ||= mkMat(escurecer(skin.cores.legs, 0.22)),
       );
       pe.rotation.x = Math.PI / 2;
       pe.scale.set(1.05, 1, 0.85);
-      pe.position.set(0, -0.16, 0.05);
+      pe.position.set(0, ARTIC ? -(spec.hh + 0.03) : -0.16, 0.05);
       pe.castShadow = true;
-      addOutline(THREE, pe);
+      contorno(pe);
       obj.add(pe);
     }
     scene.add(obj);
@@ -757,18 +981,26 @@ function syncVisual(rag, meshes, now) {
     m.position.set(t.x, t.y, t.z);
     m.quaternion.set(r.x, r.y, r.z, r.w);
   }
-  // Respiração + squash & stretch, tudo no feijão
+  // Respiração + squash & stretch no corpo
   const desdeHit = now - rag.lastHitLandedAt;
   const k = desdeHit >= 0 && desdeHit < 0.18 ? 0.22 * (1 - desdeHit / 0.18) : 0;
+  const bs = meshes.torso._baseS ?? [1, 1, 1];
   meshes.torso.scale.set(
-    1 + k,
-    meshes.torso._baseY * (1 + 0.028 * Math.sin(now * 2.6 + meshes._fase)) * (1 - k * 0.6),
-    0.92 * (1 + k),
+    bs[0] * (1 + k),
+    bs[1] * (1 + 0.028 * Math.sin(now * 2.6 + meshes._fase)) * (1 - k * 0.6),
+    bs[2] * (1 + k),
   );
   // Carinha: nocaute > piscada > normal
-  const piscando = ((now + meshes._fase) % 3.4) < 0.13;
-  const variante = rag.isStunned(now) ? 'x' : (piscando ? 'blink' : 'ok');
-  meshes._face.material.map = getFaceTexture(THREE, meshes._skin.face, variante);
+  if (meshes._face) {
+    const piscando = ((now + meshes._fase) % 3.4) < 0.13;
+    const variante = rag.isStunned(now) ? 'x' : (piscando ? 'blink' : 'ok');
+    meshes._face.material.map = getFaceTexture(THREE, meshes._skin.face, variante);
+  }
+  // Sprite de papel: acompanha a inclinação do corpo físico
+  if (meshes._sprite) {
+    const q = rag.parts.torso.rotation();
+    meshes._sprite.material.rotation = -Math.atan2(2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.y * q.y + q.z * q.z));
+  }
 }
 
 // ---------- Lutadores (2 a 4, humanos e bots) ----------
