@@ -70,6 +70,7 @@ export class Ragdoll {
     this.punchHit = true;
     this.jumpReadyAt = 0;
     this.hoverBlockUntil = 0;
+    this.gaitT = 0;
     this.lastHitLandedAt = -10;
     this.grabJoints = [null, null];
 
@@ -137,8 +138,8 @@ export class Ragdoll {
         const b = this.parts[name];
         b.applyImpulse({ x: 0, y: b.mass() * 9.81 * a * dt, z: 0 }, true);
       }
-      // Quadril flutuante
-      const f = clamp((0.95 - pp.y) * 950 - pv.y * 95, -160, 650);
+      // Quadril flutuante (alto o bastante pras pernas ficarem quase esticadas)
+      const f = clamp((1.0 - pp.y) * 950 - pv.y * 95, -160, 650);
       pelvis.applyImpulse({ x: 0, y: f * dt, z: 0 }, true);
       // Corda na cabeça
       const head = this.parts.head;
@@ -193,6 +194,36 @@ export class Ragdoll {
         const forte = bn === 'torso';
         const t2 = clamp(e2 * (forte ? 5 : 1.6) - av2b.y * (forte ? 1.2 : 0.4), -7, 7);
         b.applyTorqueImpulse({ x: 0, y: t2 * dt, z: 0 }, true);
+      }
+      // Passinhos: parado os pés plantam no chão sob o quadril;
+      // andando eles alternam passadas (ergue, avança, apoia)
+      if (standing) {
+        const andando = mlen > 0.01;
+        this.gaitT += dt * (andando ? 8 : 0);
+        const fwdX = Math.sin(this.heading), fwdZ = Math.cos(this.heading);
+        const latX = Math.cos(this.heading), latZ = -Math.sin(this.heading);
+        for (let lado = 0; lado < 2; lado++) {
+          const calf = this.parts[lado === 0 ? 'calfL' : 'calfR'];
+          const fase = this.gaitT + (lado === 0 ? 0 : Math.PI);
+          const passo = andando ? Math.cos(fase) * 0.2 : 0;
+          const ergue = andando ? Math.max(0, Math.sin(fase)) * 0.1 : 0;
+          const alvoX = pp.x + latX * (lado === 0 ? -0.11 : 0.11) + fwdX * passo;
+          const alvoZ = pp.z + latZ * (lado === 0 ? -0.11 : 0.11) + fwdZ * passo;
+          const alvoY = 0.14 + ergue;
+          const cp = calf.translation();
+          const ponta = qrot(calf.rotation(), [0, -0.17, 0]);
+          const cv = calf.linvel();
+          const fx2 = clamp((alvoX - (cp.x + ponta[0])) * 26 - cv.x * 3, -18, 18);
+          const fy2 = clamp((alvoY - (cp.y + ponta[1])) * 22 - cv.y * 4, -10, 14);
+          const fz2 = clamp((alvoZ - (cp.z + ponta[2])) * 26 - cv.z * 3, -18, 18);
+          calf.applyImpulse({ x: fx2 * dt, y: fy2 * dt, z: fz2 * dt }, true);
+        }
+        // Freio: sem input, os pés plantados seguram o escorregão
+        if (!andando) {
+          const bx = clamp(-pv.x * 90, -220, 220);
+          const bz = clamp(-pv.z * 90, -220, 220);
+          pelvis.applyImpulse({ x: bx * dt, y: 0, z: bz * dt }, true);
+        }
       }
       // Pulo
       if (input.jump && grounded && now > this.jumpReadyAt) {
@@ -283,5 +314,6 @@ export class Ragdoll {
     this.punchUntil = 0;
     this.punchHit = true;
     this.heading = this.heading0;
+    this.gaitT = 0;
   }
 }

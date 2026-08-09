@@ -191,7 +191,7 @@ function buildVisual(skin, fase = 0) {
     if (spec.shape === 'ball') {
       obj = new THREE.Group();
       obj.scale.setScalar(1.42); // cabeçona
-      const skull = bolinha(matFor('head'), spec.r, [1, 1.07, 1.01]);
+      const skull = bolinha(matFor('head'), spec.r, [1, 1.03, 0.96]);
       obj.add(skull);
       const face = new THREE.Mesh(
         new THREE.CircleGeometry(spec.r * 0.9, 24),
@@ -215,17 +215,25 @@ function buildVisual(skin, fase = 0) {
         matTorso = toonMat(THREE, 0xffffff);
         matTorso.map = skin._texTorso;
       }
-      obj = bolinha(matTorso, 0.19, [1.12, 1.42, 1.02]);
-      obj._baseY = 1.42;
+      // Barril arredondado (estilo Gang Beasts), não bola
+      obj = new THREE.Mesh(new THREE.CapsuleGeometry(0.185, 0.18, 6, 16), matTorso);
+      obj.scale.set(1.15, 1.05, 0.9);
+      obj.castShadow = true;
+      addOutline(THREE, obj);
+      obj._baseY = 1.05;
       if (!skin.semBarriga) {
         const corBarriga = skin.cores.barriga ?? clarear(skin.cores.torso, 0.38);
         const barriga = new THREE.Mesh(new THREE.SphereGeometry(0.155, 18, 14), toonMat(THREE, corBarriga));
-        barriga.position.set(0, -0.03, 0.078);
-        barriga.scale.set(0.8, 0.92, 0.5);
+        barriga.position.set(0, -0.04, 0.095);
+        barriga.scale.set(0.78, 1.05, 0.5);
         obj.add(barriga);
       }
     } else if (spec.name === 'pelvis') {
-      obj = bolinha(matFor('pelvis'), 0.185, [1.14, 1.0, 1.06]);
+      // "Shorts": capsulinha larga e baixa
+      obj = new THREE.Mesh(new THREE.CapsuleGeometry(0.16, 0.08, 6, 16), matFor('pelvis'));
+      obj.scale.set(1.25, 0.9, 1.05);
+      obj.castShadow = true;
+      addOutline(THREE, obj);
     } else {
       const gordo = spec.r * FOFURA[cat];
       obj = new THREE.Mesh(new THREE.CapsuleGeometry(gordo, spec.hh * 2, 6, 14), matFor(cat));
@@ -246,8 +254,16 @@ function buildVisual(skin, fase = 0) {
         obj.add(mao);
       }
       if (spec.name.startsWith('calf')) {
-        const pe = bolinha(mats.pes ||= toonMat(THREE, escurecer(skin.cores.legs, 0.28)), spec.r * 1.45, [1, 0.55, 1.4]);
-        pe.position.set(0, -(spec.hh + spec.r * 0.35), 0.04);
+        // Botinha: capsulinha deitada apontando pra frente
+        const pe = new THREE.Mesh(
+          new THREE.CapsuleGeometry(0.062, 0.09, 6, 12),
+          mats.pes ||= toonMat(THREE, escurecer(skin.cores.legs, 0.28)),
+        );
+        pe.rotation.x = Math.PI / 2;
+        pe.scale.set(1.05, 1, 0.8);
+        pe.position.set(0, -(spec.hh + 0.025), 0.05);
+        pe.castShadow = true;
+        addOutline(THREE, pe);
         obj.add(pe);
       }
     }

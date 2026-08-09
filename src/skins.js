@@ -231,7 +231,7 @@ export const SKINS = [
       // Asinhas
       for (const lado of [-1, 1]) {
         const asa = mesh(THREE, new THREE.SphereGeometry(0.115, 14, 10), 0xf0eee6);
-        asa.position.set(lado * 0.2, -0.03, 0.01);
+        asa.position.set(lado * 0.235, -0.03, 0.01);
         asa.scale.set(0.38, 0.8, 0.55);
         asa.rotation.z = lado * 0.45;
         torso.add(asa);
