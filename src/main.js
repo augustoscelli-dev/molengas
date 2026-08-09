@@ -635,6 +635,35 @@ const MAPAS = [
   {
     nome: 'RIO',
     build(m) {
+      // ---- AMBIENTE cinematografico do Rio: ceu por-do-sol + mar + neblina quente ----
+      backMesh.visible = false; // esconde a torcida/estadio padrao
+      scene.fog.color.setHex(0xf1c49a); scene.fog.near = 26; scene.fog.far = 130;
+      const skyC = document.createElement('canvas'); skyC.width = 1024; skyC.height = 512;
+      const sg = skyC.getContext('2d');
+      const grd = sg.createLinearGradient(0, 0, 0, 512);
+      grd.addColorStop(0, '#1e3f7a'); grd.addColorStop(0.42, '#6fa6d6');
+      grd.addColorStop(0.55, '#ffd9a0'); grd.addColorStop(0.63, '#ff9e6b'); grd.addColorStop(1, '#ffb98a');
+      sg.fillStyle = grd; sg.fillRect(0, 0, 1024, 512);
+      const sun = sg.createRadialGradient(560, 300, 8, 560, 300, 150);
+      sun.addColorStop(0, 'rgba(255,246,214,0.95)'); sun.addColorStop(1, 'rgba(255,246,214,0)');
+      sg.fillStyle = sun; sg.fillRect(410, 150, 300, 300);
+      sg.fillStyle = '#2f5a5e'; // morros na silhueta (sem monumentos)
+      const hill = (cx, w, h) => { sg.beginPath(); sg.moveTo(cx - w, 302); sg.quadraticCurveTo(cx, 302 - h, cx + w, 302); sg.closePath(); sg.fill(); };
+      hill(150, 130, 95); hill(360, 90, 140); hill(770, 160, 115); hill(930, 80, 70);
+      const skyTex = new THREE.CanvasTexture(skyC); skyTex.colorSpace = THREE.SRGBColorSpace;
+      const domo = new THREE.Mesh(
+        new THREE.SphereGeometry(120, 32, 16),
+        new THREE.MeshBasicMaterial({ map: skyTex, side: THREE.BackSide, fog: false }),
+      );
+      scene.add(domo); m.meshes.push(domo);
+      // MAR ao redor (a arena fica numa ilha de areia)
+      const mar = new THREE.Mesh(
+        new THREE.PlaneGeometry(420, 420),
+        new THREE.MeshStandardMaterial({ color: 0x2b7fb0, roughness: 0.22, metalness: 0.15 }),
+      );
+      mar.rotation.x = -Math.PI / 2; mar.position.y = -0.4;
+      scene.add(mar); m.meshes.push(mar);
+
       // Colisor de chao (todos ficam de pe; agua/terra sao visuais)
       chaoFixo(m, 13, 10, new THREE.MeshBasicMaterial({ visible: false }));
       // TERRA: chao visual (areia) em volta — onde ficam as casas destrutiveis
@@ -735,6 +764,10 @@ function setMapa(idx) {
   }
   mapaIdx = ((idx % MAPAS.length) + MAPAS.length) % MAPAS.length;
   mapa = { bodies: [], meshes: [], syncPairs: [], props: [], bolas: [], _caixotes: [], _blocos: [], reset: null, update: null };
+  // Restaura o ambiente padrao (um mapa pode sobrescrever ceu/neblina no build)
+  backMesh.visible = true;
+  scene.background = new THREE.Color(0x141433);
+  scene.fog.color.setHex(0x141433); scene.fog.near = 22; scene.fog.far = 55;
   MAPAS[mapaIdx].build(mapa);
   mapa.semSoco = !!MAPAS[mapaIdx].semSoco;
   setFundo(MAPAS[mapaIdx].fundo ?? 'assets/fundo.jpg');
