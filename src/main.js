@@ -8,6 +8,9 @@ import { readGamepad, mergeInput } from './gamepad.js';
 
 await RAPIER.init();
 
+// Carimbo visível na tela — se o número não bater com o do repo, é cache velho
+const VERSAO = 'v13-gominha-gorda';
+
 const WIN_SCORE = 5;
 const IDLE_IN = { move: { x: 0, z: 0 }, punch: false, grab: false, jump: false };
 
@@ -1648,4 +1651,5 @@ for (let i = 0; i < avancar * 60; i++) {
 }
 
 document.getElementById('carregando').style.display = 'none';
+document.getElementById('versao').textContent = VERSAO;
 requestAnimationFrame(frame);
