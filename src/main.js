@@ -1142,7 +1142,7 @@ function buildVisual(skin, fase = 0, slot = 0) {
         const spec = PARTS.find((p) => p.name === bn);
         const restInv = new THREE.Matrix4().compose(new THREE.Vector3(spec.off[0], spec.off[1], spec.off[2]), q0, one).invert();
         const off = new THREE.Matrix4().multiplyMatrices(restInv, bone.matrixWorld);
-        driven.push({ bone, body: bn, off });
+        driven.push({ bone, body: bn, off, root: bone.name === 'Hips' });
       }
       meshes._armature = armature;
       meshes._jrig = { armature, skinned, skeleton, driven };
@@ -1398,6 +1398,7 @@ function syncVisual(rag, meshes, now) {
 // Estilo 'r' (rigado): depois de mover os ossos, atualiza os esqueletos (senão a
 // malha skinada colapsa). Chamar logo antes do render, com matrizes já frescas.
 const _rgWorld = new THREE.Matrix4(), _rgDesired = new THREE.Matrix4(), _rgInvP = new THREE.Matrix4(), _rgOne = new THREE.Vector3(1, 1, 1);
+const _rgPos = new THREE.Vector3(), _rgQuat = new THREE.Quaternion(), _rgScl = new THREE.Vector3();
 const _rgBody = {};
 function atualizarSkins() {
   for (const l of lutadores) {
@@ -1407,13 +1408,15 @@ function atualizarSkins() {
     if (mm._jrig) {
       // corpos da física (trackers preenchidos por syncVisual) -> matrizes world
       for (const spec of PARTS) { const t = mm[spec.name]; _rgBody[spec.name] = (_rgBody[spec.name] || new THREE.Matrix4()).compose(t.position, t.quaternion, _rgOne); }
-      // cada osso segue rigidamente seu corpo (osso.world = corpo.world * bindOffset),
-      // processando pai->filho (skeleton.bones já vem nessa ordem)
+      // Cada osso ROTACIONA com seu corpo, mas mantém o COMPRIMENTO (posição de bind):
+      // só o quadril (raiz) translada. Assim os membros dobram sem esticar.
       for (const d of mm._jrig.driven) {
         _rgDesired.multiplyMatrices(_rgBody[d.body], d.off);
         _rgInvP.copy(d.bone.parent.matrixWorld).invert();
         _rgWorld.multiplyMatrices(_rgInvP, _rgDesired);
-        _rgWorld.decompose(d.bone.position, d.bone.quaternion, d.bone.scale);
+        _rgWorld.decompose(_rgPos, _rgQuat, _rgScl);
+        d.bone.quaternion.copy(_rgQuat);          // rotação vem da física
+        if (d.root) d.bone.position.copy(_rgPos);  // só a raiz translada (mantém proporções)
         d.bone.updateWorldMatrix(false, false);
       }
       mm._jrig.skeleton.update();
