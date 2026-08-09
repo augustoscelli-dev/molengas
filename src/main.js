@@ -662,17 +662,41 @@ const MAPAS = [
         s.scale.setScalar(16 / Math.max(size.x, size.z));
         const b2 = new THREE.Box3().setFromObject(s);
         s.position.set(0, -b2.min.y - 2.4, -2);
-        // Tom verde (morro verdejante) pra combinar com a pintura do Rio.
-        // Duas faixas: mata mais escura embaixo, verde mais claro no alto.
-        const yTopo = b2.max.y, yBase = b2.min.y, span = Math.max(0.001, yTopo - yBase);
-        const cBaixo = new THREE.Color(0x35521f), cAlto = new THREE.Color(0x6f9a45);
+        // Favela colorida: pinta por FACE (triangulo), em manchas grandes (~casas),
+        // cada mancha uma cor solida. Paleta = casas coloridas + verdes de mata.
+        const paleta = [
+          0xff6b6b, 0xffd166, 0x06d6a0, 0x4d96ff, 0xf78fb3, 0xffa552, 0xf4f4f4,
+          0xe8d7a0, 0xc0533f, 0x88c0d0, 0xd88fc0, 0xf3722c, 0x90be6d,
+          0x577590, 0xf9c74f, 0x43aa8b, 0x4f7a3a, 0x6f9a45, 0x3f6b2e,
+        ].map((h) => new THREE.Color(h).convertSRGBToLinear());
+        const hash = (i) => { const x = Math.sin(i * 127.1) * 43758.5453; return x - Math.floor(x); };
         s.traverse((o) => {
           if (!o.isMesh) return;
           o.castShadow = true; o.receiveShadow = true;
-          const c = new THREE.Vector3(); new THREE.Box3().setFromObject(o).getCenter(c);
-          const t = Math.min(1, Math.max(0, (c.y - yBase) / span));
+          let g = o.geometry; if (g.index) g = g.toNonIndexed(); // 1 cor por triangulo
+          g.computeBoundingBox();
+          const bb = g.boundingBox, sz = new THREE.Vector3(); bb.getSize(sz);
+          const cel = Math.max(sz.x, sz.z) / 13 || 1;   // manchas grandes = casas inteiras
+          const celY = Math.max(0.001, sz.y / 5);
+          const pos = g.attributes.position, n = pos.count;
+          const col = new Float32Array(n * 3);
+          for (let f = 0; f < n; f += 3) {              // por triangulo (centroide)
+            const mx = (pos.getX(f) + pos.getX(f + 1) + pos.getX(f + 2)) / 3;
+            const my = (pos.getY(f) + pos.getY(f + 1) + pos.getY(f + 2)) / 3;
+            const mz = (pos.getZ(f) + pos.getZ(f + 1) + pos.getZ(f + 2)) / 3;
+            const cx = Math.floor((mx - bb.min.x) / cel);
+            const cy = Math.floor((my - bb.min.y) / celY);
+            const cz = Math.floor((mz - bb.min.z) / cel);
+            const id = Math.abs((cx * 73856093) ^ (cy * 19349663) ^ (cz * 83492791));
+            const c = paleta[Math.floor(hash(id) * paleta.length) % paleta.length];
+            const br = 0.85 + hash(id * 3.3) * 0.22;
+            for (let k = 0; k < 3; k++) { col[(f + k) * 3] = c.r * br; col[(f + k) * 3 + 1] = c.g * br; col[(f + k) * 3 + 2] = c.b * br; }
+          }
+          g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+          g.computeVertexNormals();
+          o.geometry = g;
           o.material = new THREE.MeshStandardMaterial({
-            color: cBaixo.clone().lerp(cAlto, t), roughness: 0.95, metalness: 0, flatShading: true,
+            vertexColors: true, roughness: 0.9, metalness: 0, flatShading: true,
           });
         });
         scene.add(s); m.meshes.push(s);
