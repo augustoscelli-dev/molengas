@@ -1298,6 +1298,164 @@ function fecharRound() {
   }
 }
 
+// ---------- Cliente online (LAN) ----------
+// O servidor roda a física oficial; aqui só mandamos botões e
+// interpolamos os snapshots que chegam (~20Hz) pra 60fps.
+let online = null;
+
+function iniciarOnline() {
+  $('selecao').style.display = 'none';
+  showMsg('CONECTANDO…');
+  const ws = new WebSocket(`ws://${location.host}`);
+  online = { ws, slot: null, visuais: new Map(), buf: [], msgAtual: null };
+  ws.addEventListener('open', () => {
+    ws.send(JSON.stringify({ t: 'entrar', skin: selCfg[0].skin }));
+    showMsg('NA SALA! 🌐', 'quando todos entrarem, o host (1º jogador) aperta F');
+    setInterval(() => {
+      if (ws.readyState !== 1) return;
+      const inp = mergeInput(readInput(MAPS.p1), readGamepad(0));
+      ws.send(JSON.stringify({
+        t: 'input', m: [inp.move.x, inp.move.z],
+        p: inp.punch, g: inp.grab, j: inp.jump, e: inp.emote,
+      }));
+    }, 33);
+  });
+  ws.addEventListener('close', () => showMsg('DESCONECTOU 😵', 'o servidor fechou — recarrega a página'));
+  ws.addEventListener('message', (e) => {
+    let m;
+    try { m = JSON.parse(e.data); } catch { return; }
+    if (m.t === 'oi') online.slot = m.slot;
+    else if (m.t === 'cheio') showMsg('SALA CHEIA 😔');
+    else if (m.t === 's') receberSnap(m);
+  });
+  addEventListener('keydown', (e) => {
+    if (e.code === 'KeyF' && online.ws.readyState === 1) online.ws.send(JSON.stringify({ t: 'comecar' }));
+  });
+}
+
+function receberSnap(m) {
+  online.buf.push({ rx: performance.now() / 1000, m });
+  if (online.buf.length > 30) online.buf.shift();
+  for (const pl of m.pl) {
+    let v = online.visuais.get(pl.s);
+    if (!v || v.skin !== pl.sk) {
+      if (v) destroyVisual(v.meshes);
+      v = { skin: pl.sk, meshes: buildVisual(SKINS[pl.sk % SKINS.length], pl.s * 1.9) };
+      online.visuais.set(pl.s, v);
+    }
+  }
+  for (const [s, v] of online.visuais) {
+    if (!m.pl.some((p) => p.s === s)) {
+      destroyVisual(v.meshes);
+      online.visuais.delete(s);
+    }
+  }
+  $('placar').innerHTML = m.pl.map((pl) =>
+    `<img class="retrato" src="${ASSET(`assets/retratos/${SKINS[pl.sk % SKINS.length].id}.jpg`)}" onerror="this.style.display='none'"> <span>${pl.sc}</span>`,
+  ).join(' &nbsp;·&nbsp; ');
+  if (m.msg !== online.msgAtual) {
+    online.msgAtual = m.msg;
+    if (m.st !== 'lobby') showMsg(m.msg);
+  }
+  for (const evn of m.ev) {
+    const [tipo, x, y, z] = evn;
+    if (tipo === 'hit') {
+      const pos = { x, y, z };
+      burstEstrelas(pos);
+      powFx(pos);
+      som.acerto();
+      trauma = Math.min(1, trauma + 0.5);
+    } else if (tipo === 'soco') som.soco();
+    else if (tipo === 'pulo') som.pulo();
+    else if (tipo === 'lutem') { som.lutem(); som.musica('luta'); }
+    else if (tipo === 'ponto') { som.ponto(); som.torcidaOh(); }
+    else if (tipo === 'queda') som.queda();
+    else if (tipo === 'vitoria') { som.vitoria(); som.musica('menu'); }
+    else if (tipo === 'bolada') som.bolada();
+  }
+}
+
+function aplicarSnapOnline(m1, m2, f) {
+  const lerp = (a, b) => a + (b - a) * f;
+  const agora = performance.now() / 1000;
+  for (const pl2 of m2.pl) {
+    const pl1 = m1.pl.find((p) => p.s === pl2.s) ?? pl2;
+    const v = online.visuais.get(pl2.s);
+    if (!v || pl1.p.length !== pl2.p.length) continue;
+    let o = 0;
+    for (const spec of PARTS) {
+      const msh = v.meshes[spec.name];
+      msh.position.set(lerp(pl1.p[o], pl2.p[o]), lerp(pl1.p[o + 1], pl2.p[o + 1]), lerp(pl1.p[o + 2], pl2.p[o + 2]));
+      const dot = pl1.p[o + 3] * pl2.p[o + 3] + pl1.p[o + 4] * pl2.p[o + 4] + pl1.p[o + 5] * pl2.p[o + 5] + pl1.p[o + 6] * pl2.p[o + 6];
+      const s2 = dot < 0 ? -1 : 1;
+      msh.quaternion.set(
+        lerp(pl1.p[o + 3] * s2, pl2.p[o + 3]),
+        lerp(pl1.p[o + 4] * s2, pl2.p[o + 4]),
+        lerp(pl1.p[o + 5] * s2, pl2.p[o + 5]),
+        lerp(pl1.p[o + 6] * s2, pl2.p[o + 6]),
+      ).normalize();
+      o += 7;
+    }
+    const piscando = ((agora + pl2.s * 1.9) % 3.4) < 0.13;
+    v.meshes._face.material.map = getFaceTexture(THREE, v.meshes._skin.face, pl2.at ? 'x' : (piscando ? 'blink' : 'ok'));
+    v.meshes.torso.scale.y = v.meshes.torso._baseY * (1 + 0.028 * Math.sin(agora * 2.6 + pl2.s * 1.9));
+  }
+  // props: aplica nos corpos locais (parados) e deixa o sync normal desenhar
+  m2.pr.forEach((b2, idx) => {
+    const b1 = m1.pr[idx] ?? b2;
+    const body = mapa.props[idx];
+    if (!body) return;
+    body.setTranslation({ x: lerp(b1[0], b2[0]), y: lerp(b1[1], b2[1]), z: lerp(b1[2], b2[2]) }, false);
+    body.setRotation({ x: b2[3], y: b2[4], z: b2[5], w: b2[6] }, false);
+  });
+}
+
+function frameOnline(t, fdt) {
+  const alvo = performance.now() / 1000 - 0.12;
+  const buf = online.buf;
+  let i = buf.length - 1;
+  while (i > 0 && buf[i - 1].rx > alvo) i--;
+  if (buf.length >= 2) {
+    const b1 = buf[Math.max(0, i - 1)];
+    const b2 = buf[i];
+    const span = Math.max(0.001, b2.rx - b1.rx);
+    const f = Math.min(1, Math.max(0, (alvo - b1.rx) / span));
+    aplicarSnapOnline(b1.m, b2.m, f);
+  }
+  for (const [body, mesh] of mapa.syncPairs) {
+    const tp = body.translation();
+    const rp = body.rotation();
+    mesh.position.set(tp.x, tp.y, tp.z);
+    mesh.quaternion.set(rp.x, rp.y, rp.z, rp.w);
+  }
+  mapa.update?.(t / 1000);
+  updateEfeitos(fdt);
+  mirarHolofotes(t / 1000);
+  cairConfetes(fdt, t / 1000);
+  // câmera pelos bonecos na tela
+  trauma = Math.max(0, trauma - 2.4 * fdt);
+  let midX = 0, midZ = 0, spread = 4;
+  if (online.visuais.size) {
+    let minX = 1e9, maxX = -1e9, minZ = 1e9, maxZ = -1e9;
+    for (const v of online.visuais.values()) {
+      const p = v.meshes.pelvis.position;
+      minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
+      minZ = Math.min(minZ, p.z); maxZ = Math.max(maxZ, p.z);
+    }
+    midX = (minX + maxX) / 2;
+    midZ = (minZ + maxZ) / 2;
+    spread = Math.min(Math.hypot(maxX - minX, maxZ - minZ), 12);
+  }
+  const target = new THREE.Vector3(midX * 0.6, 3.9 + spread * 0.3, 6.6 + spread * 0.55);
+  camPos.lerp(target, 0.05);
+  camera.position.copy(camPos);
+  camera.lookAt(midX * 0.6, 0.8, midZ * 0.3);
+  const shake = trauma * trauma * 0.2;
+  camera.position.x += Math.sin(t * 0.061) * shake;
+  camera.position.y += Math.cos(t * 0.047) * shake * 0.7;
+  r3.render(scene, camera);
+}
+
 // ---------- Loop ----------
 const FIXED_DT = 1 / 60;
 world.timestep = FIXED_DT;
@@ -1311,6 +1469,11 @@ function frame(t) {
   requestAnimationFrame(frame);
   const fdt = Math.min((t - last) / 1000, 0.1);
   last = t;
+
+  if (online) {
+    frameOnline(t, fdt);
+    return;
+  }
 
   if (state === 'replay') {
     replayT += fdt * 0.4; // câmera lenta
@@ -1457,7 +1620,9 @@ function frame(t) {
 
 // ---------- Início ----------
 setMapa(parseInt(PARAMS.get('mapa'), 10) || 0);
-if (PARAMS.has('direto')) {
+if (PARAMS.has('servidor')) {
+  iniciarOnline();
+} else if (PARAMS.has('direto')) {
   // dev: pula a seleção; ?bots=N adiciona N bots
   $('selecao').style.display = 'none';
   const nBots = Math.min(parseInt(PARAMS.get('bots'), 10) || 0, 3);
@@ -1474,7 +1639,7 @@ if (PARAMS.has('direto')) {
 }
 
 // ?avancar=N na URL: simula N segundos de física antes do primeiro frame (debug/screenshot)
-const avancar = parseFloat(PARAMS.get('avancar') || '0');
+const avancar = online ? 0 : parseFloat(PARAMS.get('avancar') || '0');
 for (let i = 0; i < avancar * 60; i++) {
   simNow += FIXED_DT;
   const lutando = state === 'luta';

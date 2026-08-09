@@ -21,11 +21,17 @@
 
 ## Rodada 4 (dedicada): ONLINE 🌐
 
-O projetão declarado — merece uma rodada inteira só dele:
-- **Fase 1: LAN** — servidor Node rodando a física oficial (Rapier já
-  roda no Node), navegadores conectam por WebSocket na mesma rede.
-- **Fase 2: nuvem + salas** — hospedar o servidor, código de sala.
-- **Fase 3: netcode fino** — interpolação, previsão, lag compensation.
+- ✅ **Fase 1: LAN** — `servidor-online.bat` sobe um servidor Node com
+  a física oficial (mesmo Rapier + Ragdoll) que também serve o jogo
+  por HTTP; cada jogador abre http://IP:8877/?servidor=1. Servidor
+  autoritativo 60Hz, snapshots 20Hz, cliente interpola (~120ms),
+  eventos de som/FX, lobby com host (F começa), até 4 jogadores.
+  Mapa: Estádio. Validado com 2 clientes headless + navegador real.
+- **Fase 2: nuvem + salas** — hospedar o servidor, código de sala,
+  todos os mapas no servidor (extrair física dos mapas pra módulo
+  compartilhado).
+- **Fase 3: netcode fino** — previsão local, reconciliação, lag
+  compensation, WebRTC se precisar.
 
 ---
 
