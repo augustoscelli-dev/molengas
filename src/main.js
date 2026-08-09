@@ -70,7 +70,8 @@ addEventListener('resize', () => {
   r3.setSize(innerWidth, innerHeight);
 });
 
-scene.add(new THREE.HemisphereLight(0xccccff, 0x443344, 1.05));
+const hemi = new THREE.HemisphereLight(0xccccff, 0x443344, 1.05);
+scene.add(hemi);
 const rim = new THREE.DirectionalLight(0x7f9dff, 0.9);
 rim.position.set(-4, 5, -7);
 scene.add(rim);
@@ -81,6 +82,23 @@ sun.shadow.mapSize.set(2048, 2048);
 sun.shadow.camera.left = -10; sun.shadow.camera.right = 10;
 sun.shadow.camera.top = 10; sun.shadow.camera.bottom = -10;
 scene.add(sun);
+
+// Snapshot do ambiente padrão — um mapa pode sobrescrever luz/neblina no build,
+// e setMapa restaura tudo isto antes do próximo build (não vaza entre mapas).
+const AMBIENTE_PADRAO = {
+  hemiSky: 0xccccff, hemiGround: 0x443344, hemiInt: 1.05,
+  rim: 0x7f9dff, rimInt: 0.9, rimPos: [-4, 5, -7],
+  sun: 0xffffff, sunInt: 1.6, sunPos: [6, 12, 5],
+  fog: 0x141433, fogNear: 22, fogFar: 55, expo: 1.12,
+};
+function restaurarAmbiente() {
+  const A = AMBIENTE_PADRAO;
+  hemi.color.setHex(A.hemiSky); hemi.groundColor.setHex(A.hemiGround); hemi.intensity = A.hemiInt;
+  rim.color.setHex(A.rim); rim.intensity = A.rimInt; rim.position.set(...A.rimPos);
+  sun.color.setHex(A.sun); sun.intensity = A.sunInt; sun.position.set(...A.sunPos);
+  scene.fog.color.setHex(A.fog); scene.fog.near = A.fogNear; scene.fog.far = A.fogFar;
+  r3.toneMappingExposure = A.expo;
+}
 
 // Textura do tablado (usada pelos mapas)
 const deckTex = makeDeckTexture();
@@ -636,6 +654,13 @@ const MAPAS = [
     nome: 'RIO',
     fundo: 'assets/fundo-rio.png',
     build(m) {
+      // Atmosfera de pôr-do-sol (casa com a pintura do fundo): luz dourada,
+      // rim quente, neblina de haze que funde o morro 3D no fundo 2D.
+      hemi.color.setHex(0xffe6c4); hemi.groundColor.setHex(0x4a3a2a); hemi.intensity = 0.92;
+      rim.color.setHex(0xffc98a); rim.intensity = 0.7; rim.position.set(7, 4, 6);
+      sun.color.setHex(0xffd39a); sun.intensity = 1.5; sun.position.set(11, 8, 3);
+      scene.fog.color.setHex(0xf2d9b8); scene.fog.near = 15; scene.fog.far = 46;
+      r3.toneMappingExposure = 1.16;
       // Colisor/fundo submerso (os lutadores pisam aqui, na agua)
       chaoFixo(m, 7, 5.5, new THREE.MeshStandardMaterial({ color: 0x0e3a4f, roughness: 0.5 }));
       // OCEANO no MEIO: superficie azul glossy com ondas (a arena principal e a agua)
@@ -757,10 +782,10 @@ function setMapa(idx) {
   }
   mapaIdx = ((idx % MAPAS.length) + MAPAS.length) % MAPAS.length;
   mapa = { bodies: [], meshes: [], syncPairs: [], props: [], bolas: [], _caixotes: [], _blocos: [], reset: null, update: null };
-  // Restaura o ambiente padrao (um mapa pode sobrescrever ceu/neblina no build)
+  // Restaura o ambiente padrao (um mapa pode sobrescrever luz/ceu/neblina no build)
   backMesh.visible = true;
   scene.background = new THREE.Color(0x141433);
-  scene.fog.color.setHex(0x141433); scene.fog.near = 22; scene.fog.far = 55;
+  restaurarAmbiente();
   MAPAS[mapaIdx].build(mapa);
   mapa.semSoco = !!MAPAS[mapaIdx].semSoco;
   setFundo(MAPAS[mapaIdx].fundo ?? 'assets/fundo.jpg');
