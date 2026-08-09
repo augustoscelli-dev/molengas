@@ -749,6 +749,46 @@ const MAPAS = [
           });
         });
         scene.add(s); m.meshes.push(s);
+
+        // VEGETAÇÃO decorativa (sem física): plantada NA superfície do morro via
+        // raycast pra baixo (acha a altura real de cada ponto, nada flutua).
+        const ray = new THREE.Raycaster();
+        const BAIXO = new THREE.Vector3(0, -1, 0);
+        const alturaMorro = (x, z) => {
+          ray.set(new THREE.Vector3(x, 30, z), BAIXO);
+          const hit = ray.intersectObject(s, true);
+          return hit.length ? hit[0].point.y : null;
+        };
+        const hs = (i) => { const v = Math.sin(i * 91.7) * 43758.5453; return v - Math.floor(v); };
+        // arbustos low-poly (icosaedro achatado, verde)
+        const geoMato = new THREE.IcosahedronGeometry(1, 0);
+        const matsMato = [0x3f6b2e, 0x4f7a3a, 0x5c8a44].map((h) => new THREE.MeshStandardMaterial({ color: h, roughness: 1, flatShading: true }));
+        const spotsMato = [[-6.4, -2.2], [-5.6, -4.0], [-7.0, 0.6], [-4.2, -4.8], [6.2, -2.0], [5.6, -4.1], [6.8, 0.8], [4.2, -4.8], [-2.6, -5.4], [2.6, -5.4], [0.2, -5.7], [-6.9, -1.0], [6.7, -1.2]];
+        spotsMato.forEach(([x, z], i) => {
+          const y = alturaMorro(x, z); if (y === null) return;
+          const r = 0.28 + hs(i) * 0.34;
+          const mt = new THREE.Mesh(geoMato, matsMato[i % matsMato.length]);
+          mt.scale.set(r, r * (0.7 + hs(i * 2) * 0.5), r);
+          mt.position.set(x, y + r * 0.3, z);
+          mt.rotation.y = hs(i * 3) * 6.28; mt.castShadow = true; mt.receiveShadow = true;
+          scene.add(mt); m.meshes.push(mt);
+        });
+        // palmeiras (clonadas do modelo low-poly)
+        new GLTFLoader().load(ASSET('assets/modelos/palmeira-low.glb'), (gp) => {
+          const proto = gp.scene;
+          const pb = new THREE.Box3().setFromObject(proto), ps = new THREE.Vector3(); pb.getSize(ps);
+          proto.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+          const spots = [[-6.6, -1.4], [-5.8, -3.8], [-7.1, 1.2], [6.4, -1.2], [5.7, -3.7], [6.9, 1.3], [-3.6, -5.1], [3.6, -5.1], [0, -5.6]];
+          spots.forEach(([x, z], i) => {
+            const y = alturaMorro(x, z); if (y === null) return;
+            const esc = (2.5 + hs(i * 5) * 1.1) / (ps.y || 1);
+            const p = proto.clone(true);
+            p.scale.setScalar(esc);
+            p.position.set(x, y - pb.min.y * esc, z);
+            p.rotation.y = hs(i * 7) * 6.28;
+            scene.add(p); m.meshes.push(p);
+          });
+        });
       });
       // CASAS destrutiveis (mistura dos 4 modelos, coloridas) nas BORDAS/pe do morro
       const cores = [0xff6b6b, 0xffd166, 0x06d6a0, 0x4d96ff, 0xf78fb3, 0xffa552, 0xf4f4f4];
