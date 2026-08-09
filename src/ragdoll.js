@@ -74,6 +74,7 @@ export class Ragdoll {
     this.gaitT = 0;
     this.lastHitLandedAt = -10;
     this.grabJoints = [null, null];
+    this._ray = new R.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: -1, z: 0 });
 
     const groups = ((memberships & 0xffff) << 16) | (filter & 0xffff);
     for (const spec of PARTS) {
@@ -117,6 +118,18 @@ export class Ragdoll {
     }
   }
 
+  // Distância até a superfície logo abaixo do quadril (chão, plataforma,
+  // caixote, bola…), ou null se não tem nada em até 1.6m — aí despenca.
+  groundToi() {
+    const pp = this.parts.pelvis.translation();
+    this._ray.origin.x = pp.x;
+    this._ray.origin.y = pp.y;
+    this._ray.origin.z = pp.z;
+    const hit = this.world.castRay(this._ray, 1.6, true, undefined, (0x0010 << 16) | 0x0009);
+    if (!hit) return null;
+    return hit.timeOfImpact ?? hit.toi;
+  }
+
   handTip(side) {
     const hand = this.parts[side === 0 ? 'forearmL' : 'forearmR'];
     const p = hand.translation();
@@ -129,18 +142,19 @@ export class Ragdoll {
     const pelvis = this.parts.pelvis;
     const pp = pelvis.translation();
     const pv = pelvis.linvel();
-    const onPlatform = Math.abs(pp.x) < ARENA.halfX + 0.1 && Math.abs(pp.z) < ARENA.halfZ + 0.1;
-    const grounded = onPlatform && pp.y < 1.15 && Math.abs(pv.y) < 3;
+    const toi = stunned ? null : this.groundToi();
+    const surfaceY = toi !== null ? pp.y - toi : 0;
+    const grounded = toi !== null && toi < 1.25 && Math.abs(pv.y) < 3;
 
     // "Em pé" = anti-gravidade parcial + molas de marionete + torque de vertical.
-    const standing = !stunned && onPlatform && now > this.hoverBlockUntil && pp.y < 1.3;
+    const standing = !stunned && toi !== null && now > this.hoverBlockUntil;
     if (standing) {
       for (const [name, a] of Object.entries(ANTIGRAV)) {
         const b = this.parts[name];
         b.applyImpulse({ x: 0, y: b.mass() * 9.81 * a * dt, z: 0 }, true);
       }
       // Quadril flutuante (alto o bastante pras pernas ficarem quase esticadas)
-      const f = clamp((1.0 - pp.y) * 950 - pv.y * 95, -160, 650);
+      const f = clamp((1.0 - toi) * 950 - pv.y * 95, -160, 650);
       pelvis.applyImpulse({ x: 0, y: f * dt, z: 0 }, true);
       // Corda na cabeça
       const head = this.parts.head;
@@ -210,7 +224,7 @@ export class Ragdoll {
           const ergue = andando ? Math.max(0, Math.sin(fase)) * 0.1 : 0;
           const alvoX = pp.x + latX * (lado === 0 ? -0.11 : 0.11) + fwdX * passo;
           const alvoZ = pp.z + latZ * (lado === 0 ? -0.11 : 0.11) + fwdZ * passo;
-          const alvoY = 0.14 + ergue;
+          const alvoY = surfaceY + 0.14 + ergue;
           const cp = calf.translation();
           const ponta = qrot(calf.rotation(), [0, -0.17, 0]);
           const cv = calf.linvel();

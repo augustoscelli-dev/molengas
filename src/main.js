@@ -19,55 +19,12 @@ const store = {
 // ---------- Física ----------
 const world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
 const GROUND_GROUPS = (0x0001 << 16) | 0xffff;
-const groundBody = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, -0.3, 0));
-world.createCollider(
-  RAPIER.ColliderDesc.cuboid(ARENA.halfX, 0.3, ARENA.halfZ).setFriction(0.8).setCollisionGroups(GROUND_GROUPS),
-  groundBody,
-);
+const PROP_GROUPS = (0x0008 << 16) | 0x000f;
 
 const p1 = new Ragdoll(RAPIER, world, { x: -2.2, z: 0, heading: Math.PI / 2, memberships: 0x0002, filter: 0x0001 | 0x0004 | 0x0008 });
 const p2 = new Ragdoll(RAPIER, world, { x: 2.2, z: 0, heading: -Math.PI / 2, memberships: 0x0004, filter: 0x0001 | 0x0002 | 0x0008 });
 p1.opponent = p2;
 p2.opponent = p1;
-
-// ---------- Perigos e objetos da arena ----------
-const PROP_GROUPS = (0x0008 << 16) | 0x000f;
-// Bola de demolição pendurada no meio
-const ancora = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, 6.2, 0));
-const bolaBody = world.createRigidBody(
-  RAPIER.RigidBodyDesc.dynamic().setTranslation(0, 1.8, 0).setCcdEnabled(true).setLinearDamping(0.05).setAngularDamping(0.3),
-);
-world.createCollider(
-  RAPIER.ColliderDesc.ball(0.55).setMass(45).setFriction(0.4).setRestitution(0.3).setCollisionGroups(PROP_GROUPS),
-  bolaBody,
-);
-world.createImpulseJoint(RAPIER.JointData.spherical({ x: 0, y: 0, z: 0 }, { x: 0, y: 4.4, z: 0 }), ancora, bolaBody, true);
-bolaBody.setLinvel({ x: 2.6, y: 0, z: 1.1 }, true);
-// Caixotes espalhados
-const CAIXOTES_SPAWN = [[-3.4, 2.3], [3.2, -2.4], [0.6, 3.0], [-1.2, -2.9]];
-const caixotes = CAIXOTES_SPAWN.map(([cx, cz]) => {
-  const b = world.createRigidBody(
-    RAPIER.RigidBodyDesc.dynamic().setTranslation(cx, 0.4, cz).setLinearDamping(0.25).setAngularDamping(0.5),
-  );
-  world.createCollider(
-    RAPIER.ColliderDesc.cuboid(0.19, 0.19, 0.19).setMass(4).setFriction(0.6).setCollisionGroups(PROP_GROUPS),
-    b,
-  );
-  return b;
-});
-p1.props = p2.props = [bolaBody, ...caixotes];
-
-function resetProps() {
-  bolaBody.setTranslation({ x: 0, y: 1.8, z: 0 }, true);
-  bolaBody.setLinvel({ x: 2.6, y: 0, z: 1.1 }, true);
-  bolaBody.setAngvel({ x: 0, y: 0, z: 0 }, true);
-  caixotes.forEach((b, i) => {
-    b.setTranslation({ x: CAIXOTES_SPAWN[i][0], y: 0.4, z: CAIXOTES_SPAWN[i][1] }, true);
-    b.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true);
-    b.setLinvel({ x: 0, y: 0, z: 0 }, true);
-    b.setAngvel({ x: 0, y: 0, z: 0 }, true);
-  });
-}
 
 // ---------- Cena ----------
 const scene = new THREE.Scene();
@@ -120,15 +77,8 @@ sun.shadow.camera.left = -10; sun.shadow.camera.right = 10;
 sun.shadow.camera.top = 10; sun.shadow.camera.bottom = -10;
 scene.add(sun);
 
-// Plataforma
+// Textura do tablado (usada pelos mapas)
 const deckTex = makeDeckTexture();
-const deck = new THREE.Mesh(
-  new THREE.BoxGeometry(ARENA.halfX * 2, 0.6, ARENA.halfZ * 2),
-  new THREE.MeshStandardMaterial({ map: deckTex, roughness: 0.85 }),
-);
-deck.position.y = -0.3;
-deck.receiveShadow = true;
-scene.add(deck);
 
 // Fundo (arte do Pollinations, se existir; senão fica só o céu)
 new THREE.TextureLoader().load(ASSET('assets/fundo.jpg'), (tex) => {
@@ -141,69 +91,220 @@ new THREE.TextureLoader().load(ASSET('assets/fundo.jpg'), (tex) => {
   scene.add(back);
 }, undefined, () => {});
 
-// ---------- Visual dos objetos da arena ----------
-const propVisuals = [];
-let cordaMesh;
-{
-  // Bola de demolição
-  const bolaMesh = new THREE.Mesh(new THREE.SphereGeometry(0.55, 24, 18), toonMat(THREE, 0x4a4a58));
-  bolaMesh.castShadow = true;
-  addOutline(THREE, bolaMesh);
-  const brilho = new THREE.Mesh(new THREE.SphereGeometry(0.13, 10, 8), new THREE.MeshBasicMaterial({ color: 0x8a8a9a }));
-  brilho.position.set(-0.2, 0.28, 0.28);
-  bolaMesh.add(brilho);
-  scene.add(bolaMesh);
-  propVisuals.push({ body: bolaBody, mesh: bolaMesh });
-  // Corrente (cilindro esticado entre âncora e bola, atualizado por frame)
-  cordaMesh = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.035, 0.035, 1, 8),
-    toonMat(THREE, 0x2e2e38),
-  );
-  scene.add(cordaMesh);
-  const suporte = new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 10), toonMat(THREE, 0x2e2e38));
-  suporte.position.set(0, 6.2, 0);
-  scene.add(suporte);
-}
-const _vA = new THREE.Vector3(0, 6.2, 0);
-const _vB = new THREE.Vector3();
-const _vDir = new THREE.Vector3();
-const _up = new THREE.Vector3(0, 1, 0);
-function atualizarCorda() {
-  const bp = bolaBody.translation();
-  _vB.set(bp.x, bp.y, bp.z);
-  _vDir.subVectors(_vA, _vB);
-  const len = _vDir.length();
-  cordaMesh.position.copy(_vB).addScaledVector(_vDir, 0.5);
-  cordaMesh.scale.set(1, len, 1);
-  cordaMesh.quaternion.setFromUnitVectors(_up, _vDir.normalize());
-}
-{
-  // Caixotes de madeira
-  const texCaixote = (() => {
-    const c = document.createElement('canvas');
-    c.width = c.height = 128;
-    const g = c.getContext('2d');
-    g.fillStyle = '#c89b52';
-    g.fillRect(0, 0, 128, 128);
-    g.fillStyle = 'rgba(90,55,15,0.5)';
-    for (const y of [0, 40, 84]) g.fillRect(0, y, 128, 4);
-    g.strokeStyle = '#8a5f28';
-    g.lineWidth = 10;
-    g.strokeRect(5, 5, 118, 118);
-    g.beginPath(); g.moveTo(10, 10); g.lineTo(118, 118); g.moveTo(118, 10); g.lineTo(10, 118); g.stroke();
-    const t = new THREE.CanvasTexture(c);
-    t.colorSpace = THREE.SRGBColorSpace;
-    return t;
-  })();
-  const matCaixote = toonMat(THREE, 0xffffff);
-  matCaixote.map = texCaixote;
-  for (const b of caixotes) {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.38, 0.38), matCaixote);
-    m.castShadow = true;
-    addOutline(THREE, m);
-    scene.add(m);
-    propVisuals.push({ body: b, mesh: m });
+// ---------- Mapas ----------
+const texCaixote = (() => {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d');
+  g.fillStyle = '#c89b52';
+  g.fillRect(0, 0, 128, 128);
+  g.fillStyle = 'rgba(90,55,15,0.5)';
+  for (const y of [0, 40, 84]) g.fillRect(0, y, 128, 4);
+  g.strokeStyle = '#8a5f28';
+  g.lineWidth = 10;
+  g.strokeRect(5, 5, 118, 118);
+  g.beginPath(); g.moveTo(10, 10); g.lineTo(118, 118); g.moveTo(118, 10); g.lineTo(10, 118); g.stroke();
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+})();
+const matCaixote = toonMat(THREE, 0xffffff);
+matCaixote.map = texCaixote;
+
+const texQueijo = (() => {
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const g = c.getContext('2d');
+  g.fillStyle = '#f2c94c';
+  g.fillRect(0, 0, 256, 256);
+  g.fillStyle = '#d9a832';
+  for (const [hx, hy, hr] of [[40, 60, 20], [180, 40, 14], [120, 150, 24], [220, 200, 17], [60, 210, 12], [200, 110, 10]]) {
+    g.beginPath(); g.arc(hx, hy, hr, 0, 7); g.fill();
   }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+})();
+
+function fazerCaixote(m, x, z) {
+  const b = world.createRigidBody(
+    RAPIER.RigidBodyDesc.dynamic().setTranslation(x, 0.4, z).setLinearDamping(0.25).setAngularDamping(0.5),
+  );
+  world.createCollider(
+    RAPIER.ColliderDesc.cuboid(0.19, 0.19, 0.19).setMass(4).setFriction(0.6).setCollisionGroups(PROP_GROUPS),
+    b,
+  );
+  const me = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.38, 0.38), matCaixote);
+  me.castShadow = true;
+  addOutline(THREE, me);
+  scene.add(me);
+  m.bodies.push(b);
+  m.meshes.push(me);
+  m.syncPairs.push([b, me]);
+  m.props.push(b);
+  m._caixotes.push([b, x, z]);
+}
+function resetCaixotes(m) {
+  for (const [b, x, z] of m._caixotes) {
+    b.setTranslation({ x, y: 0.4, z }, true);
+    b.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true);
+    b.setLinvel({ x: 0, y: 0, z: 0 }, true);
+    b.setAngvel({ x: 0, y: 0, z: 0 }, true);
+  }
+}
+function chaoFixo(m, hx, hz, mat) {
+  const g = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, -0.3, 0));
+  world.createCollider(RAPIER.ColliderDesc.cuboid(hx, 0.3, hz).setFriction(0.8).setCollisionGroups(GROUND_GROUPS), g);
+  m.bodies.push(g);
+  const deck = new THREE.Mesh(new THREE.BoxGeometry(hx * 2, 0.6, hz * 2), mat);
+  deck.position.y = -0.3;
+  deck.receiveShadow = true;
+  scene.add(deck);
+  m.meshes.push(deck);
+}
+
+const MAPAS = [
+  {
+    nome: 'ESTÁDIO',
+    build(m) {
+      chaoFixo(m, ARENA.halfX, ARENA.halfZ, new THREE.MeshStandardMaterial({ map: deckTex, roughness: 0.85 }));
+      // Bola de demolição
+      const ancora = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, 6.2, 0));
+      const bola = world.createRigidBody(
+        RAPIER.RigidBodyDesc.dynamic().setTranslation(0, 1.8, 0).setCcdEnabled(true).setLinearDamping(0.05).setAngularDamping(0.3),
+      );
+      world.createCollider(
+        RAPIER.ColliderDesc.ball(0.55).setMass(45).setFriction(0.4).setRestitution(0.3).setCollisionGroups(PROP_GROUPS),
+        bola,
+      );
+      world.createImpulseJoint(RAPIER.JointData.spherical({ x: 0, y: 0, z: 0 }, { x: 0, y: 4.4, z: 0 }), ancora, bola, true);
+      bola.setLinvel({ x: 2.6, y: 0, z: 1.1 }, true);
+      m.bodies.push(ancora, bola);
+      m.props.push(bola);
+      m.bolas.push(bola);
+      const bolaMesh = new THREE.Mesh(new THREE.SphereGeometry(0.55, 24, 18), toonMat(THREE, 0x4a4a58));
+      bolaMesh.castShadow = true;
+      addOutline(THREE, bolaMesh);
+      const brilho = new THREE.Mesh(new THREE.SphereGeometry(0.13, 10, 8), new THREE.MeshBasicMaterial({ color: 0x8a8a9a }));
+      brilho.position.set(-0.2, 0.28, 0.28);
+      bolaMesh.add(brilho);
+      scene.add(bolaMesh);
+      m.meshes.push(bolaMesh);
+      m.syncPairs.push([bola, bolaMesh]);
+      const corda = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 1, 8), toonMat(THREE, 0x2e2e38));
+      scene.add(corda);
+      m.meshes.push(corda);
+      const suporte = new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 10), toonMat(THREE, 0x2e2e38));
+      suporte.position.set(0, 6.2, 0);
+      scene.add(suporte);
+      m.meshes.push(suporte);
+      for (const [cx, cz] of [[-3.4, 2.3], [3.2, -2.4], [0.6, 3.0], [-1.2, -2.9]]) fazerCaixote(m, cx, cz);
+      const vA = new THREE.Vector3(0, 6.2, 0);
+      const vB = new THREE.Vector3();
+      const vD = new THREE.Vector3();
+      const up = new THREE.Vector3(0, 1, 0);
+      m.update = () => {
+        const bp = bola.translation();
+        vB.set(bp.x, bp.y, bp.z);
+        vD.subVectors(vA, vB);
+        const len = vD.length();
+        corda.position.copy(vB).addScaledVector(vD, 0.5);
+        corda.scale.set(1, len, 1);
+        corda.quaternion.setFromUnitVectors(up, vD.normalize());
+      };
+      m.reset = () => {
+        bola.setTranslation({ x: 0, y: 1.8, z: 0 }, true);
+        bola.setLinvel({ x: 2.6, y: 0, z: 1.1 }, true);
+        bola.setAngvel({ x: 0, y: 0, z: 0 }, true);
+        resetCaixotes(m);
+      };
+    },
+  },
+  {
+    nome: 'GANGORRA',
+    build(m) {
+      // Plataforma inteira apoiada num eixo central — o peso inclina
+      const base = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, -0.3, 0));
+      const plat = world.createRigidBody(
+        RAPIER.RigidBodyDesc.dynamic().setTranslation(0, -0.3, 0).setAngularDamping(2),
+      );
+      world.createCollider(
+        RAPIER.ColliderDesc.cuboid(4.3, 0.3, 3.3).setMass(260).setFriction(0.9).setCollisionGroups(GROUND_GROUPS),
+        plat,
+      );
+      const eixo = world.createImpulseJoint(
+        RAPIER.JointData.revolute({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 1 }),
+        base, plat, true,
+      );
+      if (eixo.setLimits) eixo.setLimits(-0.42, 0.42);
+      if (eixo.configureMotorPosition) eixo.configureMotorPosition(0, 900, 380);
+      m.bodies.push(base, plat);
+      const deck = new THREE.Mesh(
+        new THREE.BoxGeometry(8.6, 0.6, 6.6),
+        new THREE.MeshStandardMaterial({ map: deckTex, roughness: 0.85 }),
+      );
+      deck.receiveShadow = true;
+      scene.add(deck);
+      m.meshes.push(deck);
+      m.syncPairs.push([plat, deck]);
+      // Fulcro visual
+      const fulcro = new THREE.Mesh(new THREE.ConeGeometry(0.8, 1.2, 4), toonMat(THREE, 0x8a4f9e));
+      fulcro.position.y = -1.2;
+      scene.add(fulcro);
+      m.meshes.push(fulcro);
+      fazerCaixote(m, -1.6, 2.3);
+      fazerCaixote(m, 1.6, -2.3);
+      m.reset = () => {
+        plat.setTranslation({ x: 0, y: -0.3, z: 0 }, true);
+        plat.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true);
+        plat.setAngvel({ x: 0, y: 0, z: 0 }, true);
+        plat.setLinvel({ x: 0, y: 0, z: 0 }, true);
+        resetCaixotes(m);
+      };
+    },
+  },
+  {
+    nome: 'QUEIJO',
+    build(m) {
+      // Ilhas com buracos entre elas — cuidado onde pisa
+      const matQ = new THREE.MeshStandardMaterial({ map: texQueijo, roughness: 0.8 });
+      const pads = [
+        [0, 0, 0.85, 0.9],
+        [2.6, 0, 1.05, 0.9], [-2.6, 0, 1.05, 0.9],
+        [0, 2.4, 0.85, 0.75], [0, -2.4, 0.85, 0.75],
+        [2.6, 2.4, 0.9, 0.7], [-2.6, 2.4, 0.9, 0.7], [2.6, -2.4, 0.9, 0.7], [-2.6, -2.4, 0.9, 0.7],
+      ];
+      for (const [px, pz, hx, hz] of pads) {
+        const g = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(px, -0.3, pz));
+        world.createCollider(RAPIER.ColliderDesc.cuboid(hx, 0.3, hz).setFriction(0.8).setCollisionGroups(GROUND_GROUPS), g);
+        m.bodies.push(g);
+        const deck = new THREE.Mesh(new THREE.BoxGeometry(hx * 2, 0.6, hz * 2), matQ);
+        deck.position.set(px, -0.3, pz);
+        deck.receiveShadow = true;
+        scene.add(deck);
+        m.meshes.push(deck);
+      }
+      fazerCaixote(m, 0, 0);
+      m.reset = () => resetCaixotes(m);
+    },
+  },
+];
+
+let mapaIdx = 0;
+let mapa = null;
+function setMapa(idx) {
+  if (mapa) {
+    for (const b of mapa.bodies) world.removeRigidBody(b);
+    for (const me of mapa.meshes) scene.remove(me);
+  }
+  mapaIdx = ((idx % MAPAS.length) + MAPAS.length) % MAPAS.length;
+  mapa = { bodies: [], meshes: [], syncPairs: [], props: [], bolas: [], _caixotes: [], reset: null, update: null };
+  MAPAS[mapaIdx].build(mapa);
+  p1.props = p2.props = mapa.props;
+  p1.reset();
+  p2.reset();
+  const el = document.getElementById('mapa');
+  if (el) el.textContent = 'MAPA: ' + MAPAS[mapaIdx].nome + ' · tecla 3 troca';
 }
 
 // ---------- Show de luzes e confete ----------
@@ -416,6 +517,7 @@ function setSkin(i, idx) {
 addEventListener('keydown', (e) => {
   if (e.code === 'Digit1') setSkin(0, skinIdx[0] + 1);
   if (e.code === 'Digit2') setSkin(1, skinIdx[1] + 1);
+  if (e.code === 'Digit3') setMapa(mapaIdx + 1);
 });
 
 function makeDeckTexture() {
@@ -608,6 +710,7 @@ function showMsg(txt, sub = '') {
 }
 setSkin(0, skinIdx[0]);
 setSkin(1, skinIdx[1]);
+setMapa(parseInt(new URLSearchParams(location.search).get('mapa'), 10) || 0);
 showMsg('MOLENGAS!', 'Derrube o outro da arena — primeiro a fazer ' + WIN_SCORE + ' pontos vence · teclas 1 e 2 trocam as fantasias');
 setTimeout(() => { if (state === 'luta') showMsg(''); }, 3500);
 
@@ -630,13 +733,13 @@ function handleRounds(now) {
       }
     }
   } else if (state === 'ponto' && now > stateUntil) {
-    p1.reset(); p2.reset(); resetProps();
+    p1.reset(); p2.reset(); mapa.reset?.();
     showMsg('');
     state = 'luta';
   } else if (state === 'fim' && isDown('KeyR')) {
     score[0] = score[1] = 0;
     updateScore();
-    p1.reset(); p2.reset(); resetProps();
+    p1.reset(); p2.reset(); mapa.reset?.();
     showMsg('');
     state = 'luta';
   }
@@ -672,30 +775,28 @@ function frame(t) {
   syncVisual(p1, visuals[0], simNow);
   syncVisual(p2, visuals[1], simNow);
 
-  // Objetos da arena seguem a física
-  for (const pv of propVisuals) {
-    const tp = pv.body.translation();
-    const rp = pv.body.rotation();
-    pv.mesh.position.set(tp.x, tp.y, tp.z);
-    pv.mesh.quaternion.set(rp.x, rp.y, rp.z, rp.w);
+  // Objetos do mapa seguem a física
+  for (const [body, mesh] of mapa.syncPairs) {
+    const tp = body.translation();
+    const rp = body.rotation();
+    mesh.position.set(tp.x, tp.y, tp.z);
+    mesh.quaternion.set(rp.x, rp.y, rp.z, rp.w);
   }
-  atualizarCorda();
+  mapa.update?.();
 
-  // Bolada: a bola de demolição em velocidade atordoa quem ela atropela
-  {
-    const bv = bolaBody.linvel();
-    const rapidez = Math.hypot(bv.x, bv.y, bv.z);
-    if (rapidez > 3) {
-      const bp = bolaBody.translation();
-      for (const p of [p1, p2]) {
-        if (simNow < (p._bolaCd ?? 0)) continue;
-        const tp = p.parts.torso.translation();
-        if (Math.hypot(bp.x - tp.x, bp.y - tp.y, bp.z - tp.z) < 0.95) {
-          p._bolaCd = simNow + 1.2;
-          p.stun(simNow + 1.1);
-          p.lastHitLandedAt = simNow;
-          trauma = Math.min(1, trauma + 0.5);
-        }
+  // Bolada: bola de demolição em velocidade atordoa quem ela atropela
+  for (const bolaB of mapa.bolas) {
+    const bv = bolaB.linvel();
+    if (Math.hypot(bv.x, bv.y, bv.z) < 3) continue;
+    const bp = bolaB.translation();
+    for (const p of [p1, p2]) {
+      if (simNow < (p._bolaCd ?? 0)) continue;
+      const tp = p.parts.torso.translation();
+      if (Math.hypot(bp.x - tp.x, bp.y - tp.y, bp.z - tp.z) < 0.95) {
+        p._bolaCd = simNow + 1.2;
+        p.stun(simNow + 1.1);
+        p.lastHitLandedAt = simNow;
+        trauma = Math.min(1, trauma + 0.5);
       }
     }
   }
