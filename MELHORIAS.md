@@ -1,76 +1,81 @@
-# MOLENGAS! — Lista de melhorias
+# MOLENGAS! — Lista de melhorias (rodada 2)
 
 Legenda: 💥 impacto alto · 🔨 esforço (P/M/G) · ✅ feito
 
-## Prioridade alta (próximas)
+## Prioridade alta (próximas 5)
 
-1. ✅ **Som** — Web Audio sintetizado (src/som.js): soco, acerto,
-   bolada, queda, torcida (murmúrio em loop + "oh!"), fanfarras,
-   bipes de menu. Liga no primeiro clique/tecla.
-2. ✅ **Gamepad** — controle i = jogador i; analógico/dpad anda,
-   A pula/confirma, X ou RB soca, B ou LB agarra. Funciona nos menus.
-3. ✅ **Tela de pré-luta** — retratos grandes + VS, cada jogador
-   confirma sua fantasia, P1 escolhe o mapa, "ROUND N... LUTEM!".
-4. ✅ **Agarrar a beirada** — caindo perto da plataforma, segurar
-   agarrar gruda a mão na borda; pulo se iça de volta.
-5. ✅ **Arremesso com carga** — girar segurando algo e soltar =
-   impulso extra proporcional ao giro.
+1. 💥 **Bot (CPU)** 🔨M — jogar sozinho! P2 controlado por IA simples:
+   persegue, soca perto, foge da bola, às vezes agarra e arrasta pra
+   borda. Três níveis (mole, médio, brabo). Destrava treinar e testar
+   sem segundo jogador.
+2. 💥 **4 jogadores** 🔨M — mais 2 lutadores locais (controles 3 e 4,
+   ou +2 esquemas de teclado). Todo mundo contra todo mundo = o caos
+   que o Gang Beasts promete. Placar e seleção pra 4.
+3. 💥 **Música + vozes** 🔨M — trilha sintetizada (menu animado, luta
+   tensa) e "vozes" molengas: grunhidos no soco, "uéé?" pendurado na
+   beirada, choro no nocaute (estilo balbucio de Banjo-Kazooie).
+4. **Replay do ponto em câmera lenta** 🔨M — rebobinar os últimos ~2s
+   da queda em slow-mo com zoom antes do "PONTO!" (gera o clipe
+   perfeito pro canal).
+5. **Identidade do link** 🔨P — título/favicon caprichados, meta
+   OpenGraph (imagem bonita quando cola o link no WhatsApp/Discord),
+   e PWA instalável (ícone na área de trabalho, funciona offline).
+
+## Modos de jogo
+
+6. **Sumô** 🔨P — sem soco, só empurrão e agarrão; arena redonda.
+7. **Batata quente** 🔨M — uma bomba passa de mão em mão; explode a
+   cada X segundos; quem segura voa.
+8. **Rei da bola** 🔨M — pontua quem ficar em cima da bola de
+   demolição por mais tempo.
+9. **Melhor-de-X configurável** 🔨P — hoje fixo em 5 pontos.
 
 ## Combate
 
-6. **Mergulho/voadora** 🔨P — pulo + soco = tackle voador (e fica
-   caído 1s, risco × recompensa).
-7. **Nocaute acumulativo** 🔨P — socos repetidos deixam mais tempo
-   atordoado (hoje é tempo fixo), incentivo a combos.
-8. **Cansaço** 🔨P — spam de soco esgota; barra invisível de fôlego.
-9. **Levantar objetos acima da cabeça** 🔨M — carregar caixote com os
-   dois braços e arremessar de verdade.
+10. **Voadora** 🔨P — pulo + soco = tackle de corpo inteiro (e fica
+    caído 1s: risco × recompensa).
+11. **Nocaute acumulativo** 🔨P — socos seguidos atordoam mais tempo.
+12. **Cansaço** 🔨P — spam de soco esgota o fôlego.
+13. **Levantar acima da cabeça** 🔨M — carregar caixote/pessoa com os
+    dois braços e arremessar de verdade.
+14. **Empurrão de corpo (dash)** 🔨P — investida com o ombro.
 
 ## Mapas
 
-10. **Plataforma que encolhe** 🔨P — a cada round o chão diminui
-    (morte súbita natural).
-11. **Plataformas móveis / elevador** 🔨P — o raycast de chão já
-    suporta; só criar bodies cinemáticos.
-12. **Gelo** 🔨P — mapa escorregadio (fricção baixa) — comédia pura.
-13. **Ventilador/esteira** 🔨P — zona que empurra constantemente.
-14. **Hazards ativos** 🔨M — martelo que varre, serra que passa.
+15. **Plataforma que encolhe** 🔨P — morte súbita natural por round.
+16. **Plataformas móveis / elevador** 🔨P — o raycast já suporta.
+17. **Gelo** 🔨P — fricção baixa, comédia garantida.
+18. **Ventilador / esteira** 🔨P — zonas que empurram.
+19. **Martelo giratório** 🔨M — hazard ativo varrendo a arena.
 
-## Arte & efeitos
+## Arte & polimento
 
-15. **Replay em câmera lenta do ponto** 🔨M — rebobinar os últimos 2s
-    da queda em slow-mo (rende clipe!).
-16. **Mais fantasias** 🔨P cada — abacaxi, robô, banana, fantasma...
-    (pipeline pronto: cores + acessórios + retrato Pollinations).
-17. **Trilha de soco** 🔨P — arco borrado atrás do punho tipo anime.
-18. **Torcida reagindo** 🔨M — confete extra + "OOOOH!" no ponto.
-19. **Sombra blob** 🔨P — sombra redonda fofa sob cada boneco.
-20. **Bloom** 🔨M — brilho nos holofotes e listras (pós-processamento).
+20. **Mais fantasias** 🔨P cada — abacaxi, robô, banana, fantasma,
+    unicórnio… (pipeline pronto, inclusive retrato).
+21. **Trilha de soco** 🔨P — arco borrado tipo anime atrás do punho.
+22. **Torcida reagindo** 🔨M — confete extra + zoom nos "OOOH!".
+23. **Estatísticas pós-partida** 🔨P — socos acertados, quedas,
+    tempo pendurado, maior arremesso.
+24. **Emotes** 🔨P — tecla de provocação (tchauzinho, dancinha).
+25. **Bloom** 🔨M — brilho nos holofotes e listras.
 
-## UI
+## Online (o projetão — decisão: 100% online)
 
-21. **Menu inicial + pausa (ESC)** 🔨P
-22. **Melhor-de-X configurável** 🔨P — hoje é fixo em 5 pontos.
-23. **Toque no navegador (mobile)** 🔨G — só se um dia fizer sentido.
-
-## Online (o projetão — decisão: jogo será 100% online)
-
-24. **Fase 1: LAN** 🔨G — servidor Node rodando a física (Rapier já
-    roda no Node — os testes provam), 2 navegadores na mesma rede.
-25. **Fase 2: nuvem + salas** 🔨G — servidor hospedado, código de sala
-    pra jogar com qualquer um.
-26. **Fase 3: netcode fino** 🔨G — interpolação, previsão local,
-    compensação de lag. O chefão final.
+26. **Fase 1: LAN** 🔨G — servidor Node com a física (Rapier já roda
+    no Node), 2 navegadores na mesma rede.
+27. **Fase 2: nuvem + salas** 🔨G — código de sala pra jogar de longe.
+28. **Fase 3: netcode fino** 🔨G — interpolação, previsão, lag.
 
 ## Já feito
 
-- ✅ Ragdoll ativo (marionete + antigrav + torque)
-- ✅ Soco, agarrão, nocaute, rounds, placar
-- ✅ 9 fantasias + retratos Pollinations + troca (tecla 1/2)
-- ✅ Toon shading, contorno, squash, POF!, estrelas, poeira, shake
-- ✅ Holofotes, confete, tone mapping, piso rico
-- ✅ Pés que pisam + passadas + freio; braços que balançam + guarda
-- ✅ 3 mapas (Estádio/bola de demolição, Gangorra, Queijo) + raycast de chão
+- ✅ Rodada 1 completa: som sintetizado, gamepad, tela de pré-luta
+  (retratos + mapa + ROUND N/LUTEM!), agarrar a beirada, arremesso
+  com carga
+- ✅ Ragdoll ativo com passos de verdade, freio, braços vivos, guarda
+- ✅ 9 fantasias + retratos Pollinations; toon shading + juice completo
+  (POF!, estrelas, poeira, shake, squash)
+- ✅ 3 mapas interativos (bola de demolição, gangorra, queijo) +
+  raycast de chão
+- ✅ Holofotes, confete, tone mapping ACES
 - ✅ GitHub Pages: https://augustoscelli-dev.github.io/molengas/
-- ✅ Ferramentas dev: ?zoom ?debug ?avancar=N ?skins=a,b ?mapa=N,
-  teste-fisica.js (13 cenários headless)
+- ✅ Dev: ?zoom ?debug ?avancar ?skins ?mapa ?direto + 13 testes headless
