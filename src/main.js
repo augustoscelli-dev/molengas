@@ -38,7 +38,24 @@ scene.fog = new THREE.Fog(0x141433, 22, 55);
 const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 200);
 camera.position.set(0, 6, 10);
 
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+function criarRenderer() {
+  // O contexto WebGL pode falhar por estado do navegador (GPU travada etc.) —
+  // tenta configurações cada vez mais conservadoras antes de desistir.
+  const tentativas = [
+    { antialias: true },
+    { antialias: false },
+    { antialias: false, powerPreference: 'low-power', failIfMajorPerformanceCaveat: false },
+  ];
+  for (const opts of tentativas) {
+    try { return new THREE.WebGLRenderer(opts); } catch {}
+  }
+  throw new Error(
+    'O 3D (WebGL) está desligado no seu navegador — não é um problema do jogo. ' +
+    'Feche TODAS as janelas do navegador e abra de novo. Se persistir: ative ' +
+    '"Usar aceleração gráfica" em chrome://settings/system e teste get.webgl.org (deve mostrar um cubo girando).',
+  );
+}
+const renderer = criarRenderer();
 renderer.setSize(innerWidth, innerHeight);
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
