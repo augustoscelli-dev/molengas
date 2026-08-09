@@ -153,16 +153,62 @@ function resetCaixotes(m) {
     b.setAngvel({ x: 0, y: 0, z: 0 }, true);
   }
 }
-function chaoFixo(m, hx, hz, mat) {
+function chaoFixo(m, hx, hz, mat, atrito = 0.8) {
   const g = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, -0.3, 0));
-  world.createCollider(RAPIER.ColliderDesc.cuboid(hx, 0.3, hz).setFriction(0.8).setCollisionGroups(GROUND_GROUPS), g);
+  world.createCollider(RAPIER.ColliderDesc.cuboid(hx, 0.3, hz).setFriction(atrito).setCollisionGroups(GROUND_GROUPS), g);
   m.bodies.push(g);
   const deck = new THREE.Mesh(new THREE.BoxGeometry(hx * 2, 0.6, hz * 2), mat);
   deck.position.y = -0.3;
   deck.receiveShadow = true;
   scene.add(deck);
   m.meshes.push(deck);
+  return g;
 }
+
+const texGelo = (() => {
+  const c = document.createElement('canvas');
+  c.width = c.height = 512;
+  const g = c.getContext('2d');
+  const grad = g.createLinearGradient(0, 0, 512, 512);
+  grad.addColorStop(0, '#cfeefc');
+  grad.addColorStop(1, '#a8d8f0');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 512, 512);
+  g.strokeStyle = 'rgba(255,255,255,0.7)';
+  g.lineWidth = 3;
+  for (const [x1, y1, x2, y2] of [[40, 90, 200, 60], [200, 60, 310, 140], [420, 40, 350, 210], [80, 300, 220, 340], [220, 340, 300, 460], [460, 300, 380, 380]]) {
+    g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke();
+  }
+  g.strokeStyle = '#7fb8d8';
+  g.lineWidth = 22;
+  g.strokeRect(11, 11, 490, 490);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+})();
+
+const texSumo = (() => {
+  const c = document.createElement('canvas');
+  c.width = c.height = 512;
+  const g = c.getContext('2d');
+  g.fillStyle = '#f0e3c8';
+  g.fillRect(0, 0, 512, 512);
+  g.strokeStyle = '#c2413b';
+  g.lineWidth = 26;
+  g.beginPath(); g.arc(256, 256, 218, 0, 7); g.stroke();
+  g.lineWidth = 10;
+  g.beginPath(); g.arc(256, 256, 60, 0, 7); g.stroke();
+  g.fillStyle = '#c2413b';
+  for (const a of [0.8, 2.35]) {
+    g.save();
+    g.translate(256 + Math.cos(a) * 130, 256 + Math.sin(a) * 130);
+    g.fillRect(-8, -30, 16, 60);
+    g.restore();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+})();
 
 const MAPAS = [
   {
@@ -288,6 +334,209 @@ const MAPAS = [
       m.reset = () => resetCaixotes(m);
     },
   },
+  {
+    nome: 'GELO',
+    build(m) {
+      // Pista escorregadia: atrito quase zero + tração reduzida
+      chaoFixo(m, 5.5, 4, new THREE.MeshStandardMaterial({ map: texGelo, roughness: 0.15 }), 0.03);
+      m.controle = 0.35;
+      fazerCaixote(m, -2.8, 2.2);
+      fazerCaixote(m, 2.8, -2.2);
+      m.reset = () => resetCaixotes(m);
+    },
+  },
+  {
+    nome: 'MORTE SÚBITA',
+    build(m) {
+      // A plataforma encolhe a cada round
+      const mat = new THREE.MeshStandardMaterial({ map: deckTex, roughness: 0.85 });
+      let chao = null;
+      let deck = null;
+      let fator = 1;
+      const criar = () => {
+        if (chao) {
+          world.removeRigidBody(chao);
+          m.bodies.splice(m.bodies.indexOf(chao), 1);
+        }
+        chao = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, -0.3, 0));
+        world.createCollider(
+          RAPIER.ColliderDesc.cuboid(4.8 * fator, 0.3, 3.6 * fator).setFriction(0.8).setCollisionGroups(GROUND_GROUPS),
+          chao,
+        );
+        m.bodies.push(chao);
+        if (!deck) {
+          deck = new THREE.Mesh(new THREE.BoxGeometry(9.6, 0.6, 7.2), mat);
+          deck.position.y = -0.3;
+          deck.receiveShadow = true;
+          scene.add(deck);
+          m.meshes.push(deck);
+        }
+        deck.scale.set(fator, 1, fator);
+      };
+      criar();
+      fazerCaixote(m, -2, 2);
+      fazerCaixote(m, 2, -2);
+      m.reset = (novo) => {
+        fator = novo ? 1 : Math.max(0.35, fator - 0.13);
+        criar();
+        resetCaixotes(m);
+      };
+    },
+  },
+  {
+    nome: 'MARTELO',
+    build(m) {
+      chaoFixo(m, 5.5, 4, new THREE.MeshStandardMaterial({ map: deckTex, roughness: 0.85 }));
+      // Braço giratório varrendo a arena na altura da cintura
+      const poste = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, 0, 0));
+      world.createCollider(
+        RAPIER.ColliderDesc.cuboid(0.12, 0.75, 0.12).setTranslation(0, 0.45, 0).setCollisionGroups(GROUND_GROUPS),
+        poste,
+      );
+      const braco = world.createRigidBody(
+        RAPIER.RigidBodyDesc.dynamic().setTranslation(1.95, 0.62, 0).setAngularDamping(0).setCcdEnabled(true),
+      );
+      world.createCollider(
+        RAPIER.ColliderDesc.cuboid(1.55, 0.06, 0.06).setMass(8).setCollisionGroups(PROP_GROUPS),
+        braco,
+      );
+      world.createCollider(
+        RAPIER.ColliderDesc.ball(0.42).setTranslation(1.75, 0, 0).setMass(25).setCollisionGroups(PROP_GROUPS),
+        braco,
+      );
+      const eixo = world.createImpulseJoint(
+        RAPIER.JointData.revolute({ x: 0, y: 0.62, z: 0 }, { x: -1.95, y: 0, z: 0 }, { x: 0, y: 1, z: 0 }),
+        poste, braco, true,
+      );
+      if (eixo.configureMotorVelocity) eixo.configureMotorVelocity(1.15, 260);
+      m.bodies.push(poste, braco);
+      m.props.push(braco);
+      const posteMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.16, 1.25, 12), toonMat(THREE, 0x8a4f9e));
+      posteMesh.position.y = 0.45;
+      posteMesh.castShadow = true;
+      scene.add(posteMesh);
+      m.meshes.push(posteMesh);
+      const bracoGrupo = new THREE.Group();
+      const barra = new THREE.Mesh(new THREE.BoxGeometry(3.1, 0.13, 0.13), toonMat(THREE, 0x4a4a58));
+      barra.castShadow = true;
+      addOutline(THREE, barra);
+      bracoGrupo.add(barra);
+      const cabeca = new THREE.Mesh(new THREE.SphereGeometry(0.42, 20, 14), toonMat(THREE, 0xd63b30));
+      cabeca.position.x = 1.75;
+      cabeca.castShadow = true;
+      addOutline(THREE, cabeca);
+      bracoGrupo.add(cabeca);
+      scene.add(bracoGrupo);
+      m.meshes.push(bracoGrupo);
+      m.syncPairs.push([braco, bracoGrupo]);
+      m.reset = () => {
+        braco.setTranslation({ x: 1.95, y: 0.62, z: 0 }, true);
+        braco.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true);
+        braco.setLinvel({ x: 0, y: 0, z: 0 }, true);
+        braco.setAngvel({ x: 0, y: 0, z: 0 }, true);
+      };
+    },
+  },
+  {
+    nome: 'SUMÔ',
+    semSoco: true,
+    build(m) {
+      // Ringue redondo que encolhe — sem soco: empurra, agarra e arremessa
+      const mat = new THREE.MeshStandardMaterial({ map: texSumo, roughness: 0.8 });
+      let chao = null;
+      let deck = null;
+      let fator = 1;
+      const criar = () => {
+        if (chao) {
+          world.removeRigidBody(chao);
+          m.bodies.splice(m.bodies.indexOf(chao), 1);
+        }
+        chao = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, -0.3, 0));
+        world.createCollider(
+          RAPIER.ColliderDesc.cylinder(0.3, 3.9 * fator).setFriction(0.9).setCollisionGroups(GROUND_GROUPS),
+          chao,
+        );
+        m.bodies.push(chao);
+        if (!deck) {
+          deck = new THREE.Mesh(new THREE.CylinderGeometry(3.9, 3.9, 0.6, 44), mat);
+          deck.position.y = -0.3;
+          deck.receiveShadow = true;
+          scene.add(deck);
+          m.meshes.push(deck);
+        }
+        deck.scale.set(fator, 1, fator);
+      };
+      criar();
+      m.reset = (novo) => {
+        fator = novo ? 1 : Math.max(0.4, fator - 0.12);
+        criar();
+      };
+    },
+  },
+  {
+    nome: 'BATATA QUENTE',
+    build(m) {
+      chaoFixo(m, 4.6, 3.5, new THREE.MeshStandardMaterial({ map: deckTex, roughness: 0.85 }));
+      // A bomba passa de mão em mão — some longe dela quando piscar!
+      const bomba = world.createRigidBody(
+        RAPIER.RigidBodyDesc.dynamic().setTranslation(0, 0.5, 0).setLinearDamping(0.4).setAngularDamping(0.6),
+      );
+      world.createCollider(
+        RAPIER.ColliderDesc.ball(0.24).setMass(3).setFriction(0.6).setRestitution(0.4).setCollisionGroups(PROP_GROUPS),
+        bomba,
+      );
+      m.bodies.push(bomba);
+      m.props.push(bomba);
+      const bombaMat = toonMat(THREE, 0x232330);
+      const bombaMesh = new THREE.Mesh(new THREE.SphereGeometry(0.24, 20, 14), bombaMat);
+      bombaMesh.castShadow = true;
+      addOutline(THREE, bombaMesh);
+      const pavio = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.12, 6), toonMat(THREE, 0xb98d43));
+      pavio.position.y = 0.28;
+      bombaMesh.add(pavio);
+      scene.add(bombaMesh);
+      m.meshes.push(bombaMesh);
+      m.syncPairs.push([bomba, bombaMesh]);
+      let proximaEm = null;
+      m.update = (now) => {
+        if (now === undefined) return;
+        if (proximaEm === null) proximaEm = now + 6.5;
+        const falta = proximaEm - now;
+        const pisca = falta < 3 && Math.sin(now * (falta < 1.2 ? 34 : 11)) > 0;
+        bombaMat.color.setHex(pisca ? 0xd63b30 : 0x232330);
+        if (falta <= 0) {
+          proximaEm = now + 6.5;
+          const bp = bomba.translation();
+          for (const l of lutadores) {
+            const tp = l.rag.parts.torso.translation();
+            const d = Math.hypot(tp.x - bp.x, tp.y - bp.y, tp.z - bp.z);
+            if (d < 2.4) {
+              const k = (1 - d / 2.4) * 14;
+              const dl = Math.hypot(tp.x - bp.x, tp.z - bp.z) || 1;
+              for (const pn of ['torso', 'pelvis']) {
+                l.rag.parts[pn].applyImpulse({ x: ((tp.x - bp.x) / dl) * k, y: k * 0.5, z: ((tp.z - bp.z) / dl) * k }, true);
+              }
+              l.rag.releaseGrabs();
+              l.rag.stun(now + 1.2);
+              l.rag.dano = Math.min(4, l.rag.dano + 1);
+            }
+          }
+          som.bolada();
+          trauma = 1;
+          burstEstrelas(bp);
+          puffFx({ x: bp.x, y: bp.y + 0.6, z: bp.z });
+          bomba.setTranslation({ x: 0, y: 0.5, z: 0 }, true);
+          bomba.setLinvel({ x: 0, y: 0, z: 0 }, true);
+        }
+      };
+      m.reset = () => {
+        proximaEm = null;
+        bomba.setTranslation({ x: 0, y: 0.5, z: 0 }, true);
+        bomba.setLinvel({ x: 0, y: 0, z: 0 }, true);
+        bomba.setAngvel({ x: 0, y: 0, z: 0 }, true);
+      };
+    },
+  },
 ];
 
 let mapaIdx = 0;
@@ -300,8 +549,10 @@ function setMapa(idx) {
   mapaIdx = ((idx % MAPAS.length) + MAPAS.length) % MAPAS.length;
   mapa = { bodies: [], meshes: [], syncPairs: [], props: [], bolas: [], _caixotes: [], reset: null, update: null };
   MAPAS[mapaIdx].build(mapa);
+  mapa.semSoco = !!MAPAS[mapaIdx].semSoco;
   for (const l of lutadores) {
     l.rag.props = mapa.props;
+    l.rag.controle = mapa.controle ?? 1;
     l.rag.reset();
     l.vivo = true;
   }
@@ -382,7 +633,11 @@ function escurecer(cor, t) {
 function buildVisual(skin, fase = 0) {
   const meshes = { _skin: skin, _fase: fase };
   const mats = {};
-  const matFor = (cat) => mats[cat] ||= toonMat(THREE, skin.cores[cat]);
+  const fantasmagorico = (m) => {
+    if (skin.opacidade) { m.transparent = true; m.opacity = skin.opacidade; }
+    return m;
+  };
+  const matFor = (cat) => mats[cat] ||= fantasmagorico(toonMat(THREE, skin.cores[cat]));
   const bolinha = (mat, r, escala) => {
     const b = new THREE.Mesh(new THREE.SphereGeometry(r, 18, 14), mat);
     if (escala) b.scale.set(...escala);
@@ -431,7 +686,7 @@ function buildVisual(skin, fase = 0) {
       obj._baseY = 1.05;
       if (!skin.semBarriga) {
         const corBarriga = skin.cores.barriga ?? clarear(skin.cores.torso, 0.38);
-        const barriga = new THREE.Mesh(new THREE.SphereGeometry(0.155, 18, 14), toonMat(THREE, corBarriga));
+        const barriga = new THREE.Mesh(new THREE.SphereGeometry(0.155, 18, 14), fantasmagorico(toonMat(THREE, corBarriga)));
         barriga.position.set(0, -0.04, 0.095);
         barriga.scale.set(0.78, 1.05, 0.5);
         obj.add(barriga);
@@ -537,6 +792,7 @@ function montarLutadores(configs) {
       filter: 0x0001 | 0x0008 | (TODOS_PLAYERS & ~PLAYER_BITS[i]),
     });
     rag.props = mapa.props;
+    rag.controle = mapa.controle ?? 1;
     const meshes = buildVisual(SKINS[cfg.skin], i * 1.9);
     return { rag, meshes, cfg, slot: i, vivo: true, score: 0 };
   });
@@ -548,6 +804,17 @@ function inputDoLutador(l) {
   if (l.cfg.tipo === 'kb1') return mergeInput(readInput(MAPS.p1), readGamepad(0));
   if (l.cfg.tipo === 'kb2') return mergeInput(readInput(MAPS.p2), readGamepad(1));
   return readGamepad(l.cfg.gp) ?? IDLE_IN;
+}
+
+// Toque duplo na direção = investida de ombro
+function detectarDash(l, inp, now) {
+  const mag = Math.hypot(inp.move.x, inp.move.z);
+  const pressionado = mag > 0.5;
+  if (pressionado && !l._movHeld) {
+    if (now - (l._lastPress ?? -9) < 0.33) l.rag.dash(now);
+    l._lastPress = now;
+  }
+  l._movHeld = mag > 0.3;
 }
 
 // ---------- Bot ----------
@@ -662,6 +929,13 @@ const powTexs = ['POF!', 'PAH!', 'BUM!'].map((txt) => texturaCanvas(256, (g) => 
   g.fillStyle = '#d6273b';
   g.fillText(txt, 0, 4);
 }));
+
+const emoteTex = texturaCanvas(128, (g) => {
+  g.font = '96px "Segoe UI Emoji", "Segoe UI", sans-serif';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillText('👋', 64, 70);
+});
 
 const efeitos = [];
 function spawnFx(tex, pos, opts) {
@@ -843,7 +1117,7 @@ function iniciarLuta() {
   $('selecao').style.display = 'none';
   const configs = selCfg.filter((c) => c.ativo).map((c) => ({ ...c }));
   montarLutadores(configs);
-  mapa.reset?.();
+  mapa.reset?.(true);
   updateScore();
   som.confirmar();
   som.musica('luta');
@@ -971,6 +1245,7 @@ function handleRounds(now) {
     for (const l of lutadores) {
       if (l.vivo && l.rag.parts.pelvis.translation().y < -8) {
         l.vivo = false;
+        l.rag.stats.quedas++;
         som.queda();
         som.vozChoro(VOZES[l.slot]);
         l.rag.rivals = [];
@@ -995,11 +1270,11 @@ function handleRounds(now) {
   } else if (state === 'ponto' && now > stateUntil) {
     for (const l of lutadores) { l.rag.reset(); l.vivo = true; }
     for (const o of lutadores) o.rag.rivals = lutadores.filter((x) => x !== o).map((x) => x.rag);
-    mapa.reset?.();
+    mapa.reset?.(false);
     startIntro(lutadores.reduce((s, l) => s + l.score, 0) + 1);
   } else if (state === 'fim' && isDown('KeyR')) {
     for (const l of lutadores) { l.rag.reset(); l.vivo = true; }
-    mapa.reset?.();
+    mapa.reset?.(true);
     mostrarSelecao();
   }
 }
@@ -1010,7 +1285,11 @@ function fecharRound() {
     state = 'fim';
     som.vitoria();
     som.vozYay(VOZES[winner.slot]);
-    showMsg('🏆 ' + SKINS[winner.cfg.skin].nome + ' VENCEU!', 'Aperte R pra voltar à seleção');
+    const stats = lutadores.map((l) =>
+      `${SKINS[l.cfg.skin].nome}: ${l.rag.stats.acertos}/${l.rag.stats.socos} socos · ` +
+      `${l.rag.stats.quedas} quedas · ${l.rag.stats.pendurado.toFixed(0)}s pendurado · ${l.rag.stats.arremessos} arremessos`,
+    ).join('<br>');
+    showMsg('🏆 ' + SKINS[winner.cfg.skin].nome + ' VENCEU!', stats + '<br><br>Aperte R pra voltar à seleção');
   } else {
     som.ponto();
     state = 'ponto';
@@ -1054,7 +1333,12 @@ function frame(t) {
     simNow += FIXED_DT;
     const lutando = state === 'luta';
     for (const l of lutadores) {
-      l.rag.update(FIXED_DT, simNow, lutando && l.vivo ? inputDoLutador(l) : IDLE_IN);
+      let inp = lutando && l.vivo ? inputDoLutador(l) : IDLE_IN;
+      if (inp !== IDLE_IN) {
+        if (mapa.semSoco && inp.punch) inp = { ...inp, punch: false };
+        if (l.cfg.tipo !== 'cpu') detectarDash(l, inp, simNow);
+      }
+      l.rag.update(FIXED_DT, simNow, inp);
     }
     world.step();
     if (state === 'luta') gravarReplay();
@@ -1071,7 +1355,7 @@ function frame(t) {
     mesh.position.set(tp.x, tp.y, tp.z);
     mesh.quaternion.set(rp.x, rp.y, rp.z, rp.w);
   }
-  mapa.update?.();
+  mapa.update?.(simNow);
 
   // Bolada: bola de demolição em velocidade atordoa quem ela atropela
   for (const bolaB of mapa.bolas) {
@@ -1083,6 +1367,7 @@ function frame(t) {
       const tp = l.rag.parts.torso.translation();
       if (Math.hypot(bp.x - tp.x, bp.y - tp.y, bp.z - tp.z) < 0.95) {
         l._bolaCd = simNow + 1.2;
+        l.rag.dano = Math.min(4, l.rag.dano + 1);
         l.rag.stun(simNow + 1.1);
         l.rag.lastHitLandedAt = simNow;
         som.bolada();
@@ -1115,6 +1400,17 @@ function frame(t) {
       if (p.hangingOnLedge()) som.vozUe(VOZES[l.slot]);
     }
     if (p.lastThrowAt > (p._sArr ?? -1)) { p._sArr = p.lastThrowAt; som.arremesso(); }
+    if (p.lastDashAt > (p._sDash ?? -1)) {
+      p._sDash = p.lastDashAt;
+      som.arremesso();
+      puffFx(p.parts.pelvis.translation());
+    }
+    if (p.lastEmoteAt > (p._sEmote ?? -1)) {
+      p._sEmote = p.lastEmoteAt;
+      som.vozYay(VOZES[l.slot]);
+      const hp = p.parts.head.translation();
+      spawnFx(emoteTex, hp, { dy: 0.55, escala: 0.32, vida: 0.9, vy: 0.6, cresce: 0.4, teto: 0.5 });
+    }
   }
   updateEfeitos(fdt);
   mirarHolofotes(simNow);

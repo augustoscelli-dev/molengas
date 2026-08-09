@@ -77,7 +77,10 @@ function drawFace(g, style, variant) {
     g.moveTo(206, 56); g.lineTo(150, 74);
     g.stroke();
   }
-  if (style === 'bigode') {
+  if (style === 'boo') {
+    g.fillStyle = '#241640';
+    g.beginPath(); g.ellipse(128, 172, 22, 28, 0, 0, 7); g.fill();
+  } else if (style === 'bigode') {
     g.fillStyle = '#3d2b1f';
     for (const lado of [-1, 1]) {
       g.beginPath();
@@ -235,6 +238,105 @@ export const SKINS = [
         asa.scale.set(0.38, 0.8, 0.55);
         asa.rotation.z = lado * 0.45;
         torso.add(asa);
+      }
+    },
+  },
+  {
+    id: 'abacaxi', nome: 'ABACAXI',
+    cores: { head: 0xf2c94c, torso: 0xf2c94c, pelvis: 0xe0b13a, arms: 0xf2c94c, legs: 0x5cb53b, barriga: 0xf9e08a },
+    face: 'normal',
+    semBarriga: true,
+    texturaTorso(g) {
+      g.fillStyle = '#f2c94c';
+      g.fillRect(0, 0, 256, 256);
+      g.strokeStyle = 'rgba(160,110,20,0.55)';
+      g.lineWidth = 5;
+      for (let i = -256; i < 512; i += 42) {
+        g.beginPath(); g.moveTo(i, 0); g.lineTo(i + 256, 256); g.stroke();
+        g.beginPath(); g.moveTo(i + 256, 0); g.lineTo(i, 256); g.stroke();
+      }
+    },
+    extras(THREE, { head }) {
+      for (let i = 0; i < 5; i++) {
+        const a = (i / 5) * Math.PI * 2;
+        const folha = mesh(THREE, new THREE.ConeGeometry(0.045, 0.2, 8), 0x5cb53b);
+        folha.position.set(Math.cos(a) * 0.06, 0.21, Math.sin(a) * 0.06);
+        folha.rotation.z = Math.cos(a) * 0.5;
+        folha.rotation.x = -Math.sin(a) * 0.5;
+        head.add(folha);
+      }
+    },
+  },
+  {
+    id: 'robo', nome: 'ROBÔ',
+    cores: { head: 0x9aa7b8, torso: 0x9aa7b8, pelvis: 0x6d7a8c, arms: 0x9aa7b8, legs: 0x6d7a8c },
+    face: 'normal',
+    semBarriga: true,
+    texturaTorso(g) {
+      g.fillStyle = '#9aa7b8';
+      g.fillRect(0, 0, 256, 256);
+      g.fillStyle = '#5d6a7c';
+      g.fillRect(70, 100, 116, 80);
+      g.strokeStyle = '#39434f';
+      g.lineWidth = 6;
+      g.strokeRect(70, 100, 116, 80);
+      for (const [bx, cor] of [[95, '#d63b30'], [128, '#f2c94c'], [161, '#5cb53b']]) {
+        g.fillStyle = cor;
+        g.beginPath(); g.arc(bx, 128, 11, 0, 7); g.fill();
+      }
+      g.fillStyle = '#39434f';
+      g.fillRect(80, 158, 96, 8);
+    },
+    extras(THREE, { head }) {
+      const haste = mesh(THREE, new THREE.CylinderGeometry(0.015, 0.015, 0.11, 8), 0x6d7a8c);
+      haste.position.y = 0.2;
+      head.add(haste);
+      const luz = mesh(THREE, new THREE.SphereGeometry(0.035, 10, 8), 0xd63b30);
+      luz.position.y = 0.27;
+      head.add(luz);
+      for (const lado of [-1, 1]) {
+        const parafuso = mesh(THREE, new THREE.CylinderGeometry(0.035, 0.035, 0.04, 10), 0x6d7a8c);
+        parafuso.position.set(lado * 0.165, 0, 0);
+        parafuso.rotation.z = Math.PI / 2;
+        head.add(parafuso);
+      }
+    },
+  },
+  {
+    id: 'banana', nome: 'BANANA',
+    cores: { head: 0xf7d954, torso: 0xf7d954, pelvis: 0xe3c23e, arms: 0xf7d954, legs: 0xe3c23e, barriga: 0xfdf3c0 },
+    face: 'normal',
+    extras(THREE, { head }) {
+      const ponta = mesh(THREE, new THREE.ConeGeometry(0.06, 0.14, 10), 0x8a5f28);
+      ponta.position.y = 0.21;
+      head.add(ponta);
+      const gomo = mesh(THREE, new THREE.CapsuleGeometry(0.035, 0.1, 4, 8), 0xe3c23e);
+      gomo.position.set(0, 0.12, -0.12);
+      gomo.rotation.x = 0.7;
+      head.add(gomo);
+    },
+  },
+  {
+    id: 'fantasma', nome: 'FANTASMA',
+    cores: { head: 0xeef0ff, torso: 0xeef0ff, pelvis: 0xd8dcf2, arms: 0xeef0ff, legs: 0xd8dcf2, barriga: 0xffffff },
+    face: 'boo',
+    opacidade: 0.82,
+    extras() {},
+  },
+  {
+    id: 'unicornio', nome: 'UNICÓRNIO',
+    cores: { head: 0xfdfdfd, torso: 0xfdfdfd, pelvis: 0xf3c9e0, arms: 0xfdfdfd, legs: 0xf3c9e0, barriga: 0xffe9f4 },
+    face: 'normal',
+    extras(THREE, { head }) {
+      const chifre = mesh(THREE, new THREE.ConeGeometry(0.045, 0.19, 10), 0xf2c94c);
+      chifre.position.set(0, 0.16, 0.09);
+      chifre.rotation.x = -0.5;
+      head.add(chifre);
+      const tons = [0xf78fc2, 0xc792ff, 0x8fd0f7];
+      for (let i = 0; i < 5; i++) {
+        const mecha = mesh(THREE, new THREE.SphereGeometry(0.05, 10, 8), tons[i % 3]);
+        mecha.position.set(0, 0.17 - i * 0.045, -0.05 - i * 0.045);
+        head.add(mecha);
       }
     },
   },

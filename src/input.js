@@ -11,8 +11,8 @@ addEventListener('keyup', (e) => keys.delete(e.code));
 addEventListener('blur', () => keys.clear());
 
 export const MAPS = {
-  p1: { up: 'KeyW', down: 'KeyS', left: 'KeyA', right: 'KeyD', punch: 'KeyF', grab: 'KeyG', jump: 'Space' },
-  p2: { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight', punch: 'KeyK', grab: 'KeyL', jump: 'Enter' },
+  p1: { up: 'KeyW', down: 'KeyS', left: 'KeyA', right: 'KeyD', punch: 'KeyF', grab: 'KeyG', jump: 'Space', emote: 'KeyT' },
+  p2: { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight', punch: 'KeyK', grab: 'KeyL', jump: 'Enter', emote: 'KeyO' },
 };
 
 export function readInput(map) {
@@ -24,6 +24,7 @@ export function readInput(map) {
     punch: keys.has(map.punch),
     grab: keys.has(map.grab),
     jump: keys.has(map.jump),
+    emote: keys.has(map.emote),
   };
 }
 

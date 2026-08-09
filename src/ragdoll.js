@@ -77,8 +77,16 @@ export class Ragdoll {
     this.lastJumpAt = -10;
     this.lastGrabAt = -10;
     this.lastThrowAt = -10;
+    this.lastDashAt = -10;
+    this.lastEmoteAt = -10;
     this.grabJoints = [null, null];
     this._ray = new R.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: -1, z: 0 });
+    this.controle = 1; // 0..1 — mapas de gelo reduzem a tração
+    this.dano = 0; // nocaute acumulativo: apanhar seguido atordoa mais
+    this.folego = 1; // cansaço: spam de soco esgota
+    this.dashReadyAt = 0;
+    this.emoteReadyAt = 0;
+    this.stats = { socos: 0, acertos: 0, quedas: 0, pendurado: 0, arremessos: 0 };
 
     const groups = ((memberships & 0xffff) << 16) | (filter & 0xffff);
     for (const spec of PARTS) {
@@ -134,6 +142,7 @@ export class Ragdoll {
         const k = Math.min(spin * 1.3, 10);
         g.body.applyImpulse({ x: (v.x / sp) * k, y: (v.y / sp) * k + spin * 0.35, z: (v.z / sp) * k }, true);
         this.lastThrowAt = this._now ?? 0;
+        this.stats.arremessos++;
       }
       this.grabJoints[i] = null;
     }
@@ -174,9 +183,24 @@ export class Ragdoll {
     return [p.x + d[0], p.y + d[1], p.z + d[2]];
   }
 
+  // Investida de ombro (toque duplo na direção)
+  dash(now) {
+    if (now < this.dashReadyAt || this.isStunned(now)) return;
+    this.dashReadyAt = now + 1.3;
+    this.lastDashAt = now;
+    this.hoverBlockUntil = Math.max(this.hoverBlockUntil, now + 0.15);
+    const dir = [Math.sin(this.heading), 0, Math.cos(this.heading)];
+    this.parts.pelvis.applyImpulse({ x: dir[0] * 10, y: 1, z: dir[2] * 10 }, true);
+    this.parts.torso.applyImpulse({ x: dir[0] * 6, y: 0.5, z: dir[2] * 6 }, true);
+  }
+
   update(dt, now, input) {
     this._now = now;
     const stunned = this.isStunned(now);
+    // recuperação gradual: dano de combo esvai, fôlego volta
+    this.dano = Math.max(0, this.dano - 0.25 * dt);
+    this.folego = Math.min(1, this.folego + 0.22 * dt);
+    if (this.hangingOnLedge()) this.stats.pendurado += dt;
     const pelvis = this.parts.pelvis;
     const pp = pelvis.translation();
     const pv = pelvis.linvel();
@@ -227,8 +251,9 @@ export class Ragdoll {
         const nx = mx / mlen, nz = mz / mlen;
         const speedAlong = pv.x * nx + pv.z * nz;
         if (speedAlong < 3.6) {
-          pelvis.applyImpulse({ x: nx * 220 * dt, y: 0, z: nz * 220 * dt }, true);
-          this.parts.torso.applyImpulse({ x: nx * 90 * dt, y: 0, z: nz * 90 * dt }, true);
+          const tr = 220 * this.controle;
+          pelvis.applyImpulse({ x: nx * tr * dt, y: 0, z: nz * tr * dt }, true);
+          this.parts.torso.applyImpulse({ x: nx * tr * 0.4 * dt, y: 0, z: nz * tr * 0.4 * dt }, true);
         }
       }
       // Torque de direção (vira o corpo pra onde anda)
@@ -291,10 +316,19 @@ export class Ragdoll {
           }
         }
         // Freio: sem input, os pés plantados seguram o escorregão
+        // (no gelo, controle baixo = freio fraco = patinação)
         if (!andando) {
-          const bx = clamp(-pv.x * 90, -220, 220);
-          const bz = clamp(-pv.z * 90, -220, 220);
+          const fr = 90 * this.controle;
+          const bx = clamp(-pv.x * fr, -220, 220);
+          const bz = clamp(-pv.z * fr, -220, 220);
           pelvis.applyImpulse({ x: bx * dt, y: 0, z: bz * dt }, true);
+        }
+        // Emote: bracinhos pro alto + pulinho
+        if (input.emote && now > this.emoteReadyAt) {
+          this.emoteReadyAt = now + 1.6;
+          this.lastEmoteAt = now;
+          for (const h of ['forearmL', 'forearmR']) this.parts[h].applyImpulse({ x: 0, y: 3, z: 0 }, true);
+          pelvis.applyImpulse({ x: 0, y: 5, z: 0 }, true);
         }
       }
       // Pulo
@@ -305,15 +339,26 @@ export class Ragdoll {
         pelvis.applyImpulse({ x: 0, y: 20, z: 0 }, true);
         this.parts.torso.applyImpulse({ x: 0, y: 12, z: 0 }, true);
       }
-      // Soco
+      // Soco (cansaço: sem fôlego sai fraco e lento; no ar vira voadora)
       if (input.punch && now >= this.punchReadyAt) {
-        this.punchReadyAt = now + 0.8;
-        this.punchUntil = now + 0.25;
+        this._socoFraco = this.folego < 0.3;
+        this.folego = Math.max(0, this.folego - 0.34);
+        this._voadora = !grounded;
+        this.punchReadyAt = now + (this._socoFraco ? 1.3 : 0.8);
+        this.punchUntil = now + (this._voadora ? 0.32 : 0.25);
         this.punchHit = false;
         this.lastPunchStartAt = now;
+        this.stats.socos++;
         const dir = [Math.sin(this.heading), 0, Math.cos(this.heading)];
+        const forca = this._socoFraco ? 3.5 : 7;
         for (const h of ['forearmL', 'forearmR']) {
-          this.parts[h].applyImpulse({ x: dir[0] * 7, y: 1.2, z: dir[2] * 7 }, true);
+          this.parts[h].applyImpulse({ x: dir[0] * forca, y: 1.2, z: dir[2] * forca }, true);
+        }
+        if (this._voadora) {
+          // tackle: o corpo inteiro vai junto — e depois desaba (risco × recompensa)
+          this.parts.torso.applyImpulse({ x: dir[0] * 6, y: 0.5, z: dir[2] * 6 }, true);
+          pelvis.applyImpulse({ x: dir[0] * 5, y: 0, z: dir[2] * 5 }, true);
+          this.hoverBlockUntil = Math.max(this.hoverBlockUntil, now + 0.7);
         }
       }
     }
@@ -334,9 +379,18 @@ export class Ragdoll {
               const d = Math.hypot(tip[0] - tp.x, tip[1] - tp.y, tip[2] - tp.z);
               if (d < 0.48) {
                 const strong = pname === 'head';
-                tb.applyImpulse({ x: dir[0] * (strong ? 6.5 : 5), y: strong ? 2.2 : 1.5, z: dir[2] * (strong ? 6.5 : 5) }, true);
-                rival.stun(now + (strong ? 1.35 : 0.4));
+                const fator = (this._voadora ? 1.35 : 1) * (this._socoFraco ? 0.55 : 1);
+                tb.applyImpulse({
+                  x: dir[0] * (strong ? 6.5 : 5) * fator,
+                  y: (strong ? 2.2 : 1.5) * fator,
+                  z: dir[2] * (strong ? 6.5 : 5) * fator,
+                }, true);
+                // nocaute acumulativo: combo atordoa cada vez mais
+                rival.dano = Math.min(4, rival.dano + 1);
+                const dur = Math.min(2.6, (strong ? 1.35 : 0.4) * (1 + rival.dano * 0.35) * fator);
+                rival.stun(now + dur);
                 rival.lastHitLandedAt = now;
+                this.stats.acertos++;
                 this.punchHit = true;
                 break outer;
               }

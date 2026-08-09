@@ -14,6 +14,7 @@ export function readGamepad(idx) {
     punch: bt(2) || bt(5),
     grab: bt(1) || bt(4) || bt(7),
     jump: bt(0),
+    emote: bt(3),
   };
 }
 
@@ -27,5 +28,6 @@ export function mergeInput(teclado, controle) {
     punch: teclado.punch || controle.punch,
     grab: teclado.grab || controle.grab,
     jump: teclado.jump || controle.jump,
+    emote: teclado.emote || controle.emote,
   };
 }

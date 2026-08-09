@@ -2,19 +2,22 @@
 
 ## Prioridade alta (próximas 5)
 
-1. 💥 **3 mapas novos** 🔨M — GELO (escorregadio, fricção quase zero),
-   MORTE SÚBITA (plataforma encolhe a cada round) e MARTELO (pêndulo
-   gigante varrendo a arena). O sistema de mapas já engole tudo.
-2. 💥 **Pacote de combate** 🔨M — voadora (pulo+soco = tackle),
-   dash de ombro (2× na direção), nocaute acumulativo (combo atordoa
-   mais) e cansaço (spam de soco esgota).
-3. **+5 fantasias** 🔨M — abacaxi, robô, banana, fantasma e unicórnio
-   (pipeline pronto: cores + acessórios + retrato Pollinations).
-4. **Modos de jogo** 🔨M — SUMÔ (sem soco, arena redonda que encolhe)
-   e BATATA QUENTE (bomba passa de mão, explode quem segura).
-5. **Estatísticas + emotes** 🔨P — tela pós-partida (socos acertados,
-   quedas, tempo pendurado, maior arremesso) e tecla de provocação
-   (acena/dancinha).
+1. ✅ **3 mapas novos** — GELO (atrito 0.03 + tração 35%: patinação),
+   MORTE SÚBITA (encolhe 13% por round até 35%) e MARTELO (braço
+   giratório com bola na ponta varrendo na altura da cintura).
+2. ✅ **Pacote de combate** — voadora (soco no ar = tackle com o corpo,
+   depois desaba), dash de ombro (toque duplo na direção), nocaute
+   acumulativo (dano decai 0.25/s) e cansaço (soco custa 34% do fôlego;
+   sem fôlego sai fraco e lento).
+3. ✅ **+5 fantasias** — ABACAXI (coroa de folhas + textura losango),
+   ROBÔ (painel de botões + antena), BANANA, FANTASMA (translúcido,
+   carinha "boo") e UNICÓRNIO (chifre + crina colorida). 14 no total.
+4. ✅ **Modos de jogo** — SUMÔ (ringue redondo que encolhe, sem soco)
+   e BATATA QUENTE (bomba pisca e explode a cada ~6.5s, empurrão
+   radial + atordoamento).
+5. ✅ **Estatísticas + emotes** — stats no fim da partida (acertos/
+   socos, quedas, tempo pendurado, arremessos) e emote 👋 com pulinho
+   (T / O / botão Y).
 
 ## Rodada 4 (dedicada): ONLINE 🌐
 
