@@ -108,48 +108,72 @@ const CATEGORIA = {
 };
 
 // Gordurinha visual por categoria (a física continua com as medidas originais)
-const FOFURA = { head: 1, torso: 1.12, pelvis: 1.16, arms: 1.28, legs: 1.22 };
+const FOFURA = { arms: 1.28, legs: 1.22 };
 
-function buildVisual(skin) {
-  const meshes = { _skin: skin };
+function clarear(cor, t) {
+  const f = (v) => Math.round(v + (255 - v) * t);
+  return (f((cor >> 16) & 255) << 16) | (f((cor >> 8) & 255) << 8) | f(cor & 255);
+}
+
+function buildVisual(skin, fase = 0) {
+  const meshes = { _skin: skin, _fase: fase };
   const mats = {};
   const matFor = (cat) => mats[cat] ||= toonMat(THREE, skin.cores[cat]);
+  const bolinha = (mat, r, escala) => {
+    const b = new THREE.Mesh(new THREE.SphereGeometry(r, 18, 14), mat);
+    if (escala) b.scale.set(...escala);
+    b.castShadow = true;
+    addOutline(THREE, b);
+    return b;
+  };
   for (const spec of PARTS) {
     const cat = CATEGORIA[spec.name];
     let obj;
     if (spec.shape === 'ball') {
       obj = new THREE.Group();
       obj.scale.setScalar(1.42); // cabeçona
-      const skull = new THREE.Mesh(new THREE.SphereGeometry(spec.r, 24, 18), matFor('head'));
-      skull.castShadow = true;
-      addOutline(THREE, skull);
+      const skull = bolinha(matFor('head'), spec.r, [1, 1.07, 1.01]);
       obj.add(skull);
       const face = new THREE.Mesh(
-        new THREE.CircleGeometry(spec.r * 0.82, 24),
-        new THREE.MeshBasicMaterial({ map: getFaceTexture(THREE, skin.face, false), transparent: true }),
+        new THREE.CircleGeometry(spec.r * 0.9, 24),
+        new THREE.MeshBasicMaterial({ map: getFaceTexture(THREE, skin.face, 'ok'), transparent: true }),
       );
-      face.position.z = spec.r + 0.005;
+      face.position.set(0, -0.008, spec.r + 0.006);
       obj.add(face);
       meshes._face = face;
+    } else if (spec.name === 'torso') {
+      // Tronco = ovo gorducho com barriguinha
+      obj = bolinha(matFor('torso'), 0.19, [1.12, 1.42, 1.02]);
+      obj._baseY = 1.42;
+      const corBarriga = skin.cores.barriga ?? clarear(skin.cores.torso, 0.38);
+      const barriga = new THREE.Mesh(new THREE.SphereGeometry(0.155, 18, 14), toonMat(THREE, corBarriga));
+      barriga.position.set(0, -0.03, 0.078);
+      barriga.scale.set(0.8, 0.92, 0.5);
+      obj.add(barriga);
+    } else if (spec.name === 'pelvis') {
+      obj = bolinha(matFor('pelvis'), 0.185, [1.14, 1.0, 1.06]);
     } else {
       const gordo = spec.r * FOFURA[cat];
       obj = new THREE.Mesh(new THREE.CapsuleGeometry(gordo, spec.hh * 2, 6, 14), matFor(cat));
       obj.castShadow = true;
       addOutline(THREE, obj);
+      // Tampas nas juntas (ombro/cotovelo/quadril/joelho) pra dobra ficar contínua
+      if (spec.name.startsWith('upperArm') || spec.name.startsWith('thigh')) {
+        for (const py of [spec.hh, -spec.hh]) {
+          const cap = bolinha(matFor(cat), gordo * 1.03);
+          cap.position.y = py;
+          obj.add(cap);
+        }
+      }
       // Mãozinhas e pezinhos
       if (spec.name.startsWith('forearm')) {
-        const mao = new THREE.Mesh(new THREE.SphereGeometry(spec.r * 1.5, 14, 10), matFor('arms'));
+        const mao = bolinha(matFor('arms'), spec.r * 1.5);
         mao.position.y = -(spec.hh + spec.r * 0.5);
-        mao.castShadow = true;
-        addOutline(THREE, mao);
         obj.add(mao);
       }
       if (spec.name.startsWith('calf')) {
-        const pe = new THREE.Mesh(new THREE.SphereGeometry(spec.r * 1.45, 14, 10), matFor('legs'));
+        const pe = bolinha(matFor('legs'), spec.r * 1.45, [1, 0.55, 1.4]);
         pe.position.set(0, -(spec.hh + spec.r * 0.35), 0.04);
-        pe.scale.set(1, 0.55, 1.4);
-        pe.castShadow = true;
-        addOutline(THREE, pe);
         obj.add(pe);
       }
     }
@@ -181,7 +205,7 @@ function setSkin(i, idx) {
   skinIdx[i] = ((idx % SKINS.length) + SKINS.length) % SKINS.length;
   store.set('molengas_skin' + i, skinIdx[i]);
   if (visuals[i]) destroyVisual(visuals[i]);
-  visuals[i] = buildVisual(SKINS[skinIdx[i]]);
+  visuals[i] = buildVisual(SKINS[skinIdx[i]], i * 1.9);
   updateScore();
 }
 addEventListener('keydown', (e) => {
@@ -191,15 +215,34 @@ addEventListener('keydown', (e) => {
 
 function makeDeckTexture() {
   const c = document.createElement('canvas');
-  c.width = 512; c.height = 384;
+  c.width = 1024; c.height = 768;
   const g = c.getContext('2d');
-  g.fillStyle = '#e8c86a';
-  g.fillRect(0, 0, 512, 384);
-  g.fillStyle = '#d8b254';
-  for (let i = 0; i < 512; i += 64) g.fillRect(i, 0, 4, 384);
+  // tábuas com variação de tom
+  const tons = ['#eccb79', '#e5c06a', '#f0d287', '#e2ba5e', '#eac672', '#e8c46d', '#f2d68e', '#e0b75a'];
+  for (let i = 0; i < 8; i++) {
+    g.fillStyle = tons[i];
+    g.fillRect(i * 128, 0, 128, 768);
+    g.fillStyle = 'rgba(120,80,20,0.35)';
+    g.fillRect(i * 128, 0, 5, 768);
+  }
+  // frisos horizontais sutis (emendas das tábuas, desencontradas)
+  g.fillStyle = 'rgba(120,80,20,0.22)';
+  for (let i = 0; i < 8; i++) {
+    for (let y = ((i * 7) % 4) * 96 + 60; y < 768; y += 384) g.fillRect(i * 128, y, 128, 4);
+  }
+  // borda dupla: vermelha + friso creme
   g.strokeStyle = '#c2413b';
-  g.lineWidth = 14;
-  g.strokeRect(18, 18, 512 - 36, 384 - 36);
+  g.lineWidth = 30;
+  g.strokeRect(30, 30, 1024 - 60, 768 - 60);
+  g.strokeStyle = '#f7ead0';
+  g.lineWidth = 6;
+  g.strokeRect(56, 56, 1024 - 112, 768 - 112);
+  // vinheta suave nas bordas
+  const v = g.createRadialGradient(512, 384, 260, 512, 384, 660);
+  v.addColorStop(0, 'rgba(0,0,0,0)');
+  v.addColorStop(1, 'rgba(70,35,10,0.28)');
+  g.fillStyle = v;
+  g.fillRect(0, 0, 1024, 768);
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
@@ -214,7 +257,65 @@ function syncVisual(ragdoll, meshes, now) {
     m.position.set(t.x, t.y, t.z);
     m.quaternion.set(r.x, r.y, r.z, r.w);
   }
-  meshes._face.material.map = getFaceTexture(THREE, meshes._skin.face, ragdoll.isStunned(now));
+  // Respiração sutil
+  meshes.torso.scale.y = meshes.torso._baseY * (1 + 0.028 * Math.sin(now * 2.6 + meshes._fase));
+  // Carinha: nocaute > piscada > normal
+  const piscando = ((now + meshes._fase) % 3.4) < 0.13;
+  const variante = ragdoll.isStunned(now) ? 'x' : (piscando ? 'blink' : 'ok');
+  meshes._face.material.map = getFaceTexture(THREE, meshes._skin.face, variante);
+}
+
+// ---------- Estrelinhas de impacto ----------
+function makeStarTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d');
+  g.translate(32, 32);
+  g.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const r = i % 2 === 0 ? 26 : 11;
+    const a = (i / 10) * Math.PI * 2 - Math.PI / 2;
+    g.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+  }
+  g.closePath();
+  g.fillStyle = '#ffd94a';
+  g.strokeStyle = '#241640';
+  g.lineWidth = 4;
+  g.fill();
+  g.stroke();
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+const starTex = makeStarTexture();
+const efeitos = [];
+function burstEstrelas(pos) {
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2 + 0.5;
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: starTex, transparent: true, depthWrite: false }));
+    s.position.set(pos.x, pos.y + 0.1, pos.z);
+    s.scale.setScalar(0.24);
+    scene.add(s);
+    efeitos.push({ s, vx: Math.cos(a) * 1.8, vy: 1.6 + (i % 3) * 0.6, vz: Math.sin(a) * 1.2, vida: 0.55 });
+  }
+}
+function updateEfeitos(dt) {
+  for (let i = efeitos.length - 1; i >= 0; i--) {
+    const e = efeitos[i];
+    e.vida -= dt;
+    if (e.vida <= 0) {
+      scene.remove(e.s);
+      e.s.material.dispose();
+      efeitos.splice(i, 1);
+      continue;
+    }
+    e.vy -= 4.5 * dt;
+    e.s.position.x += e.vx * dt;
+    e.s.position.y += e.vy * dt;
+    e.s.position.z += e.vz * dt;
+    e.s.material.opacity = Math.min(1, e.vida * 3);
+    e.s.material.rotation += 6 * dt;
+  }
 }
 
 // ---------- HUD / rounds ----------
@@ -280,7 +381,8 @@ let simNow = 0;
 
 function frame(t) {
   requestAnimationFrame(frame);
-  acc += Math.min((t - last) / 1000, 0.1);
+  const fdt = Math.min((t - last) / 1000, 0.1);
+  acc += fdt;
   last = t;
 
   while (acc >= FIXED_DT) {
@@ -296,6 +398,15 @@ function frame(t) {
 
   syncVisual(p1, visuals[0], simNow);
   syncVisual(p2, visuals[1], simNow);
+
+  // Estrelinhas quando um soco conecta
+  for (const p of [p1, p2]) {
+    if (p.lastHitLandedAt > 0 && p.lastHitLandedAt > (p._fxVisto ?? -1)) {
+      p._fxVisto = p.lastHitLandedAt;
+      burstEstrelas(p.parts.head.translation());
+    }
+  }
+  updateEfeitos(fdt);
 
   // Câmera segue o meio da briga
   const a = p1.parts.pelvis.translation();

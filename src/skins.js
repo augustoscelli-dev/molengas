@@ -26,7 +26,9 @@ export function addOutline(THREE, m, escala = 1.055) {
 }
 
 // Carinhas desenhadas em canvas (256px). Estilos: normal, bravo, ciclope, bigode.
-function drawFace(g, style, dizzy) {
+// Variantes: 'ok' (aberto), 'x' (nocaute), 'blink' (piscando).
+function drawFace(g, style, variant) {
+  const dizzy = variant === 'x';
   g.clearRect(0, 0, 256, 256);
   g.lineCap = 'round';
   const eyeXs = style === 'ciclope' ? [128] : [84, 172];
@@ -47,16 +49,25 @@ function drawFace(g, style, dizzy) {
     g.beginPath(); g.arc(128, 188, 17, 0, 7); g.stroke();
     return;
   }
-  // olhos: esclera branca, contorno, pupila e brilho
-  for (const cx of eyeXs) {
-    g.fillStyle = '#fff';
+  if (variant === 'blink') {
+    // olhos fechados felizes (arco pra baixo)
     g.strokeStyle = '#241640';
-    g.lineWidth = 8;
-    g.beginPath(); g.ellipse(cx, 104, eyeR, eyeR * 1.14, 0, 0, 7); g.fill(); g.stroke();
-    g.fillStyle = '#241640';
-    g.beginPath(); g.arc(cx + 3, 108, eyeR * 0.45, 0, 7); g.fill();
-    g.fillStyle = '#fff';
-    g.beginPath(); g.arc(cx + eyeR * 0.28, 96, eyeR * 0.16, 0, 7); g.fill();
+    g.lineWidth = 11;
+    for (const cx of eyeXs) {
+      g.beginPath(); g.arc(cx, 96, eyeR * 0.9, 0.25, Math.PI - 0.25); g.stroke();
+    }
+  } else {
+    // olhos: esclera branca, contorno, pupila e brilho
+    for (const cx of eyeXs) {
+      g.fillStyle = '#fff';
+      g.strokeStyle = '#241640';
+      g.lineWidth = 8;
+      g.beginPath(); g.ellipse(cx, 104, eyeR, eyeR * 1.14, 0, 0, 7); g.fill(); g.stroke();
+      g.fillStyle = '#241640';
+      g.beginPath(); g.arc(cx + 3, 108, eyeR * 0.45, 0, 7); g.fill();
+      g.fillStyle = '#fff';
+      g.beginPath(); g.arc(cx + eyeR * 0.28, 96, eyeR * 0.16, 0, 7); g.fill();
+    }
   }
   g.strokeStyle = '#241640';
   if (style === 'bravo') {
@@ -82,12 +93,12 @@ function drawFace(g, style, dizzy) {
 }
 
 const faceCache = {};
-export function getFaceTexture(THREE, style, dizzy) {
-  const key = style + (dizzy ? '_x' : '');
+export function getFaceTexture(THREE, style, variant = 'ok') {
+  const key = style + '_' + variant;
   if (!faceCache[key]) {
     const c = document.createElement('canvas');
     c.width = c.height = 256;
-    drawFace(c.getContext('2d'), style, dizzy);
+    drawFace(c.getContext('2d'), style, variant);
     const t = new THREE.CanvasTexture(c);
     t.colorSpace = THREE.SRGBColorSpace;
     faceCache[key] = t;
@@ -118,7 +129,7 @@ export const SKINS = [
   },
   {
     id: 'tubarao', nome: 'TUBARÃO',
-    cores: { head: 0x8fa8bd, torso: 0x8fa8bd, pelvis: 0x6d8296, arms: 0x8fa8bd, legs: 0x6d8296 },
+    cores: { head: 0x8fa8bd, torso: 0x8fa8bd, pelvis: 0x6d8296, arms: 0x8fa8bd, legs: 0x6d8296, barriga: 0xf2f7fa },
     face: 'bravo',
     extras(THREE, { head, torso, pelvis }) {
       const fin = mesh(THREE, new THREE.ConeGeometry(0.1, 0.22, 10), 0x5f7488);
@@ -159,13 +170,13 @@ export const SKINS = [
       const aba = mesh(THREE, new THREE.CylinderGeometry(0.21, 0.21, 0.018, 18), 0xd63b30);
       aba.position.y = 0.02;
       head.add(aba);
-      const faixa = mesh(THREE, new THREE.CylinderGeometry(0.196, 0.196, 0.06, 16, 1, true), 0xf5f0dc);
+      const faixa = mesh(THREE, new THREE.CylinderGeometry(0.228, 0.228, 0.07, 18, 1, true), 0xf5f0dc);
       torso.add(faixa);
     },
   },
   {
     id: 'chef', nome: 'CHEF',
-    cores: { head: 0xf2c894, torso: 0xf5f5f0, pelvis: 0x4a4a55, arms: 0xf5f5f0, legs: 0x4a4a55 },
+    cores: { head: 0xf2c894, torso: 0xf5f5f0, pelvis: 0x4a4a55, arms: 0xf5f5f0, legs: 0x4a4a55, barriga: 0xffffff },
     face: 'bigode',
     extras(THREE, { head }) {
       const base = mesh(THREE, new THREE.CylinderGeometry(0.125, 0.125, 0.13, 16), 0xfafafa);
@@ -179,7 +190,7 @@ export const SKINS = [
   },
   {
     id: 'alien', nome: 'ALIEN',
-    cores: { head: 0x7ed957, torso: 0x7ed957, pelvis: 0x5cb53b, arms: 0x7ed957, legs: 0x5cb53b },
+    cores: { head: 0x7ed957, torso: 0x7ed957, pelvis: 0x5cb53b, arms: 0x7ed957, legs: 0x5cb53b, barriga: 0xc9f7a8 },
     face: 'ciclope',
     extras(THREE, { head }) {
       for (const sx of [-1, 1]) {
@@ -195,7 +206,7 @@ export const SKINS = [
   },
   {
     id: 'galinha', nome: 'GALINHA',
-    cores: { head: 0xfafafa, torso: 0xfafafa, pelvis: 0xf2d16b, arms: 0xfafafa, legs: 0xf2a83a },
+    cores: { head: 0xfafafa, torso: 0xfafafa, pelvis: 0xf2d16b, arms: 0xfafafa, legs: 0xf2a83a, barriga: 0xfff3d6 },
     face: 'normal',
     extras(THREE, { head }) {
       for (let i = -1; i <= 1; i++) {
@@ -211,10 +222,10 @@ export const SKINS = [
   },
   {
     id: 'dino', nome: 'DINO',
-    cores: { head: 0x4fae6b, torso: 0x4fae6b, pelvis: 0x3d8c54, arms: 0x4fae6b, legs: 0x3d8c54 },
+    cores: { head: 0x4fae6b, torso: 0x4fae6b, pelvis: 0x3d8c54, arms: 0x4fae6b, legs: 0x3d8c54, barriga: 0xd6eeb0 },
     face: 'bravo',
     extras(THREE, { head, torso, pelvis }) {
-      const lugares = [[head, 0.15, -0.06], [head, 0.08, -0.14], [torso, 0.13, -0.21], [torso, 0.0, -0.23]];
+      const lugares = [[head, 0.15, -0.06], [head, 0.08, -0.14], [torso, 0.14, -0.24], [torso, 0.0, -0.26]];
       for (const [pai, py, pz] of lugares) {
         const placa = mesh(THREE, new THREE.ConeGeometry(0.055, 0.11, 8), 0x8fe07a);
         placa.position.set(0, py, pz);
