@@ -672,27 +672,7 @@ const MAPAS = [
         new THREE.MeshStandardMaterial({ color: 0x9c7a4d, roughness: 0.96 }),
       );
       terra.rotation.x = -Math.PI / 2; terra.receiveShadow = true; scene.add(terra); m.meshes.push(terra);
-      // AGUA no CENTRO (arena principal da luta) — disco azul com ondas
-      const gAgua = new THREE.CircleGeometry(4.4, 72);
-      const agua = new THREE.Mesh(gAgua, new THREE.MeshStandardMaterial({
-        color: 0x2f86b8, transparent: true, opacity: 0.85, roughness: 0.12, metalness: 0.1,
-      }));
-      agua.rotation.x = -Math.PI / 2; agua.position.y = 0.05; agua.receiveShadow = true;
-      scene.add(agua); m.meshes.push(agua);
-      const aro = new THREE.Mesh(
-        new THREE.RingGeometry(4.4, 4.75, 72),
-        new THREE.MeshStandardMaterial({ color: 0xe6d3a6, roughness: 0.9 }),
-      );
-      aro.rotation.x = -Math.PI / 2; aro.position.y = 0.03; scene.add(aro); m.meshes.push(aro);
-      const baseA = gAgua.attributes.position.array.slice();
-      m.update = (t) => {
-        const p = gAgua.attributes.position;
-        for (let i = 0; i < p.count; i++) {
-          const x = baseA[i * 3], y = baseA[i * 3 + 1];
-          p.array[i * 3 + 2] = Math.sin(x * 0.9 + t * 1.7) * 0.05 + Math.cos(y * 1.0 + t * 1.3) * 0.045;
-        }
-        p.needsUpdate = true;
-      };
+      // (sem piscina no meio — o chao da favela e a propria arena)
       // CENARIO detalhado do Rio (diorama) — morro ao fundo, tingido de verde (vegetacao)
       new GLTFLoader().load(ASSET('assets/modelos/rio-cenario.glb'), (gltf) => {
         const s = gltf.scene;
