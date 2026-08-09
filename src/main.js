@@ -663,21 +663,36 @@ const MAPAS = [
       r3.toneMappingExposure = 1.16;
       // Colisor/fundo submerso (os lutadores pisam aqui, na agua)
       chaoFixo(m, 7, 5.5, new THREE.MeshStandardMaterial({ color: 0x0e3a4f, roughness: 0.5 }));
-      // OCEANO no MEIO: superficie azul glossy com ondas (a arena principal e a agua)
-      const gA = new THREE.PlaneGeometry(15, 12, 48, 36);
+      // OCEANO no MEIO: superficie glossy com profundidade (centro fundo, beira
+      // rasa/turquesa) + ondas que fazem o brilho do sol dançar (normais por frame)
+      const gA = new THREE.PlaneGeometry(15, 12, 64, 48);
+      const posA = gA.attributes.position;
+      const corA = new Float32Array(posA.count * 3);
+      const cFundo = new THREE.Color(0x1a6f89).convertSRGBToLinear(); // profundo (claro o bastante p/ ver a luta)
+      const cRaso = new THREE.Color(0x46bccb).convertSRGBToLinear();  // raso turquesa
+      const tmpC = new THREE.Color();
+      for (let i = 0; i < posA.count; i++) {
+        const d = Math.min(1, Math.hypot(posA.getX(i) / 7.5, posA.getY(i) / 6)); // 0 centro -> 1 beira
+        tmpC.copy(cFundo).lerp(cRaso, d * 1.15);
+        corA[i * 3] = tmpC.r; corA[i * 3 + 1] = tmpC.g; corA[i * 3 + 2] = tmpC.b;
+      }
+      gA.setAttribute('color', new THREE.BufferAttribute(corA, 3));
       const agua = new THREE.Mesh(gA, new THREE.MeshStandardMaterial({
-        color: 0x2f86b8, roughness: 0.1, metalness: 0.25, transparent: true, opacity: 0.92,
+        vertexColors: true, roughness: 0.13, metalness: 0.32, transparent: true, opacity: 0.94,
+        emissive: 0x14323d, emissiveIntensity: 0.18,
       }));
       agua.rotation.x = -Math.PI / 2; agua.position.y = 0.06; agua.receiveShadow = true;
       scene.add(agua); m.meshes.push(agua);
-      const baseA = gA.attributes.position.array.slice();
+      const baseA = posA.array.slice();
       m.update = (t) => {
         const pp = gA.attributes.position;
         for (let i = 0; i < pp.count; i++) {
           const x = baseA[i * 3], y = baseA[i * 3 + 1];
-          pp.array[i * 3 + 2] = Math.sin(x * 0.9 + t * 1.7) * 0.06 + Math.cos(y * 1.0 + t * 1.3) * 0.05;
+          pp.array[i * 3 + 2] = Math.sin(x * 0.9 + t * 1.7) * 0.06 + Math.cos(y * 1.0 + t * 1.3) * 0.05
+            + Math.sin((x + y) * 2.1 + t * 2.6) * 0.02;
         }
         pp.needsUpdate = true;
+        gA.computeVertexNormals(); // ondas mexem o brilho do sol na água
       };
       // MORRO detalhado (diorama) emoldurando a arena
       new GLTFLoader().load(ASSET('assets/modelos/rio-cenario.glb'), (gltf) => {
