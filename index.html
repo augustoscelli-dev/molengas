@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MOLENGAS!</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #141433; }
+  canvas { display: block; }
+  #hud {
+    position: fixed; inset: 0; pointer-events: none;
+    font-family: "Segoe UI", system-ui, sans-serif; color: #fff;
+    text-shadow: 0 2px 0 rgba(0,0,0,.55);
+  }
+  #placar {
+    position: absolute; top: 14px; left: 0; right: 0;
+    text-align: center; font-size: 30px; font-weight: 800; letter-spacing: 1px;
+  }
+  #msg {
+    position: absolute; top: 34%; left: 0; right: 0; display: none;
+    text-align: center; font-size: 56px; font-weight: 900; letter-spacing: 2px;
+    -webkit-text-stroke: 2px rgba(0,0,0,.35);
+  }
+  #msg .sub { font-size: 20px; font-weight: 600; -webkit-text-stroke: 0; margin-top: 10px; opacity: .9; }
+  #controles {
+    position: absolute; bottom: 12px; left: 0; right: 0;
+    display: flex; justify-content: space-between; padding: 0 24px;
+    font-size: 14px; font-weight: 600; opacity: .85;
+  }
+  #controles .p1 { color: #ff9a9a; } #controles .p2 { color: #9ac8ff; }
+  .retrato { width: 40px; height: 40px; border-radius: 50%; vertical-align: middle;
+    margin: 0 10px; border: 2px solid rgba(255,255,255,.6); object-fit: cover; }
+</style>
+</head>
+<body>
+<div id="hud">
+  <div id="placar"></div>
+  <div id="msg"></div>
+  <div id="controles">
+    <div class="p1">🔴 WASD anda &nbsp;·&nbsp; F soco &nbsp;·&nbsp; G agarra &nbsp;·&nbsp; ESPAÇO pula &nbsp;·&nbsp; 1 fantasia</div>
+    <div class="p2">2 fantasia &nbsp;·&nbsp; SETAS anda &nbsp;·&nbsp; K soco &nbsp;·&nbsp; L agarra &nbsp;·&nbsp; ENTER pula 🔵</div>
+  </div>
+</div>
+<div id="carregando" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;font-family:sans-serif;font-size:28px;font-weight:700;">CARREGANDO…</div>
+<script>
+  // Qualquer erro de JS aparece na tela (em vez de tela escura muda)
+  function mostrarErro(txt) {
+    var d = document.getElementById('carregando');
+    if (!d) return;
+    d.style.display = 'flex';
+    d.style.fontSize = '16px';
+    d.style.color = '#ff9090';
+    d.style.textAlign = 'center';
+    d.innerHTML = '😵 Deu erro ao carregar:<br><br>' + txt + '<br><br>Manda essa mensagem pro Claude!';
+  }
+  addEventListener('error', function (e) { mostrarErro(e.message + (e.filename ? '<br>' + e.filename.split('/').pop() + ':' + e.lineno : '')); });
+  addEventListener('unhandledrejection', function (e) { mostrarErro(String(e.reason)); });
+</script>
+<script>
+  // Aviso se abrirem o arquivo direto (file://) em vez do jogar.bat
+  if (location.protocol === 'file:') {
+    addEventListener('DOMContentLoaded', () => {
+      const m = document.getElementById('msg');
+      m.style.display = 'block';
+      m.style.fontSize = '36px';
+      m.innerHTML = 'Abra pelo <b>jogar.bat</b>!<div class="sub">O jogo precisa do servidor local — abrindo o arquivo direto o navegador bloqueia a física e a arte</div>';
+    });
+  }
+</script>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>
