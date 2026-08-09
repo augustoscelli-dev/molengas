@@ -664,16 +664,7 @@ const MAPAS = [
         }
         p.needsUpdate = true;
       };
-      // CENARIO do Rio (diorama 3D) — pequeno, LA NO FUNDO, so como moldura distante
-      new GLTFLoader().load(ASSET('assets/modelos/rio-cenario.glb'), (gltf) => {
-        const s = gltf.scene;
-        const b = new THREE.Box3().setFromObject(s), sz = new THREE.Vector3(); b.getSize(sz);
-        s.scale.setScalar(13 / Math.max(sz.x, sz.z));
-        const b2 = new THREE.Box3().setFromObject(s);
-        s.position.set(0, -b2.min.y - 2, -15);
-        s.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
-        scene.add(s); m.meshes.push(s);
-      });
+      // (o "morro" agora e feito de casas empilhadas; a paisagem vem do fundo 2D)
       // CASAS destrutiveis: mistura de modelos de favela (cor aplicada por codigo).
       // Cada casa e um prop agarravel/socavel -> arranque uma e jogue no rival.
       const cores = [0xff6b6b, 0xffd166, 0x06d6a0, 0x4d96ff, 0xf78fb3, 0xffa552, 0xf4f4f4];
@@ -691,29 +682,32 @@ const MAPAS = [
           return { geo, esc: 0.6 / Math.max(s.x, s.z), h: s.y * (0.6 / Math.max(s.x, s.z)) };
         });
         if (!info.length) return;
+        const maxH = Math.max(...info.map((it) => it.h));
         let ci = 0, pick = 0;
-        const torre = (px, pz, alt) => {
-          let y = 0;
-          for (let a = 0; a < alt; a++) {
-            const it = info[pick++ % info.length];
-            const yy = y + it.h * 0.5;
-            const rb = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(px, yy, pz).setLinearDamping(0.15).setAngularDamping(0.35));
-            world.createCollider(RAPIER.ColliderDesc.cuboid(0.3, it.h * 0.5, 0.3).setMass(3).setFriction(0.7).setCollisionGroups(PROP_GROUPS), rb);
-            const me = new THREE.Mesh(it.geo, new THREE.MeshStandardMaterial({ color: cores[ci++ % cores.length], roughness: 0.85 }));
-            me.scale.setScalar(it.esc); me.castShadow = true; me.receiveShadow = true; scene.add(me);
-            m.bodies.push(rb); m.meshes.push(me); m.syncPairs.push([rb, me]); m.props.push(rb); m._blocos.push([rb, px, yy, pz]);
-            y += it.h;
+        const casa = (px, py, pz) => {
+          const it = info[pick++ % info.length];
+          const rb = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(px, py, pz).setLinearDamping(0.2).setAngularDamping(0.4));
+          world.createCollider(RAPIER.ColliderDesc.cuboid(0.3, it.h * 0.5, 0.3).setMass(3).setFriction(0.95).setCollisionGroups(PROP_GROUPS), rb);
+          const me = new THREE.Mesh(it.geo, new THREE.MeshStandardMaterial({ color: cores[ci++ % cores.length], roughness: 0.85 }));
+          me.scale.setScalar(it.esc); me.castShadow = true; me.receiveShadow = true; scene.add(me);
+          m.bodies.push(rb); m.meshes.push(me); m.syncPairs.push([rb, me]); m.props.push(rb); m._blocos.push([rb, px, py, pz]);
+        };
+        // MORRO de casas: pilha em piramide (favela subindo a ladeira). Tudo destrutivel.
+        const morro = (cx, cz, baseW, baseD, layers, recuoZ) => {
+          for (let ly = 0; ly < layers; ly++) {
+            const w = baseW - ly, d = baseD - ly;
+            if (w < 1 || d < 1) break;
+            const py = maxH * 0.5 + ly * maxH * 0.94;
+            for (let ix = 0; ix < w; ix++) for (let iz = 0; iz < d; iz++) {
+              const px = cx + (ix - (w - 1) / 2) * 0.66;
+              const pz = cz + (iz - (d - 1) / 2) * 0.66 + ly * recuoZ;
+              casa(px, py, pz);
+            }
           }
         };
-        // FAVELA densa: aneis de torres ao redor da agua (TUDO destrutivel).
-        // Mais alta/densa nos aneis externos -> vira o "morro" de casas.
-        const aneis = [{ r: 5.6, n: 8, alt: 2 }, { r: 6.9, n: 10, alt: 3 }, { r: 8.3, n: 12, alt: 3 }];
-        for (const an of aneis) {
-          for (let i = 0; i < an.n; i++) {
-            const ang = (i / an.n) * Math.PI * 2 + an.r; // desalinha os aneis
-            torre(Math.cos(ang) * an.r, Math.sin(ang) * an.r, an.alt + (i % 2));
-          }
-        }
+        morro(0, -8, 7, 3, 4, -0.3);   // morro principal (fundo) — favela subindo
+        morro(-7.5, 0, 3, 3, 3, 0);    // morro lateral esquerdo
+        morro(7.5, 0, 3, 3, 3, 0);     // morro lateral direito
       });
       // Palmeiras decorativas na terra
       carregarGeo('assets/modelos/palmeira-low.glb').then((geo) => {
