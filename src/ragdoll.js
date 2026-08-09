@@ -64,6 +64,7 @@ export class Ragdoll {
     this.heading = heading;
     this.parts = {};
     this.opponent = null;
+    this.props = []; // corpos agarráveis/socáveis da arena (caixotes, bola…)
     this.stunUntil = 0;
     this.punchReadyAt = 0;
     this.punchUntil = 0;
@@ -218,6 +219,24 @@ export class Ragdoll {
           const fz2 = clamp((alvoZ - (cp.z + ponta[2])) * 26 - cv.z * 3, -18, 18);
           calf.applyImpulse({ x: fx2 * dt, y: fy2 * dt, z: fz2 * dt }, true);
         }
+        // Braços balançam no ritmo da passada (fase oposta à perna do mesmo lado)
+        if (andando) {
+          for (let lado = 0; lado < 2; lado++) {
+            const braco = this.parts[lado === 0 ? 'forearmL' : 'forearmR'];
+            const faseB = this.gaitT + (lado === 0 ? Math.PI : 0);
+            const bal = Math.sin(faseB) * 4;
+            braco.applyImpulse({ x: fwdX * bal * dt, y: 0, z: fwdZ * bal * dt }, true);
+          }
+        }
+        // Guarda de boxe: inimigo perto → punhos sobem
+        if (this.opponent && now > this.punchUntil) {
+          const op = this.opponent.parts.torso.translation();
+          if (Math.hypot(op.x - pp.x, op.z - pp.z) < 1.15) {
+            for (const h of ['forearmL', 'forearmR']) {
+              this.parts[h].applyImpulse({ x: fwdX * 2.5 * dt, y: 5 * dt, z: fwdZ * 2.5 * dt }, true);
+            }
+          }
+        }
         // Freio: sem input, os pés plantados seguram o escorregão
         if (!andando) {
           const bx = clamp(-pv.x * 90, -220, 220);
@@ -266,6 +285,16 @@ export class Ragdoll {
               break outer;
             }
           }
+          // Objetos da arena também levam soco
+          for (const pb of this.props) {
+            const tp = pb.translation();
+            const d = Math.hypot(tip[0] - tp.x, tip[1] - tp.y, tip[2] - tp.z);
+            if (d < 0.75) {
+              pb.applyImpulse({ x: dir[0] * 6, y: 2, z: dir[2] * 6 }, true);
+              this.punchHit = true;
+              break outer;
+            }
+          }
         }
       }
     }
@@ -282,6 +311,12 @@ export class Ragdoll {
           const tp = tb.translation();
           const d = Math.hypot(tip[0] - tp.x, tip[1] - tp.y, tip[2] - tp.z);
           if (d < bestD) { bestD = d; best = tb; }
+        }
+        // Objetos da arena também são agarráveis (caixote, bola…)
+        for (const pb of this.props) {
+          const tp = pb.translation();
+          const d = Math.hypot(tip[0] - tp.x, tip[1] - tp.y, tip[2] - tp.z) - 0.25;
+          if (d < bestD) { bestD = d; best = pb; }
         }
         const hand = this.parts[side === 0 ? 'forearmL' : 'forearmR'];
         if (best) {

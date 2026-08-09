@@ -25,10 +25,49 @@ world.createCollider(
   groundBody,
 );
 
-const p1 = new Ragdoll(RAPIER, world, { x: -2.2, z: 0, heading: Math.PI / 2, memberships: 0x0002, filter: 0x0001 | 0x0004 });
-const p2 = new Ragdoll(RAPIER, world, { x: 2.2, z: 0, heading: -Math.PI / 2, memberships: 0x0004, filter: 0x0001 | 0x0002 });
+const p1 = new Ragdoll(RAPIER, world, { x: -2.2, z: 0, heading: Math.PI / 2, memberships: 0x0002, filter: 0x0001 | 0x0004 | 0x0008 });
+const p2 = new Ragdoll(RAPIER, world, { x: 2.2, z: 0, heading: -Math.PI / 2, memberships: 0x0004, filter: 0x0001 | 0x0002 | 0x0008 });
 p1.opponent = p2;
 p2.opponent = p1;
+
+// ---------- Perigos e objetos da arena ----------
+const PROP_GROUPS = (0x0008 << 16) | 0x000f;
+// Bola de demolição pendurada no meio
+const ancora = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, 6.2, 0));
+const bolaBody = world.createRigidBody(
+  RAPIER.RigidBodyDesc.dynamic().setTranslation(0, 1.8, 0).setCcdEnabled(true).setLinearDamping(0.05).setAngularDamping(0.3),
+);
+world.createCollider(
+  RAPIER.ColliderDesc.ball(0.55).setMass(45).setFriction(0.4).setRestitution(0.3).setCollisionGroups(PROP_GROUPS),
+  bolaBody,
+);
+world.createImpulseJoint(RAPIER.JointData.spherical({ x: 0, y: 0, z: 0 }, { x: 0, y: 4.4, z: 0 }), ancora, bolaBody, true);
+bolaBody.setLinvel({ x: 2.6, y: 0, z: 1.1 }, true);
+// Caixotes espalhados
+const CAIXOTES_SPAWN = [[-3.4, 2.3], [3.2, -2.4], [0.6, 3.0], [-1.2, -2.9]];
+const caixotes = CAIXOTES_SPAWN.map(([cx, cz]) => {
+  const b = world.createRigidBody(
+    RAPIER.RigidBodyDesc.dynamic().setTranslation(cx, 0.4, cz).setLinearDamping(0.25).setAngularDamping(0.5),
+  );
+  world.createCollider(
+    RAPIER.ColliderDesc.cuboid(0.19, 0.19, 0.19).setMass(4).setFriction(0.6).setCollisionGroups(PROP_GROUPS),
+    b,
+  );
+  return b;
+});
+p1.props = p2.props = [bolaBody, ...caixotes];
+
+function resetProps() {
+  bolaBody.setTranslation({ x: 0, y: 1.8, z: 0 }, true);
+  bolaBody.setLinvel({ x: 2.6, y: 0, z: 1.1 }, true);
+  bolaBody.setAngvel({ x: 0, y: 0, z: 0 }, true);
+  caixotes.forEach((b, i) => {
+    b.setTranslation({ x: CAIXOTES_SPAWN[i][0], y: 0.4, z: CAIXOTES_SPAWN[i][1] }, true);
+    b.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true);
+    b.setLinvel({ x: 0, y: 0, z: 0 }, true);
+    b.setAngvel({ x: 0, y: 0, z: 0 }, true);
+  });
+}
 
 // ---------- Cena ----------
 const scene = new THREE.Scene();
@@ -101,6 +140,71 @@ new THREE.TextureLoader().load(ASSET('assets/fundo.jpg'), (tex) => {
   back.position.set(0, 6, -42);
   scene.add(back);
 }, undefined, () => {});
+
+// ---------- Visual dos objetos da arena ----------
+const propVisuals = [];
+let cordaMesh;
+{
+  // Bola de demolição
+  const bolaMesh = new THREE.Mesh(new THREE.SphereGeometry(0.55, 24, 18), toonMat(THREE, 0x4a4a58));
+  bolaMesh.castShadow = true;
+  addOutline(THREE, bolaMesh);
+  const brilho = new THREE.Mesh(new THREE.SphereGeometry(0.13, 10, 8), new THREE.MeshBasicMaterial({ color: 0x8a8a9a }));
+  brilho.position.set(-0.2, 0.28, 0.28);
+  bolaMesh.add(brilho);
+  scene.add(bolaMesh);
+  propVisuals.push({ body: bolaBody, mesh: bolaMesh });
+  // Corrente (cilindro esticado entre âncora e bola, atualizado por frame)
+  cordaMesh = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.035, 0.035, 1, 8),
+    toonMat(THREE, 0x2e2e38),
+  );
+  scene.add(cordaMesh);
+  const suporte = new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 10), toonMat(THREE, 0x2e2e38));
+  suporte.position.set(0, 6.2, 0);
+  scene.add(suporte);
+}
+const _vA = new THREE.Vector3(0, 6.2, 0);
+const _vB = new THREE.Vector3();
+const _vDir = new THREE.Vector3();
+const _up = new THREE.Vector3(0, 1, 0);
+function atualizarCorda() {
+  const bp = bolaBody.translation();
+  _vB.set(bp.x, bp.y, bp.z);
+  _vDir.subVectors(_vA, _vB);
+  const len = _vDir.length();
+  cordaMesh.position.copy(_vB).addScaledVector(_vDir, 0.5);
+  cordaMesh.scale.set(1, len, 1);
+  cordaMesh.quaternion.setFromUnitVectors(_up, _vDir.normalize());
+}
+{
+  // Caixotes de madeira
+  const texCaixote = (() => {
+    const c = document.createElement('canvas');
+    c.width = c.height = 128;
+    const g = c.getContext('2d');
+    g.fillStyle = '#c89b52';
+    g.fillRect(0, 0, 128, 128);
+    g.fillStyle = 'rgba(90,55,15,0.5)';
+    for (const y of [0, 40, 84]) g.fillRect(0, y, 128, 4);
+    g.strokeStyle = '#8a5f28';
+    g.lineWidth = 10;
+    g.strokeRect(5, 5, 118, 118);
+    g.beginPath(); g.moveTo(10, 10); g.lineTo(118, 118); g.moveTo(118, 10); g.lineTo(10, 118); g.stroke();
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  })();
+  const matCaixote = toonMat(THREE, 0xffffff);
+  matCaixote.map = texCaixote;
+  for (const b of caixotes) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.38, 0.38), matCaixote);
+    m.castShadow = true;
+    addOutline(THREE, m);
+    scene.add(m);
+    propVisuals.push({ body: b, mesh: m });
+  }
+}
 
 // ---------- Show de luzes e confete ----------
 const holofotes = [];
@@ -200,6 +304,10 @@ function buildVisual(skin, fase = 0) {
       face.position.set(0, -0.008, spec.r + 0.006);
       obj.add(face);
       meshes._face = face;
+      // Pescocinho ligando a cabeça ao corpo
+      const pescoco = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.085, 0.12, 12), matFor('head'));
+      pescoco.position.y = -0.15;
+      obj.add(pescoco);
     } else if (spec.name === 'torso') {
       // Tronco = ovo gorducho com barriguinha (ou textura de roupa, se a skin tiver)
       let matTorso = matFor('torso');
@@ -522,13 +630,13 @@ function handleRounds(now) {
       }
     }
   } else if (state === 'ponto' && now > stateUntil) {
-    p1.reset(); p2.reset();
+    p1.reset(); p2.reset(); resetProps();
     showMsg('');
     state = 'luta';
   } else if (state === 'fim' && isDown('KeyR')) {
     score[0] = score[1] = 0;
     updateScore();
-    p1.reset(); p2.reset();
+    p1.reset(); p2.reset(); resetProps();
     showMsg('');
     state = 'luta';
   }
@@ -563,6 +671,34 @@ function frame(t) {
 
   syncVisual(p1, visuals[0], simNow);
   syncVisual(p2, visuals[1], simNow);
+
+  // Objetos da arena seguem a física
+  for (const pv of propVisuals) {
+    const tp = pv.body.translation();
+    const rp = pv.body.rotation();
+    pv.mesh.position.set(tp.x, tp.y, tp.z);
+    pv.mesh.quaternion.set(rp.x, rp.y, rp.z, rp.w);
+  }
+  atualizarCorda();
+
+  // Bolada: a bola de demolição em velocidade atordoa quem ela atropela
+  {
+    const bv = bolaBody.linvel();
+    const rapidez = Math.hypot(bv.x, bv.y, bv.z);
+    if (rapidez > 3) {
+      const bp = bolaBody.translation();
+      for (const p of [p1, p2]) {
+        if (simNow < (p._bolaCd ?? 0)) continue;
+        const tp = p.parts.torso.translation();
+        if (Math.hypot(bp.x - tp.x, bp.y - tp.y, bp.z - tp.z) < 0.95) {
+          p._bolaCd = simNow + 1.2;
+          p.stun(simNow + 1.1);
+          p.lastHitLandedAt = simNow;
+          trauma = Math.min(1, trauma + 0.5);
+        }
+      }
+    }
+  }
 
   // Efeitos de impacto: estrelas + POF! + chacoalhada quando um soco conecta,
   // poeira quando alguém desaba
