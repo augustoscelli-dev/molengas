@@ -60,6 +60,8 @@ renderer.setSize(innerWidth, innerHeight);
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.12;
 document.body.appendChild(renderer.domElement);
 addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight;
@@ -100,6 +102,59 @@ new THREE.TextureLoader().load(ASSET('assets/fundo.jpg'), (tex) => {
   scene.add(back);
 }, undefined, () => {});
 
+// ---------- Show de luzes e confete ----------
+const holofotes = [];
+{
+  const geoCone = new THREE.ConeGeometry(2.4, 15, 20, 1, true);
+  geoCone.translate(0, -7.5, 0);
+  const matCone = new THREE.MeshBasicMaterial({
+    color: 0xffe9b0, transparent: true, opacity: 0.085,
+    blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false,
+  });
+  for (const [tx, ty, tz] of [[-11, 11, -7], [11, 11, -7], [-8, 12, 6], [8, 12, 6]]) {
+    const g = new THREE.Group();
+    g.position.set(tx, ty, tz);
+    g.add(new THREE.Mesh(geoCone, matCone));
+    scene.add(g);
+    holofotes.push(g);
+  }
+}
+const _dirHolofote = new THREE.Vector3();
+const _baixo = new THREE.Vector3(0, -1, 0);
+function mirarHolofotes(t) {
+  holofotes.forEach((h, i) => {
+    _dirHolofote.set(Math.sin(t * 0.5 + i * 1.7) * 3.2, 0, Math.cos(t * 0.4 + i * 2.1) * 2.2)
+      .sub(h.position).normalize();
+    h.quaternion.setFromUnitVectors(_baixo, _dirHolofote);
+  });
+}
+
+const confetes = [];
+{
+  const paleta = [0xff5b8d, 0x59c8ff, 0xffd94a, 0x8dff70, 0xc792ff];
+  const geoC = new THREE.PlaneGeometry(0.09, 0.14);
+  const matsC = paleta.map((c) => new THREE.MeshBasicMaterial({ color: c, side: THREE.DoubleSide }));
+  const rnd = (i, s) => { const x = Math.sin(i * 127.1 + s * 311.7) * 43758.5453; return x - Math.floor(x); };
+  for (let i = 0; i < 70; i++) {
+    const m = new THREE.Mesh(geoC, matsC[i % paleta.length]);
+    m.position.set(rnd(i, 1) * 30 - 15, rnd(i, 2) * 13 + 2, rnd(i, 3) * 24 - 19);
+    m.rotation.set(rnd(i, 4) * 6, rnd(i, 5) * 6, 0);
+    m._v = 0.35 + rnd(i, 6) * 0.5;
+    m._f = rnd(i, 7) * 6.3;
+    scene.add(m);
+    confetes.push(m);
+  }
+}
+function cairConfetes(dt, t) {
+  for (const m of confetes) {
+    m.position.y -= m._v * dt;
+    m.position.x += Math.sin(t * 1.3 + m._f) * 0.3 * dt;
+    m.rotation.x += 1.2 * dt;
+    m.rotation.y += 1.7 * dt;
+    if (m.position.y < -1) m.position.y = 14;
+  }
+}
+
 // ---------- Visual dos bonecos ----------
 const CATEGORIA = {
   head: 'head', torso: 'torso', pelvis: 'pelvis',
@@ -112,6 +167,10 @@ const FOFURA = { arms: 1.28, legs: 1.22 };
 
 function clarear(cor, t) {
   const f = (v) => Math.round(v + (255 - v) * t);
+  return (f((cor >> 16) & 255) << 16) | (f((cor >> 8) & 255) << 8) | f(cor & 255);
+}
+function escurecer(cor, t) {
+  const f = (v) => Math.round(v * (1 - t));
   return (f((cor >> 16) & 255) << 16) | (f((cor >> 8) & 255) << 8) | f(cor & 255);
 }
 
@@ -142,14 +201,29 @@ function buildVisual(skin, fase = 0) {
       obj.add(face);
       meshes._face = face;
     } else if (spec.name === 'torso') {
-      // Tronco = ovo gorducho com barriguinha
-      obj = bolinha(matFor('torso'), 0.19, [1.12, 1.42, 1.02]);
+      // Tronco = ovo gorducho com barriguinha (ou textura de roupa, se a skin tiver)
+      let matTorso = matFor('torso');
+      if (skin.texturaTorso) {
+        skin._texTorso ||= (() => {
+          const c = document.createElement('canvas');
+          c.width = c.height = 256;
+          skin.texturaTorso(c.getContext('2d'));
+          const t = new THREE.CanvasTexture(c);
+          t.colorSpace = THREE.SRGBColorSpace;
+          return t;
+        })();
+        matTorso = toonMat(THREE, 0xffffff);
+        matTorso.map = skin._texTorso;
+      }
+      obj = bolinha(matTorso, 0.19, [1.12, 1.42, 1.02]);
       obj._baseY = 1.42;
-      const corBarriga = skin.cores.barriga ?? clarear(skin.cores.torso, 0.38);
-      const barriga = new THREE.Mesh(new THREE.SphereGeometry(0.155, 18, 14), toonMat(THREE, corBarriga));
-      barriga.position.set(0, -0.03, 0.078);
-      barriga.scale.set(0.8, 0.92, 0.5);
-      obj.add(barriga);
+      if (!skin.semBarriga) {
+        const corBarriga = skin.cores.barriga ?? clarear(skin.cores.torso, 0.38);
+        const barriga = new THREE.Mesh(new THREE.SphereGeometry(0.155, 18, 14), toonMat(THREE, corBarriga));
+        barriga.position.set(0, -0.03, 0.078);
+        barriga.scale.set(0.8, 0.92, 0.5);
+        obj.add(barriga);
+      }
     } else if (spec.name === 'pelvis') {
       obj = bolinha(matFor('pelvis'), 0.185, [1.14, 1.0, 1.06]);
     } else {
@@ -165,14 +239,14 @@ function buildVisual(skin, fase = 0) {
           obj.add(cap);
         }
       }
-      // Mãozinhas e pezinhos
+      // Luvas e botas em tom mais escuro (contraste fofo)
       if (spec.name.startsWith('forearm')) {
-        const mao = bolinha(matFor('arms'), spec.r * 1.5);
+        const mao = bolinha(mats.maos ||= toonMat(THREE, escurecer(skin.cores.arms, 0.28)), spec.r * 1.55);
         mao.position.y = -(spec.hh + spec.r * 0.5);
         obj.add(mao);
       }
       if (spec.name.startsWith('calf')) {
-        const pe = bolinha(matFor('legs'), spec.r * 1.45, [1, 0.55, 1.4]);
+        const pe = bolinha(mats.pes ||= toonMat(THREE, escurecer(skin.cores.legs, 0.28)), spec.r * 1.45, [1, 0.55, 1.4]);
         pe.position.set(0, -(spec.hh + spec.r * 0.35), 0.04);
         obj.add(pe);
       }
@@ -200,6 +274,13 @@ const lerSkin = (k, padrao) => {
   return (Number.isFinite(v) ? v : padrao) % SKINS.length;
 };
 const skinIdx = [lerSkin('molengas_skin0', 2), lerSkin('molengas_skin1', 6)];
+// ?skins=4,7 na URL força as fantasias (debug/screenshot)
+const skinsParam = new URLSearchParams(location.search).get('skins');
+if (skinsParam) {
+  const [a, b] = skinsParam.split(',').map((n) => parseInt(n, 10));
+  if (Number.isFinite(a)) skinIdx[0] = a % SKINS.length;
+  if (Number.isFinite(b)) skinIdx[1] = b % SKINS.length;
+}
 const visuals = [null, null];
 function setSkin(i, idx) {
   skinIdx[i] = ((idx % SKINS.length) + SKINS.length) % SKINS.length;
@@ -259,17 +340,30 @@ function syncVisual(ragdoll, meshes, now) {
   }
   // Respiração sutil
   meshes.torso.scale.y = meshes.torso._baseY * (1 + 0.028 * Math.sin(now * 2.6 + meshes._fase));
+  // Squash & stretch da cabeça no impacto
+  const desdeHit = now - ragdoll.lastHitLandedAt;
+  if (desdeHit >= 0 && desdeHit < 0.18) {
+    const k = 0.32 * (1 - desdeHit / 0.18);
+    meshes.head.scale.set(1.42 * (1 + k), 1.42 * (1 - k * 0.65), 1.42 * (1 + k));
+  } else {
+    meshes.head.scale.setScalar(1.42);
+  }
   // Carinha: nocaute > piscada > normal
   const piscando = ((now + meshes._fase) % 3.4) < 0.13;
   const variante = ragdoll.isStunned(now) ? 'x' : (piscando ? 'blink' : 'ok');
   meshes._face.material.map = getFaceTexture(THREE, meshes._skin.face, variante);
 }
 
-// ---------- Estrelinhas de impacto ----------
-function makeStarTexture() {
+// ---------- Efeitos de impacto (estrelas, POF!, poeira) ----------
+function texturaCanvas(tamanho, desenha) {
   const c = document.createElement('canvas');
-  c.width = c.height = 64;
-  const g = c.getContext('2d');
+  c.width = c.height = tamanho;
+  desenha(c.getContext('2d'), tamanho);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+const starTex = texturaCanvas(64, (g) => {
   g.translate(32, 32);
   g.beginPath();
   for (let i = 0; i < 10; i++) {
@@ -283,20 +377,71 @@ function makeStarTexture() {
   g.lineWidth = 4;
   g.fill();
   g.stroke();
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  return t;
-}
-const starTex = makeStarTexture();
+});
+const puffTex = texturaCanvas(128, (g) => {
+  const grad = g.createRadialGradient(64, 64, 8, 64, 64, 60);
+  grad.addColorStop(0, 'rgba(255,250,240,0.95)');
+  grad.addColorStop(0.7, 'rgba(255,245,230,0.5)');
+  grad.addColorStop(1, 'rgba(255,245,230,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 128, 128);
+});
+const powTexs = ['POF!', 'PAH!', 'BUM!'].map((txt) => texturaCanvas(256, (g) => {
+  g.translate(128, 128);
+  g.beginPath();
+  for (let i = 0; i < 24; i++) {
+    const r = i % 2 === 0 ? 118 : 82;
+    const a = (i / 24) * Math.PI * 2;
+    g.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+  }
+  g.closePath();
+  g.fillStyle = '#ffd94a';
+  g.strokeStyle = '#241640';
+  g.lineWidth = 8;
+  g.fill();
+  g.stroke();
+  g.font = '900 64px "Segoe UI", Arial, sans-serif';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.lineWidth = 12;
+  g.strokeStyle = '#fff';
+  g.strokeText(txt, 0, 4);
+  g.fillStyle = '#d6273b';
+  g.fillText(txt, 0, 4);
+}));
+
 const efeitos = [];
+function spawnFx(tex, pos, opts) {
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
+  s.position.set(pos.x + (opts.dx || 0), pos.y + (opts.dy || 0), pos.z + (opts.dz || 0));
+  s.scale.setScalar(opts.escala ?? 0.24);
+  scene.add(s);
+  efeitos.push({
+    s, vida: opts.vida ?? 0.55, vx: opts.vx || 0, vy: opts.vy || 0, vz: opts.vz || 0,
+    grav: opts.grav ?? 0, giro: opts.giro ?? 0, cresce: opts.cresce ?? 0, teto: opts.teto ?? 9,
+  });
+}
 function burstEstrelas(pos) {
   for (let i = 0; i < 6; i++) {
     const a = (i / 6) * Math.PI * 2 + 0.5;
-    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: starTex, transparent: true, depthWrite: false }));
-    s.position.set(pos.x, pos.y + 0.1, pos.z);
-    s.scale.setScalar(0.24);
-    scene.add(s);
-    efeitos.push({ s, vx: Math.cos(a) * 1.8, vy: 1.6 + (i % 3) * 0.6, vz: Math.sin(a) * 1.2, vida: 0.55 });
+    spawnFx(starTex, pos, {
+      dy: 0.1, escala: 0.24, vida: 0.55, grav: 4.5, giro: 6,
+      vx: Math.cos(a) * 1.8, vy: 1.6 + (i % 3) * 0.6, vz: Math.sin(a) * 1.2,
+    });
+  }
+}
+let powN = 0;
+function powFx(pos) {
+  spawnFx(powTexs[powN++ % powTexs.length], pos, { dy: 0.5, escala: 0.14, vida: 0.6, vy: 0.55, cresce: 4.2, teto: 0.9 });
+}
+function puffFx(pos) {
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2;
+    spawnFx(puffTex, pos, {
+      dy: -0.55, dx: Math.cos(a) * 0.22, dz: Math.sin(a) * 0.18,
+      escala: 0.3, vida: 0.5, vy: 0.5, cresce: 1.6,
+      vx: Math.cos(a) * 0.8, vz: Math.sin(a) * 0.6,
+    });
   }
 }
 function updateEfeitos(dt) {
@@ -309,12 +454,13 @@ function updateEfeitos(dt) {
       efeitos.splice(i, 1);
       continue;
     }
-    e.vy -= 4.5 * dt;
+    e.vy -= e.grav * dt;
     e.s.position.x += e.vx * dt;
     e.s.position.y += e.vy * dt;
     e.s.position.z += e.vz * dt;
+    if (e.cresce) e.s.scale.setScalar(Math.min(e.teto, e.s.scale.x + e.cresce * dt));
     e.s.material.opacity = Math.min(1, e.vida * 3);
-    e.s.material.rotation += 6 * dt;
+    if (e.giro) e.s.material.rotation += e.giro * dt;
   }
 }
 
@@ -378,6 +524,9 @@ world.timestep = FIXED_DT;
 let acc = 0;
 let last = performance.now();
 let simNow = 0;
+const PARAMS = new URLSearchParams(location.search);
+let trauma = 0;
+const camPos = new THREE.Vector3(0, 6, 10);
 
 function frame(t) {
   requestAnimationFrame(frame);
@@ -399,21 +548,32 @@ function frame(t) {
   syncVisual(p1, visuals[0], simNow);
   syncVisual(p2, visuals[1], simNow);
 
-  // Estrelinhas quando um soco conecta
+  // Efeitos de impacto: estrelas + POF! + chacoalhada quando um soco conecta,
+  // poeira quando alguém desaba
   for (const p of [p1, p2]) {
     if (p.lastHitLandedAt > 0 && p.lastHitLandedAt > (p._fxVisto ?? -1)) {
       p._fxVisto = p.lastHitLandedAt;
-      burstEstrelas(p.parts.head.translation());
+      const pos = p.parts.head.translation();
+      burstEstrelas(pos);
+      powFx(pos);
+      trauma = Math.min(1, trauma + 0.55);
+    }
+    if (p.stunUntil > 0 && p.stunUntil > (p._stunVisto ?? 0)) {
+      p._stunVisto = p.stunUntil;
+      puffFx(p.parts.pelvis.translation());
     }
   }
   updateEfeitos(fdt);
+  mirarHolofotes(simNow);
+  cairConfetes(fdt, simNow);
 
-  // Câmera segue o meio da briga
+  // Câmera segue o meio da briga (com chacoalhada nos impactos)
+  trauma = Math.max(0, trauma - 2.4 * fdt);
   const a = p1.parts.pelvis.translation();
   const b = p2.parts.pelvis.translation();
   const midX = (a.x + b.x) / 2, midZ = (a.z + b.z) / 2;
   const spread = Math.min(Math.hypot(a.x - b.x, a.z - b.z), 12);
-  if (new URLSearchParams(location.search).has('debug')) {
+  if (PARAMS.has('debug')) {
     const q = p1.parts.pelvis.rotation();
     const qh = p1.parts.head.rotation();
     const yawQ = (r) => {
@@ -426,19 +586,24 @@ function frame(t) {
     d.textContent = `t=${simNow.toFixed(1)}s heading=${p1.heading.toFixed(2)} pelvisYaw=${yawQ(q)} headYaw=${yawQ(qh)}`;
   }
   // ?zoom na URL = câmera de retrato, pra inspecionar as fantasias de perto
-  if (new URLSearchParams(location.search).has('zoom')) {
-    camera.position.set(midX * 0.6, 1.9, 3.6);
+  if (PARAMS.has('zoom')) {
+    camPos.set(midX * 0.6, 1.9, 3.6);
+    camera.position.copy(camPos);
     camera.lookAt(midX * 0.6, 1.05, 0);
   } else {
     const target = new THREE.Vector3(midX * 0.6, 3.9 + spread * 0.3, 6.6 + spread * 0.55);
-    camera.position.lerp(target, 0.05);
+    camPos.lerp(target, 0.05);
+    camera.position.copy(camPos);
     camera.lookAt(midX * 0.6, 0.8, midZ * 0.3);
   }
+  const shake = trauma * trauma * 0.2;
+  camera.position.x += Math.sin(t * 0.061) * shake;
+  camera.position.y += Math.cos(t * 0.047) * shake * 0.7;
 
   renderer.render(scene, camera);
 }
 // ?avancar=N na URL: simula N segundos de física antes do primeiro frame (debug/screenshot)
-const avancar = parseFloat(new URLSearchParams(location.search).get('avancar') || '0');
+const avancar = parseFloat(PARAMS.get('avancar') || '0');
 for (let i = 0; i < avancar * 60; i++) {
   simNow += FIXED_DT;
   p1.update(FIXED_DT, simNow, readInput(MAPS.p1));

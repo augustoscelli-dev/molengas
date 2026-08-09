@@ -161,8 +161,20 @@ export const SKINS = [
   },
   {
     id: 'bombeiro', nome: 'BOMBEIRO',
-    cores: { head: 0xf2c894, torso: 0xe8b23a, pelvis: 0x3a3f4a, arms: 0xe8b23a, legs: 0x3a3f4a },
+    cores: { head: 0xf2c894, torso: 0x3a3f4a, pelvis: 0x2e323c, arms: 0x3a3f4a, legs: 0x2e323c },
     face: 'normal',
+    semBarriga: true,
+    // Jaqueta escura com duas listras refletivas (textura enrolada no tronco)
+    texturaTorso(g) {
+      g.fillStyle = '#3a3f4a';
+      g.fillRect(0, 0, 256, 256);
+      for (const y of [118, 160]) {
+        g.fillStyle = '#ffd94a';
+        g.fillRect(0, y, 256, 22);
+        g.fillStyle = '#f4f4f0';
+        g.fillRect(0, y + 8, 256, 6);
+      }
+    },
     extras(THREE, { head, torso }) {
       const capacete = mesh(THREE, new THREE.SphereGeometry(0.185, 18, 12, 0, Math.PI * 2, 0, Math.PI / 2), 0xd63b30);
       capacete.position.y = 0.03;
@@ -170,8 +182,6 @@ export const SKINS = [
       const aba = mesh(THREE, new THREE.CylinderGeometry(0.21, 0.21, 0.018, 18), 0xd63b30);
       aba.position.y = 0.02;
       head.add(aba);
-      const faixa = mesh(THREE, new THREE.CylinderGeometry(0.228, 0.228, 0.07, 18, 1, true), 0xf5f0dc);
-      torso.add(faixa);
     },
   },
   {
@@ -208,7 +218,7 @@ export const SKINS = [
     id: 'galinha', nome: 'GALINHA',
     cores: { head: 0xfafafa, torso: 0xfafafa, pelvis: 0xf2d16b, arms: 0xfafafa, legs: 0xf2a83a, barriga: 0xfff3d6 },
     face: 'normal',
-    extras(THREE, { head }) {
+    extras(THREE, { head, torso }) {
       for (let i = -1; i <= 1; i++) {
         const crista = mesh(THREE, new THREE.SphereGeometry(0.038, 10, 8), 0xd63b30);
         crista.position.set(0, 0.17 - Math.abs(i) * 0.02, i * 0.07);
@@ -218,6 +228,14 @@ export const SKINS = [
       bico.position.set(0, -0.03, 0.18);
       bico.rotation.x = Math.PI / 2;
       head.add(bico);
+      // Asinhas
+      for (const lado of [-1, 1]) {
+        const asa = mesh(THREE, new THREE.SphereGeometry(0.115, 14, 10), 0xf0eee6);
+        asa.position.set(lado * 0.2, -0.03, 0.01);
+        asa.scale.set(0.38, 0.8, 0.55);
+        asa.rotation.z = lado * 0.45;
+        torso.add(asa);
+      }
     },
   },
   {
