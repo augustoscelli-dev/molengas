@@ -920,6 +920,8 @@ let ESTILO = PARAMS.get('estilo') || 'a';   // 'let': a tecla M alterna em runti
 const ESTILO_BASE = ESTILO;                 // estilo original (pra voltar ao desligar o 3D)
 // ?glb=NOME escolhe o modelo 3D do estilo 'g' (assets/modelos/NOME.glb)
 const MODELO_GLB = PARAMS.get('glb') || 'jaeger-low';
+// ?acess=bone,jaqueta — acessórios cosméticos grudados nos ossos (dão humor ao robô)
+const ACESSORIOS = (PARAMS.get('acess') || '').split(',').map((s) => s.trim()).filter(Boolean);
 
 function clarear(cor, t) {
   const f = (v) => Math.round(v + (255 - v) * t);
@@ -935,6 +937,51 @@ function dessaturar(cor, t) {
   const cinza = 0.3 * r + 0.59 * g + 0.11 * b;
   const f = (v) => Math.round(v + (cinza - v) * t + 18);
   return (Math.min(255, f(r)) << 16) | (Math.min(255, f(g)) << 8) | Math.min(255, f(b));
+}
+
+// ---------- Acessórios cosméticos (customização/humor) ----------
+// São grudados nas peças do lutador (meshes.head/torso/...); como essas peças
+// seguem a física/rig, o acessório acompanha o movimento (boné fica na cabeça etc).
+function fazBone(cor = 0xd63b30) {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color: cor, roughness: 0.6, metalness: 0.05 });
+  const copa = new THREE.Mesh(new THREE.SphereGeometry(0.23, 24, 16, 0, Math.PI * 2, 0, Math.PI * 0.52), mat);
+  copa.scale.set(1, 0.82, 1); copa.castShadow = true; g.add(copa);
+  const aba = new THREE.Mesh(new THREE.CircleGeometry(0.22, 24, 0, Math.PI), mat);
+  aba.rotation.x = -Math.PI / 2 + 0.08; aba.position.set(0, -0.005, 0.14); aba.scale.set(1, 1.5, 1); g.add(aba);
+  const botao = new THREE.Mesh(new THREE.SphereGeometry(0.028, 8, 6), mat); botao.position.y = 0.19; g.add(botao);
+  g.position.set(0, 0.19, 0.02);
+  return g;
+}
+function fazJaqueta(cor = 0x2f6bd6) {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color: cor, roughness: 0.85, metalness: 0.0, side: THREE.DoubleSide });
+  const corpo = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.36, 0.6, 22, 1, true), mat);
+  corpo.castShadow = true; g.add(corpo);
+  const gola = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.055, 10, 22), mat);
+  gola.rotation.x = Math.PI / 2; gola.position.y = 0.3; g.add(gola);
+  // faixa clara na frente (zíper/humor)
+  const zip = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.55, 0.02), new THREE.MeshStandardMaterial({ color: 0xf3d34a, roughness: 0.6 }));
+  zip.position.set(0, 0, 0.34); g.add(zip);
+  g.position.set(0, -0.02, 0);
+  return g;
+}
+function fazManga(cor) {
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.13, 0.28, 14, 1, true), new THREE.MeshStandardMaterial({ color: cor, roughness: 0.85, side: THREE.DoubleSide }));
+  m.castShadow = true; return m;
+}
+function vestir(meshes, lista) {
+  if (!lista || !lista.length) return;
+  const anexa = (parte, obj) => { const p = meshes[parte]; if (p && obj) p.add(obj); };
+  const jcor = 0x2f6bd6;
+  for (const item of lista) {
+    if (item === 'bone' || item === 'boné' || item === 'cap') anexa('head', fazBone(0xd63b30));
+    else if (item === 'jaqueta' || item === 'jacket') {
+      anexa('torso', fazJaqueta(jcor));
+      const mL = fazManga(jcor); mL.position.y = -0.06; anexa('upperArmL', mL);
+      const mR = fazManga(jcor); mR.position.y = -0.06; anexa('upperArmR', mR);
+    }
+  }
 }
 
 function buildVisual(skin, fase = 0, slot = 0) {
@@ -1107,6 +1154,7 @@ function buildVisual(skin, fase = 0, slot = 0) {
     for (const spec of PARTS) { const o = new THREE.Object3D(); scene.add(o); meshes[spec.name] = o; }
     meshes.torso._baseS = [1, 1, 1];
     meshes._jrig = null;
+    vestir(meshes, ACESSORIOS); // acessórios grudam nos trackers (seguem a física)
     const nomesGLB = MODELO_GLB.split(',');
     const nomeGLB = (nomesGLB[slot] || nomesGLB[0] || 'jaeger-rigado').trim();
     const tinta = new THREE.Color(skin.cores.torso);
@@ -1303,6 +1351,7 @@ function buildVisual(skin, fase = 0, slot = 0) {
     meshes[spec.name] = obj;
   }
   skin.extras(THREE, { head: meshes._headAnchor ?? meshes.head, torso: meshes.torso, pelvis: meshes.pelvis });
+  vestir(meshes, ACESSORIOS);
   registrarFlashMats(meshes);
   return meshes;
 }
