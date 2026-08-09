@@ -9,7 +9,7 @@ import { readGamepad, mergeInput } from './gamepad.js';
 await RAPIER.init();
 
 // Carimbo visível na tela — se o número não bater com o do repo, é cache velho
-const VERSAO = 'v13-gominha-gorda';
+const VERSAO = 'v14-feijao';
 
 const WIN_SCORE = 5;
 const IDLE_IN = { move: { x: 0, z: 0 }, punch: false, grab: false, jump: false };
@@ -647,29 +647,13 @@ function buildVisual(skin, fase = 0) {
     addOutline(THREE, b);
     return b;
   };
+  // Anatomia Fall Guys aprovada: UM feijãozão liso (cabeça+tronco+quadril
+  // numa casca só, seguindo o tronco da física) + braços e pernas tocos.
   for (const spec of PARTS) {
-    const cat = CATEGORIA[spec.name];
     let obj;
-    if (spec.shape === 'ball') {
-      obj = new THREE.Group();
-      obj.scale.setScalar(1.5); // cabeçona
-      const skull = bolinha(matFor('head'), spec.r, [1, 1.03, 0.96]);
-      skull.position.y = -0.03; // assentada nos ombros, sem pescoço aparente
-      obj.add(skull);
-      const face = new THREE.Mesh(
-        new THREE.CircleGeometry(spec.r * 0.94, 24),
-        new THREE.MeshBasicMaterial({ map: getFaceTexture(THREE, skin.face, 'ok'), transparent: true }),
-      );
-      face.position.set(0, -0.035, spec.r + 0.004);
-      obj.add(face);
-      meshes._face = face;
-      // Pescoço grosso escondido na emenda
-      const pescoco = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.125, 0.16, 12), matFor('head'));
-      pescoco.position.y = -0.15;
-      obj.add(pescoco);
-    } else if (spec.name === 'torso') {
-      // Barril arredondado (estilo Gang Beasts), não bola
-      let matTorso = matFor('torso');
+    if (spec.name === 'torso') {
+      // O FEIJÃO
+      let matBean = matFor('torso');
       if (skin.texturaTorso) {
         skin._texTorso ||= (() => {
           const c = document.createElement('canvas');
@@ -679,63 +663,77 @@ function buildVisual(skin, fase = 0) {
           t.colorSpace = THREE.SRGBColorSpace;
           return t;
         })();
-        matTorso = vinilMat(THREE, 0xffffff, 1); // skins "vestidas" são opacas
-        matTorso.map = skin._texTorso;
+        matBean = vinilMat(THREE, 0xffffff, 1);
+        matBean.map = skin._texTorso;
       }
-      obj = new THREE.Mesh(new THREE.CapsuleGeometry(0.2, 0.18, 6, 16), matTorso);
-      obj.scale.set(1.22, 1.08, 0.95);
+      const geoBean = new THREE.CapsuleGeometry(0.34, 0.56, 8, 24);
+      geoBean.translate(0, -0.1, 0); // desce a barriga pra emendar nas pernas
+      obj = new THREE.Mesh(geoBean, matBean);
+      obj.scale.set(1, 1.05, 0.92);
       obj.castShadow = true;
-      addOutline(THREE, obj);
-      obj._baseY = 1.08;
+      addOutline(THREE, obj, 1.03);
+      obj._baseY = 1.05;
+      // Carinha no alto do feijão
+      const face = new THREE.Mesh(
+        new THREE.CircleGeometry(0.21, 28),
+        new THREE.MeshBasicMaterial({ map: getFaceTexture(THREE, skin.face, 'ok'), transparent: true }),
+      );
+      face.position.set(0, 0.16, 0.325);
+      face.rotation.x = -0.12;
+      obj.add(face);
+      meshes._face = face;
       if (!skin.semBarriga) {
         const corBarriga = skin.cores.barriga ?? clarear(skin.cores.torso, 0.38);
-        const barriga = new THREE.Mesh(new THREE.SphereGeometry(0.155, 18, 14), vinilMat(THREE, corBarriga, Math.min(1, opCorpo + 0.06)));
-        barriga.position.set(0, -0.04, 0.095);
-        barriga.scale.set(0.78, 1.05, 0.5);
+        const barriga = new THREE.Mesh(new THREE.SphereGeometry(0.24, 20, 16), vinilMat(THREE, corBarriga, 1));
+        barriga.position.set(0, -0.16, 0.15);
+        barriga.scale.set(0.85, 1.05, 0.55);
         obj.add(barriga);
       }
-    } else if (spec.name === 'pelvis') {
-      // "Shorts": capsulão largo emendando no tronco
-      obj = new THREE.Mesh(new THREE.CapsuleGeometry(0.185, 0.12, 6, 16), matFor('pelvis'));
-      obj.scale.set(1.3, 1.0, 1.1);
+    } else if (spec.shape === 'ball') {
+      // Cabeça física invisível — âncora dos acessórios (chapéus etc.),
+      // rebaixada pra eles brotarem da casca do feijão
+      obj = new THREE.Group();
+      obj.scale.setScalar(1.5);
+      const ancora2 = new THREE.Group();
+      ancora2.position.y = -0.14;
+      obj.add(ancora2);
+      meshes._headAnchor = ancora2;
+    } else if (spec.name === 'pelvis' || spec.name.startsWith('upperArm') || spec.name.startsWith('thigh')) {
+      // invisíveis (o feijão cobre); pelvis segue como âncora de caudas
+      obj = new THREE.Group();
+    } else if (spec.name.startsWith('forearm')) {
+      // Bracinho toco + luvona
+      obj = new THREE.Mesh(
+        new THREE.CapsuleGeometry(0.09, 0.16, 6, 12),
+        matFor('arms'),
+      );
       obj.castShadow = true;
       addOutline(THREE, obj);
+      const mao = bolinha(mats.maos ||= vinilMat(THREE, escurecer(skin.cores.arms, 0.22), 1), 0.13);
+      mao.position.y = -0.14;
+      obj.add(mao);
     } else {
-      const gordo = spec.r * FOFURA[cat];
-      obj = new THREE.Mesh(new THREE.CapsuleGeometry(gordo, spec.hh * 2, 6, 14), matFor(cat));
+      // calf: perninha toco comprida (emenda por baixo do feijão) + botona
+      const geoPerna = new THREE.CapsuleGeometry(0.1, 0.34, 6, 12);
+      geoPerna.translate(0, 0.09, 0);
+      obj = new THREE.Mesh(geoPerna, matFor('legs'));
       obj.castShadow = true;
       addOutline(THREE, obj);
-      // Tampas gordas nas juntas — braço/perna viram uma linguicinha contínua
-      if (spec.name.startsWith('upperArm') || spec.name.startsWith('thigh')) {
-        for (const py of [spec.hh, -spec.hh]) {
-          const cap = bolinha(matFor(cat), gordo * 1.12);
-          cap.position.y = py;
-          obj.add(cap);
-        }
-      }
-      // Punhos e botas de brinquedo, bem grandes (F1)
-      if (spec.name.startsWith('forearm')) {
-        const mao = bolinha(mats.maos ||= vinilMat(THREE, escurecer(skin.cores.arms, 0.22), 1), spec.r * 1.9);
-        mao.position.y = -(spec.hh + spec.r * 0.55);
-        obj.add(mao);
-      }
-      if (spec.name.startsWith('calf')) {
-        const pe = new THREE.Mesh(
-          new THREE.CapsuleGeometry(0.082, 0.1, 6, 12),
-          mats.pes ||= vinilMat(THREE, escurecer(skin.cores.legs, 0.22), 1),
-        );
-        pe.rotation.x = Math.PI / 2;
-        pe.scale.set(1.05, 1, 0.85);
-        pe.position.set(0, -(spec.hh + 0.03), 0.05);
-        pe.castShadow = true;
-        addOutline(THREE, pe);
-        obj.add(pe);
-      }
+      const pe = new THREE.Mesh(
+        new THREE.CapsuleGeometry(0.095, 0.1, 6, 12),
+        mats.pes ||= vinilMat(THREE, escurecer(skin.cores.legs, 0.22), 1),
+      );
+      pe.rotation.x = Math.PI / 2;
+      pe.scale.set(1.05, 1, 0.85);
+      pe.position.set(0, -0.16, 0.05);
+      pe.castShadow = true;
+      addOutline(THREE, pe);
+      obj.add(pe);
     }
     scene.add(obj);
     meshes[spec.name] = obj;
   }
-  skin.extras(THREE, { head: meshes.head, torso: meshes.torso, pelvis: meshes.pelvis });
+  skin.extras(THREE, { head: meshes._headAnchor ?? meshes.head, torso: meshes.torso, pelvis: meshes.pelvis });
   return meshes;
 }
 
@@ -759,16 +757,14 @@ function syncVisual(rag, meshes, now) {
     m.position.set(t.x, t.y, t.z);
     m.quaternion.set(r.x, r.y, r.z, r.w);
   }
-  // Respiração sutil
-  meshes.torso.scale.y = meshes.torso._baseY * (1 + 0.028 * Math.sin(now * 2.6 + meshes._fase));
-  // Squash & stretch da cabeça no impacto
+  // Respiração + squash & stretch, tudo no feijão
   const desdeHit = now - rag.lastHitLandedAt;
-  if (desdeHit >= 0 && desdeHit < 0.18) {
-    const k = 0.32 * (1 - desdeHit / 0.18);
-    meshes.head.scale.set(1.42 * (1 + k), 1.42 * (1 - k * 0.65), 1.42 * (1 + k));
-  } else {
-    meshes.head.scale.setScalar(1.42);
-  }
+  const k = desdeHit >= 0 && desdeHit < 0.18 ? 0.22 * (1 - desdeHit / 0.18) : 0;
+  meshes.torso.scale.set(
+    1 + k,
+    meshes.torso._baseY * (1 + 0.028 * Math.sin(now * 2.6 + meshes._fase)) * (1 - k * 0.6),
+    0.92 * (1 + k),
+  );
   // Carinha: nocaute > piscada > normal
   const piscando = ((now + meshes._fase) % 3.4) < 0.13;
   const variante = rag.isStunned(now) ? 'x' : (piscando ? 'blink' : 'ok');

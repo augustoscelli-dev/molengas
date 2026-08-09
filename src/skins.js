@@ -151,12 +151,12 @@ export const SKINS = [
     face: 'bravo',
     extras(THREE, { head, torso, pelvis }) {
       const fin = mesh(THREE, new THREE.ConeGeometry(0.1, 0.22, 10), 0x5f7488);
-      fin.position.set(0, 0.13, -0.23);
+      fin.position.set(0, 0.18, -0.33);
       fin.rotation.x = -0.6;
       fin.scale.x = 0.35;
       torso.add(fin);
       const tail = mesh(THREE, new THREE.ConeGeometry(0.06, 0.18, 10), 0x5f7488);
-      tail.position.set(0, -0.06, -0.24);
+      tail.position.set(0, -0.08, -0.3);
       tail.rotation.x = -2.3;
       tail.scale.x = 0.4;
       pelvis.add(tail);
@@ -170,7 +170,7 @@ export const SKINS = [
       for (let i = 0; i < 6; i++) {
         const a = (i / 6) * Math.PI * 2 + 0.3;
         const t = mesh(THREE, new THREE.CapsuleGeometry(0.028, 0.1, 4, 8), 0x8352b5);
-        t.position.set(Math.cos(a) * 0.12, -0.12, Math.sin(a) * 0.12);
+        t.position.set(Math.cos(a) * 0.23, -0.04, Math.sin(a) * 0.23);
         t.rotation.z = Math.cos(a) * 0.7;
         t.rotation.x = -Math.sin(a) * 0.7;
         head.add(t);
@@ -243,13 +243,13 @@ export const SKINS = [
         head.add(crista);
       }
       const bico = mesh(THREE, new THREE.ConeGeometry(0.045, 0.09, 10), 0xf2a83a);
-      bico.position.set(0, -0.03, 0.18);
+      bico.position.set(0, -0.02, 0.27);
       bico.rotation.x = Math.PI / 2;
       head.add(bico);
       // Asinhas
       for (const lado of [-1, 1]) {
         const asa = mesh(THREE, new THREE.SphereGeometry(0.115, 14, 10), 0xf0eee6);
-        asa.position.set(lado * 0.235, -0.03, 0.01);
+        asa.position.set(lado * 0.34, -0.05, 0.03);
         asa.scale.set(0.38, 0.8, 0.55);
         asa.rotation.z = lado * 0.45;
         torso.add(asa);
@@ -311,7 +311,7 @@ export const SKINS = [
       head.add(luz);
       for (const lado of [-1, 1]) {
         const parafuso = mesh(THREE, new THREE.CylinderGeometry(0.035, 0.035, 0.04, 10), 0x6d7a8c);
-        parafuso.position.set(lado * 0.165, 0, 0);
+        parafuso.position.set(lado * 0.25, 0.06, 0);
         parafuso.rotation.z = Math.PI / 2;
         head.add(parafuso);
       }
@@ -326,7 +326,7 @@ export const SKINS = [
       ponta.position.y = 0.21;
       head.add(ponta);
       const gomo = mesh(THREE, new THREE.CapsuleGeometry(0.035, 0.1, 4, 8), 0xe3c23e);
-      gomo.position.set(0, 0.12, -0.12);
+      gomo.position.set(0, 0.14, -0.24);
       gomo.rotation.x = 0.7;
       head.add(gomo);
     },
@@ -350,7 +350,7 @@ export const SKINS = [
       const tons = [0xf78fc2, 0xc792ff, 0x8fd0f7];
       for (let i = 0; i < 5; i++) {
         const mecha = mesh(THREE, new THREE.SphereGeometry(0.05, 10, 8), tons[i % 3]);
-        mecha.position.set(0, 0.17 - i * 0.045, -0.05 - i * 0.045);
+        mecha.position.set(0, 0.2 - i * 0.035, -0.12 - i * 0.05);
         head.add(mecha);
       }
     },
@@ -360,7 +360,7 @@ export const SKINS = [
     cores: { head: 0x4fae6b, torso: 0x4fae6b, pelvis: 0x3d8c54, arms: 0x4fae6b, legs: 0x3d8c54, barriga: 0xd6eeb0 },
     face: 'bravo',
     extras(THREE, { head, torso, pelvis }) {
-      const lugares = [[head, 0.15, -0.06], [head, 0.08, -0.14], [torso, 0.14, -0.24], [torso, 0.0, -0.26]];
+      const lugares = [[head, 0.15, -0.06], [head, 0.08, -0.14], [torso, 0.16, -0.36], [torso, 0.0, -0.38]];
       for (const [pai, py, pz] of lugares) {
         const placa = mesh(THREE, new THREE.ConeGeometry(0.055, 0.11, 8), 0x8fe07a);
         placa.position.set(0, py, pz);
@@ -369,7 +369,7 @@ export const SKINS = [
         pai.add(placa);
       }
       const cauda = mesh(THREE, new THREE.ConeGeometry(0.06, 0.22, 10), 0x3d8c54);
-      cauda.position.set(0, -0.08, -0.24);
+      cauda.position.set(0, -0.1, -0.3);
       cauda.rotation.x = -2.4;
       pelvis.add(cauda);
     },
