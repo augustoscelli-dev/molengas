@@ -718,9 +718,10 @@ const CATEGORIA = {
 const FOFURA = { arms: 1.6, legs: 1.55 };
 // Estilos de personagem em teste (?estilo=a|b|c|d):
 // a=feijão vinil · b=chibi cabeçudo · c=massinha articulada · d=cartum chapado
-const ESTILO = PARAMS.get('estilo') || 'a';
+let ESTILO = PARAMS.get('estilo') || 'a';   // 'let': a tecla M alterna em runtime
+const ESTILO_BASE = ESTILO;                 // estilo original (pra voltar ao desligar o 3D)
 // ?glb=NOME escolhe o modelo 3D do estilo 'g' (assets/modelos/NOME.glb)
-const MODELO_GLB = PARAMS.get('glb') || 'robo';
+const MODELO_GLB = PARAMS.get('glb') || 'jaeger-low';
 
 function clarear(cor, t) {
   const f = (v) => Math.round(v + (255 - v) * t);
@@ -1040,6 +1041,18 @@ function montarLutadores(configs) {
   });
   for (const l of lutadores) l.rag.rivals = lutadores.filter((o) => o !== l).map((o) => o.rag);
 }
+
+// Tecla M: alterna entre o estilo base e o modelo 3D (GLB) em runtime,
+// reconstruindo os visuais dos lutadores em cena (mesmo caminho da troca de skin).
+function alternarModelo3D() {
+  ESTILO = ESTILO === 'g' ? (ESTILO_BASE === 'g' ? 'a' : ESTILO_BASE) : 'g';
+  for (const l of lutadores) {
+    destroyVisual(l.meshes);
+    l.meshes = buildVisual(SKINS[l.cfg.skin], l.slot * 1.9, l.slot);
+  }
+  som.selecionar?.();
+}
+addEventListener('keydown', (e) => { if (e.code === 'KeyM') alternarModelo3D(); });
 
 function inputDoLutador(l) {
   if (l.cfg.tipo === 'cpu') return botInput(l);
