@@ -1023,23 +1023,29 @@ function buildVisual(skin, fase = 0, slot = 0) {
     return meshes;
   }
 
-  // Estilo R (rigado): "corta" o GLB em 11 pedaços (por osso mais próximo) e cola
-  // cada um no corpo da física — o Jaeger passa a ARTICULAR (soco/chute).
+  // Estilo R (rigado de verdade): esqueleto de 11 ossos + SkinnedMesh. A malha
+  // continua INTEIRA (igual ao modelo) e deforma suave nas juntas — sem pedaço
+  // solto. Os ossos são dirigidos pela física, então soco/chute articulam.
   if (ESTILO === 'r') {
-    const grupos = {};
-    for (const spec of PARTS) {
-      const g = new THREE.Group();
-      if (spec.name === 'torso') g._baseS = [1, 1, 1];
-      scene.add(g); meshes[spec.name] = g; grupos[spec.name] = g;
-    }
+    const nbr = {
+      pelvis: ['torso', 'thighL', 'thighR'], torso: ['pelvis', 'head', 'upperArmL', 'upperArmR'],
+      head: ['torso'], upperArmL: ['torso', 'forearmL'], upperArmR: ['torso', 'forearmR'],
+      forearmL: ['upperArmL'], forearmR: ['upperArmR'], thighL: ['pelvis', 'calfL'],
+      thighR: ['pelvis', 'calfR'], calfL: ['thighL'], calfR: ['thighR'],
+    };
+    const idxDe = {}; PARTS.forEach((p, i) => { idxDe[p.name] = i; });
+    const anchors = PARTS.map((p) => new THREE.Vector3(p.off[0], p.off[1], p.off[2]));
+    // Ossos planos sob uma raiz na origem — syncVisual dirige cada osso pela física.
+    const rootBones = new THREE.Group(); scene.add(rootBones);
+    const bones = PARTS.map((p) => { const b = new THREE.Bone(); b.position.set(p.off[0], p.off[1], p.off[2]); rootBones.add(b); return b; });
+    rootBones.updateMatrixWorld(true);
+    const skel = new THREE.Skeleton(bones);
+    PARTS.forEach((p, i) => { meshes[p.name] = bones[i]; }); // syncVisual move os ossos
+    meshes.torso._baseS = [1, 1, 1];
+    meshes._rootBones = rootBones; meshes._skel = skel; meshes._skinMeshes = []; meshes._flashExtra = [];
     const nomesGLB = MODELO_GLB.split(',');
     const nomeGLB = (nomesGLB[slot] || nomesGLB[0] || 'jaeger-low').trim();
-    const anchors = PARTS.map((p) => new THREE.Vector3(p.off[0], p.off[1], p.off[2]));
-    const classify = (pt) => {
-      let best = 0, bd = 1e9;
-      for (let i = 0; i < anchors.length; i++) { const d = pt.distanceToSquared(anchors[i]); if (d < bd) { bd = d; best = i; } }
-      return PARTS[best].name;
-    };
+    const tinta = new THREE.Color(skin.cores.torso);
     new GLTFLoader().load(ASSET('assets/modelos/' + nomeGLB + '.glb'), (gltf) => {
       const modelo = gltf.scene; modelo.updateMatrixWorld(true);
       const box = new THREE.Box3().setFromObject(modelo);
@@ -1048,43 +1054,47 @@ function buildVisual(skin, fase = 0, slot = 0) {
       const RH = 1.68, pesY = 0.08;                       // altura útil pé->cabeça do ragdoll
       const s = RH / (size.y || 1);
       const offX = -center.x * s, offZ = -center.z * s, offY = pesY - box.min.y * s;
-      const tinta = new THREE.Color(skin.cores.torso);
-      const partArr = {}; for (const p of PARTS) partArr[p.name] = [];
-      const vA = new THREE.Vector3(), vB = new THREE.Vector3(), vC = new THREE.Vector3(), cen = new THREE.Vector3();
-      let baseMat = null;
+      const v = new THREE.Vector3(), nv = new THREE.Vector3();
+      // pesos: osso mais próximo (primary) + vizinho de junta mais próximo (secondary),
+      // misturando só perto da junta — dá dobra suave sem soltar pedaço.
+      const pesar = (vx, vy, vz) => {
+        let p0 = 0, d0 = 1e9;
+        for (let i = 0; i < anchors.length; i++) { const a = anchors[i], dx = vx - a.x, dy = vy - a.y, dz = vz - a.z, d = dx * dx + dy * dy + dz * dz; if (d < d0) { d0 = d; p0 = i; } }
+        let p1 = p0, d1 = 1e9;
+        for (const nm of nbr[PARTS[p0].name]) { const i = idxDe[nm], a = anchors[i], dx = vx - a.x, dy = vy - a.y, dz = vz - a.z, d = dx * dx + dy * dy + dz * dz; if (d < d1) { d1 = d; p1 = i; } }
+        const dp = Math.sqrt(d0), dq = Math.sqrt(d1) || 1e-4;
+        const w1 = Math.min(1, Math.max(0.5, dq / (dp + dq))); // primary mantém a maioria (meio do membro fica rígido)
+        return [p0, p1, w1, 1 - w1];
+      };
       modelo.traverse((o) => {
         if (!o.isMesh) return;
-        if (!baseMat) {
-          const src = Array.isArray(o.material) ? o.material[0] : o.material;
-          baseMat = src.clone(); baseMat.map = null; baseMat.vertexColors = false;
-          if (!baseMat.color) baseMat.color = new THREE.Color(0x8895a6);
-          baseMat.color.lerp(tinta, 0.4);
+        const g0 = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
+        const pos = g0.attributes.position, nor = g0.attributes.normal, uv = g0.attributes.uv;
+        const n = pos.count;
+        const P = new Float32Array(n * 3), N = nor ? new Float32Array(n * 3) : null;
+        const SI = new Uint16Array(n * 4), SW = new Float32Array(n * 4);
+        const nmat = new THREE.Matrix3().getNormalMatrix(o.matrixWorld);
+        for (let i = 0; i < n; i++) {
+          v.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld).multiplyScalar(s);
+          v.x += offX; v.y += offY; v.z += offZ;
+          P[i * 3] = v.x; P[i * 3 + 1] = v.y; P[i * 3 + 2] = v.z;
+          if (N) { nv.fromBufferAttribute(nor, i).applyMatrix3(nmat).normalize(); N[i * 3] = nv.x; N[i * 3 + 1] = nv.y; N[i * 3 + 2] = nv.z; }
+          const [a, b, w1, w2] = pesar(v.x, v.y, v.z);
+          SI[i * 4] = a; SI[i * 4 + 1] = b; SW[i * 4] = w1; SW[i * 4 + 1] = w2;
         }
-        const g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry;
-        const pos = g.attributes.position, wm = o.matrixWorld;
-        for (let f = 0; f < pos.count; f += 3) {
-          vA.fromBufferAttribute(pos, f).applyMatrix4(wm).multiplyScalar(s);
-          vB.fromBufferAttribute(pos, f + 1).applyMatrix4(wm).multiplyScalar(s);
-          vC.fromBufferAttribute(pos, f + 2).applyMatrix4(wm).multiplyScalar(s);
-          vA.x += offX; vA.y += offY; vA.z += offZ;
-          vB.x += offX; vB.y += offY; vB.z += offZ;
-          vC.x += offX; vC.y += offY; vC.z += offZ;
-          cen.copy(vA).add(vB).add(vC).multiplyScalar(1 / 3);
-          const part = classify(cen);
-          partArr[part].push(vA.x, vA.y, vA.z, vB.x, vB.y, vB.z, vC.x, vC.y, vC.z);
-        }
-      });
-      for (const p of PARTS) {
-        const arr = partArr[p.name]; if (!arr.length) continue;
-        const f32 = new Float32Array(arr);
-        for (let i = 0; i < f32.length; i += 3) { f32[i] -= p.off[0]; f32[i + 1] -= p.off[1]; f32[i + 2] -= p.off[2]; }
         const geo = new THREE.BufferGeometry();
-        geo.setAttribute('position', new THREE.BufferAttribute(f32, 3));
-        geo.computeVertexNormals();
-        const mesh = new THREE.Mesh(geo, baseMat);
-        mesh.castShadow = true; mesh.receiveShadow = true;
-        grupos[p.name].add(mesh);
-      }
+        geo.setAttribute('position', new THREE.BufferAttribute(P, 3));
+        if (N) geo.setAttribute('normal', new THREE.BufferAttribute(N, 3)); else geo.computeVertexNormals();
+        if (uv) geo.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(uv.array), 2));
+        geo.setAttribute('skinIndex', new THREE.BufferAttribute(SI, 4));
+        geo.setAttribute('skinWeight', new THREE.BufferAttribute(SW, 4));
+        const src = Array.isArray(o.material) ? o.material[0] : o.material;
+        const mat = src.clone(); if (mat.color) mat.color.lerp(tinta, 0.4);
+        const sm = new THREE.SkinnedMesh(geo, mat);
+        sm.castShadow = true; sm.receiveShadow = true; sm.frustumCulled = false;
+        sm.bind(skel);
+        scene.add(sm); meshes._skinMeshes.push(sm); meshes._flashExtra.push(sm);
+      });
       registrarFlashMats(meshes);
     });
     return meshes;
@@ -1249,11 +1259,19 @@ function buildVisual(skin, fase = 0, slot = 0) {
 function destroyVisual(meshes) {
   for (const spec of PARTS) {
     const obj = meshes[spec.name];
+    if (obj.isBone) continue; // estilo 'r': ossos são limpos junto com a raiz abaixo
     scene.remove(obj);
     obj.traverse((o) => {
       if (o.geometry) o.geometry.dispose();
       if (o.material && !o.material.map) o.material.dispose();
     });
+  }
+  // Estilo 'r' (rigado): remove a raiz dos ossos e as malhas skinadas (ficam soltas na cena)
+  if (meshes._rootBones) scene.remove(meshes._rootBones);
+  for (const sm of meshes._skinMeshes || []) {
+    scene.remove(sm);
+    if (sm.geometry) sm.geometry.dispose();
+    if (sm.material && !sm.material.map) sm.material.dispose();
   }
 }
 
@@ -1262,8 +1280,8 @@ function destroyVisual(meshes) {
 const COR_FLASH = new THREE.Color(1.0, 0.55, 0.5); // branco-quente avermelhado (dor)
 function registrarFlashMats(meshes) {
   const mats = [], visto = new Set();
-  for (const spec of PARTS) {
-    const root = meshes[spec.name];
+  const raizes = PARTS.map((s) => meshes[s.name]).concat(meshes._flashExtra || []);
+  for (const root of raizes) {
     if (!root || !root.traverse) continue;
     root.traverse((o) => {
       const lista = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : [];
@@ -1321,6 +1339,17 @@ function syncVisual(rag, meshes, now) {
   if (meshes._sprite) {
     const q = rag.parts.torso.rotation();
     meshes._sprite.material.rotation = -Math.atan2(2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.y * q.y + q.z * q.z));
+  }
+}
+
+// Estilo 'r' (rigado): depois de mover os ossos, atualiza os esqueletos (senão a
+// malha skinada colapsa). Chamar logo antes do render, com matrizes já frescas.
+function atualizarSkins() {
+  for (const l of lutadores) {
+    const mm = l.meshes;
+    if (!mm || !mm._skel) continue;
+    mm._rootBones.updateMatrixWorld(true);
+    mm._skel.update();
   }
 }
 
@@ -2051,6 +2080,7 @@ function frame(t) {
     updateEfeitos(fdt);
     mirarHolofotes(simNow);
     cairConfetes(fdt, simNow);
+    atualizarSkins();
     r3.render(scene, camera);
     return;
   }
@@ -2183,6 +2213,7 @@ function frame(t) {
   camera.position.x += Math.sin(t * 0.061) * shake;
   camera.position.y += Math.cos(t * 0.047) * shake * 0.7;
 
+  atualizarSkins();
   r3.render(scene, camera);
 }
 
