@@ -73,6 +73,10 @@ export class Ragdoll {
     this.hoverBlockUntil = 0;
     this.gaitT = 0;
     this.lastHitLandedAt = -10;
+    this.lastPunchStartAt = -10;
+    this.lastJumpAt = -10;
+    this.lastGrabAt = -10;
+    this.lastThrowAt = -10;
     this.grabJoints = [null, null];
     this._ray = new R.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: -1, z: 0 });
 
@@ -109,13 +113,27 @@ export class Ragdoll {
     this.releaseGrabs();
   }
 
-  releaseGrabs() {
+  // arremesso=true (soltou de propósito): girando rápido, o que estava
+  // agarrado sai voando com força extra proporcional ao giro.
+  releaseGrabs(arremesso = false) {
+    const spin = Math.min(Math.abs(this.parts.pelvis.angvel().y), 8);
     for (let i = 0; i < 2; i++) {
-      if (this.grabJoints[i]) {
-        this.world.removeImpulseJoint(this.grabJoints[i], true);
-        this.grabJoints[i] = null;
+      const g = this.grabJoints[i];
+      if (!g) continue;
+      this.world.removeImpulseJoint(g.j, true);
+      if (arremesso && spin > 2.5 && g.body && !g.chao) {
+        const v = g.body.linvel();
+        const sp = Math.hypot(v.x, v.y, v.z) || 1;
+        const k = Math.min(spin * 1.3, 10);
+        g.body.applyImpulse({ x: (v.x / sp) * k, y: (v.y / sp) * k + spin * 0.35, z: (v.z / sp) * k }, true);
+        this.lastThrowAt = this._now ?? 0;
       }
+      this.grabJoints[i] = null;
     }
+  }
+
+  hangingOnLedge() {
+    return this.grabJoints.some((g) => g && g.chao);
   }
 
   // Distância até a superfície logo abaixo do quadril (chão, plataforma,
@@ -138,6 +156,7 @@ export class Ragdoll {
   }
 
   update(dt, now, input) {
+    this._now = now;
     const stunned = this.isStunned(now);
     const pelvis = this.parts.pelvis;
     const pp = pelvis.translation();
@@ -262,6 +281,7 @@ export class Ragdoll {
       if (input.jump && grounded && now > this.jumpReadyAt) {
         this.jumpReadyAt = now + 0.7;
         this.hoverBlockUntil = now + 0.4;
+        this.lastJumpAt = now;
         pelvis.applyImpulse({ x: 0, y: 20, z: 0 }, true);
         this.parts.torso.applyImpulse({ x: 0, y: 12, z: 0 }, true);
       }
@@ -270,6 +290,7 @@ export class Ragdoll {
         this.punchReadyAt = now + 0.8;
         this.punchUntil = now + 0.25;
         this.punchHit = false;
+        this.lastPunchStartAt = now;
         const dir = [Math.sin(this.heading), 0, Math.cos(this.heading)];
         for (const h of ['forearmL', 'forearmR']) {
           this.parts[h].applyImpulse({ x: dir[0] * 7, y: 1.2, z: dir[2] * 7 }, true);
@@ -316,6 +337,7 @@ export class Ragdoll {
     // Agarrar
     if (input.grab && !stunned && this.opponent) {
       const ot = this.opponent.parts.torso.translation();
+      const situacaoBeirada = toi === null || pp.y < 0.55;
       for (let side = 0; side < 2; side++) {
         if (this.grabJoints[side]) continue;
         const tip = this.handTip(side);
@@ -335,8 +357,33 @@ export class Ragdoll {
         const hand = this.parts[side === 0 ? 'forearmL' : 'forearmR'];
         if (best) {
           const data = this.R.JointData.spherical({ x: 0, y: -0.12, z: 0 }, { x: 0, y: 0, z: 0 });
-          this.grabJoints[side] = this.world.createImpulseJoint(data, hand, best, true);
-        } else {
+          this.grabJoints[side] = { j: this.world.createImpulseJoint(data, hand, best, true), body: best, chao: false };
+          this.lastGrabAt = now;
+        } else if (situacaoBeirada && this.world.projectPoint) {
+          // Caindo perto da plataforma: a mão gruda na beirada
+          const proj = this.world.projectPoint(
+            { x: tip[0], y: tip[1], z: tip[2] }, true, undefined, (0x0010 << 16) | 0x0001,
+          );
+          if (proj && proj.collider) {
+            const pt = proj.point;
+            const d = Math.hypot(tip[0] - pt.x, tip[1] - pt.y, tip[2] - pt.z);
+            if (d < 0.26) {
+              const gb = proj.collider.parent();
+              const gt = gb.translation();
+              const gr = gb.rotation();
+              const loc = qrot(
+                { x: -gr.x, y: -gr.y, z: -gr.z, w: gr.w },
+                [pt.x - gt.x, pt.y - gt.y, pt.z - gt.z],
+              );
+              const data = this.R.JointData.spherical(
+                { x: 0, y: -0.12, z: 0 },
+                { x: loc[0], y: loc[1], z: loc[2] },
+              );
+              this.grabJoints[side] = { j: this.world.createImpulseJoint(data, hand, gb, true), body: gb, chao: true };
+              this.lastGrabAt = now;
+            }
+          }
+        } else if (!situacaoBeirada) {
           // Estica os braços na direção do oponente
           const hp2 = hand.translation();
           const dx = ot.x - hp2.x, dy = ot.y + 0.2 - hp2.y, dz = ot.z - hp2.z;
@@ -344,8 +391,22 @@ export class Ragdoll {
           hand.applyImpulse({ x: (dx / dl) * 8 * dt, y: (dy / dl) * 8 * dt, z: (dz / dl) * 8 * dt }, true);
         }
       }
+      // Pendurado na beirada: alívio pro braço aguentar o corpo
+      if (this.hangingOnLedge()) {
+        this.parts.torso.applyImpulse({ x: 0, y: 55 * dt, z: 0 }, true);
+        pelvis.applyImpulse({ x: 0, y: 30 * dt, z: 0 }, true);
+        // Pulo = se içar de volta
+        if (input.jump && now > this.jumpReadyAt) {
+          this.jumpReadyAt = now + 0.8;
+          this.lastJumpAt = now;
+          this.releaseGrabs();
+          this.hoverBlockUntil = now + 0.25;
+          pelvis.applyImpulse({ x: 0, y: 24, z: 0 }, true);
+          this.parts.torso.applyImpulse({ x: 0, y: 14, z: 0 }, true);
+        }
+      }
     } else if (this.grabJoints[0] || this.grabJoints[1]) {
-      this.releaseGrabs();
+      this.releaseGrabs(true);
     }
   }
 

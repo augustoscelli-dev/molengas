@@ -30,9 +30,49 @@
   #controles .p1 { color: #ff9a9a; } #controles .p2 { color: #9ac8ff; }
   .retrato { width: 40px; height: 40px; border-radius: 50%; vertical-align: middle;
     margin: 0 10px; border: 2px solid rgba(255,255,255,.6); object-fit: cover; }
+  #selecao {
+    position: fixed; inset: 0; z-index: 5; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 26px;
+    background: rgba(12,10,32,.82); color: #fff;
+    font-family: "Segoe UI", system-ui, sans-serif; text-shadow: 0 2px 0 rgba(0,0,0,.55);
+  }
+  .sel-titulo { font-size: 64px; font-weight: 900; letter-spacing: 3px;
+    -webkit-text-stroke: 2px rgba(0,0,0,.35); }
+  .sel-paineis { display: flex; align-items: center; gap: 40px; }
+  .sel-painel { display: flex; flex-direction: column; align-items: center; gap: 10px;
+    padding: 18px 26px; border-radius: 18px; border: 4px solid rgba(255,255,255,.25);
+    background: rgba(255,255,255,.06); }
+  .sel-painel.confirmado { border-color: #7ed957; box-shadow: 0 0 22px rgba(126,217,87,.45); }
+  .sel-painel img { width: 150px; height: 150px; border-radius: 50%; object-fit: cover;
+    border: 3px solid rgba(255,255,255,.5); }
+  .sel-vs { font-size: 42px; font-weight: 900; opacity: .85; }
+  .sel-nome { font-size: 24px; font-weight: 800; letter-spacing: 1px; }
+  .sel-dica { font-size: 13px; font-weight: 600; opacity: .75; }
+  #sel-mapa { text-align: center; }
 </style>
 </head>
 <body>
+<div id="selecao" style="display:none">
+  <div class="sel-titulo">MOLENGAS!</div>
+  <div class="sel-paineis">
+    <div class="sel-painel" id="sel-p0">
+      <img id="sel-img0" alt="">
+      <div class="sel-nome" id="sel-nome0"></div>
+      <div class="sel-dica">🔴 A · D muda &nbsp;·&nbsp; F confirma</div>
+    </div>
+    <div class="sel-vs">VS</div>
+    <div class="sel-painel" id="sel-p1x">
+      <img id="sel-img1" alt="">
+      <div class="sel-nome" id="sel-nome1"></div>
+      <div class="sel-dica">← · → muda &nbsp;·&nbsp; K confirma 🔵</div>
+    </div>
+  </div>
+  <div id="sel-mapa" style="display:none">
+    <div class="sel-nome">MAPA: <span id="sel-mapa-nome"></span></div>
+    <div class="sel-dica">🔴 A · D muda &nbsp;·&nbsp; F começa a luta!</div>
+  </div>
+  <div class="sel-dica">🎮 controles também funcionam: analógico anda · A pula/confirma · X soca · B agarra</div>
+</div>
 <div id="hud">
   <div id="placar"></div>
   <div id="msg"></div>

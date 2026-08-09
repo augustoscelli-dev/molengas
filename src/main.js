@@ -3,6 +3,8 @@ import * as RAPIER from '../libs/rapier3d.es.js';
 import { Ragdoll, PARTS, ARENA } from './ragdoll.js';
 import { MAPS, readInput, isDown } from './input.js';
 import { SKINS, getFaceTexture, toonMat, addOutline } from './skins.js';
+import { som, initSom } from './som.js';
+import { readGamepad, mergeInput } from './gamepad.js';
 
 await RAPIER.init();
 
@@ -693,8 +695,96 @@ function updateEfeitos(dt) {
 // ---------- HUD / rounds ----------
 const $ = (id) => document.getElementById(id);
 const score = [0, 0];
-let state = 'luta'; // luta | ponto | fim
+let state = 'selecao'; // selecao | intro | luta | ponto | fim
 let stateUntil = 0;
+let introStep = 0;
+const sel = { fase: 'skins', conf: [false, false] };
+
+// Som só pode ligar depois de um gesto do usuário (regra do navegador)
+const ligarSom = () => initSom();
+addEventListener('pointerdown', ligarSom, { once: true });
+addEventListener('keydown', ligarSom, { once: true });
+
+function atualizarSelecao() {
+  for (const i of [0, 1]) {
+    $('sel-img' + i).src = ASSET(`assets/retratos/${SKINS[skinIdx[i]].id}.jpg`);
+    $('sel-nome' + i).textContent = SKINS[skinIdx[i]].nome;
+    $(i === 0 ? 'sel-p0' : 'sel-p1x').classList.toggle('confirmado', sel.conf[i]);
+  }
+  $('sel-mapa').style.display = sel.fase === 'mapa' ? 'block' : 'none';
+  $('sel-mapa-nome').textContent = MAPAS[mapaIdx].nome;
+}
+function mostrarSelecao() {
+  score[0] = score[1] = 0;
+  updateScore();
+  sel.fase = 'skins';
+  sel.conf[0] = sel.conf[1] = false;
+  $('selecao').style.display = 'flex';
+  showMsg('');
+  state = 'selecao';
+  atualizarSelecao();
+}
+function startIntro(roundN) {
+  state = 'intro';
+  introStep = 0;
+  stateUntil = simNow + 0.9;
+  showMsg('ROUND ' + roundN);
+}
+function iniciarLuta() {
+  $('selecao').style.display = 'none';
+  p1.reset(); p2.reset(); mapa.reset?.();
+  som.confirmar();
+  startIntro(1);
+}
+
+// Seleção por teclado
+addEventListener('keydown', (e) => {
+  if (state !== 'selecao') return;
+  const mexer = (i, dir) => { setSkin(i, skinIdx[i] + dir); som.selecionar(); };
+  if (sel.fase === 'skins') {
+    if (!sel.conf[0] && e.code === 'KeyA') mexer(0, -1);
+    if (!sel.conf[0] && e.code === 'KeyD') mexer(0, 1);
+    if (!sel.conf[0] && e.code === 'KeyF') { sel.conf[0] = true; som.confirmar(); }
+    if (!sel.conf[1] && e.code === 'ArrowLeft') mexer(1, -1);
+    if (!sel.conf[1] && e.code === 'ArrowRight') mexer(1, 1);
+    if (!sel.conf[1] && e.code === 'KeyK') { sel.conf[1] = true; som.confirmar(); }
+    if (sel.conf[0] && sel.conf[1]) sel.fase = 'mapa';
+  } else {
+    if (e.code === 'KeyA') { setMapa(mapaIdx - 1); som.selecionar(); }
+    if (e.code === 'KeyD') { setMapa(mapaIdx + 1); som.selecionar(); }
+    if (e.code === 'KeyF') { iniciarLuta(); return; }
+  }
+  atualizarSelecao();
+});
+// Seleção por gamepad (detecção de borda)
+const gpMenuPrev = [{ x: 0, a: false }, { x: 0, a: false }];
+function menuGamepad() {
+  for (let i = 0; i < 2; i++) {
+    const gp = readGamepad(i);
+    if (!gp) continue;
+    const prev = gpMenuPrev[i];
+    const esq = gp.move.x < -0.5 && prev.x >= -0.5;
+    const dir = gp.move.x > 0.5 && prev.x <= 0.5;
+    const a = gp.jump && !prev.a;
+    prev.x = gp.move.x;
+    prev.a = gp.jump;
+    if (state !== 'selecao') continue;
+    if (sel.fase === 'skins') {
+      if (!sel.conf[i]) {
+        if (esq) { setSkin(i, skinIdx[i] - 1); som.selecionar(); }
+        if (dir) { setSkin(i, skinIdx[i] + 1); som.selecionar(); }
+        if (a) { sel.conf[i] = true; som.confirmar(); }
+      }
+      if (sel.conf[0] && sel.conf[1]) sel.fase = 'mapa';
+      atualizarSelecao();
+    } else if (i === 0) {
+      if (esq) { setMapa(mapaIdx - 1); som.selecionar(); }
+      if (dir) { setMapa(mapaIdx + 1); som.selecionar(); }
+      if (a) { iniciarLuta(); return; }
+      atualizarSelecao();
+    }
+  }
+}
 
 function updateScore() {
   const s0 = SKINS[skinIdx[0]], s1 = SKINS[skinIdx[1]];
@@ -711,10 +801,29 @@ function showMsg(txt, sub = '') {
 setSkin(0, skinIdx[0]);
 setSkin(1, skinIdx[1]);
 setMapa(parseInt(new URLSearchParams(location.search).get('mapa'), 10) || 0);
-showMsg('MOLENGAS!', 'Derrube o outro da arena — primeiro a fazer ' + WIN_SCORE + ' pontos vence · teclas 1 e 2 trocam as fantasias');
-setTimeout(() => { if (state === 'luta') showMsg(''); }, 3500);
+if (new URLSearchParams(location.search).has('direto')) {
+  // dev: pula a tela de seleção
+  $('selecao').style.display = 'none';
+  state = 'luta';
+} else {
+  mostrarSelecao();
+}
 
 function handleRounds(now) {
+  if (state === 'intro') {
+    if (now > stateUntil) {
+      if (introStep === 0) {
+        introStep = 1;
+        stateUntil = now + 0.6;
+        showMsg('LUTEM! 🥊');
+        som.lutem();
+      } else {
+        showMsg('');
+        state = 'luta';
+      }
+    }
+    return;
+  }
   if (state === 'luta') {
     const y1 = p1.parts.pelvis.translation().y;
     const y2 = p2.parts.pelvis.translation().y;
@@ -725,23 +834,23 @@ function handleRounds(now) {
       state = 'ponto';
       stateUntil = now + 1.6;
       const nome = SKINS[skinIdx[winner]].nome;
+      som.queda();
+      som.torcidaOh();
       if (score[winner] >= WIN_SCORE) {
         state = 'fim';
-        showMsg('🏆 ' + nome + ' VENCEU!', 'Aperte R pra recomeçar');
+        som.vitoria();
+        showMsg('🏆 ' + nome + ' VENCEU!', 'Aperte R pra voltar à seleção');
       } else {
+        som.ponto();
         showMsg('PONTO DO ' + nome + '!');
       }
     }
   } else if (state === 'ponto' && now > stateUntil) {
     p1.reset(); p2.reset(); mapa.reset?.();
-    showMsg('');
-    state = 'luta';
+    startIntro(score[0] + score[1] + 1);
   } else if (state === 'fim' && isDown('KeyR')) {
-    score[0] = score[1] = 0;
-    updateScore();
     p1.reset(); p2.reset(); mapa.reset?.();
-    showMsg('');
-    state = 'luta';
+    mostrarSelecao();
   }
 }
 
@@ -761,16 +870,17 @@ function frame(t) {
   acc += fdt;
   last = t;
 
+  const IDLE_IN = { move: { x: 0, z: 0 }, punch: false, grab: false, jump: false };
   while (acc >= FIXED_DT) {
     acc -= FIXED_DT;
     simNow += FIXED_DT;
-    if (state !== 'fim') {
-      p1.update(FIXED_DT, simNow, readInput(MAPS.p1));
-      p2.update(FIXED_DT, simNow, readInput(MAPS.p2));
-    }
+    const lutando = state === 'luta';
+    p1.update(FIXED_DT, simNow, lutando ? mergeInput(readInput(MAPS.p1), readGamepad(0)) : IDLE_IN);
+    p2.update(FIXED_DT, simNow, lutando ? mergeInput(readInput(MAPS.p2), readGamepad(1)) : IDLE_IN);
     world.step();
     handleRounds(simNow);
   }
+  menuGamepad();
 
   syncVisual(p1, visuals[0], simNow);
   syncVisual(p2, visuals[1], simNow);
@@ -796,6 +906,7 @@ function frame(t) {
         p._bolaCd = simNow + 1.2;
         p.stun(simNow + 1.1);
         p.lastHitLandedAt = simNow;
+        som.bolada();
         trauma = Math.min(1, trauma + 0.5);
       }
     }
@@ -809,12 +920,18 @@ function frame(t) {
       const pos = p.parts.head.translation();
       burstEstrelas(pos);
       powFx(pos);
+      som.acerto();
       trauma = Math.min(1, trauma + 0.55);
     }
     if (p.stunUntil > 0 && p.stunUntil > (p._stunVisto ?? 0)) {
       p._stunVisto = p.stunUntil;
       puffFx(p.parts.pelvis.translation());
     }
+    // Ganchos de som (a física marca o instante; aqui a gente toca)
+    if (p.lastPunchStartAt > (p._sSoco ?? -1)) { p._sSoco = p.lastPunchStartAt; som.soco(); }
+    if (p.lastJumpAt > (p._sPulo ?? -1)) { p._sPulo = p.lastJumpAt; som.pulo(); }
+    if (p.lastGrabAt > (p._sGarra ?? -1)) { p._sGarra = p.lastGrabAt; som.agarra(); }
+    if (p.lastThrowAt > (p._sArr ?? -1)) { p._sArr = p.lastThrowAt; som.arremesso(); }
   }
   updateEfeitos(fdt);
   mirarHolofotes(simNow);

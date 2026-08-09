@@ -4,18 +4,17 @@ Legenda: 💥 impacto alto · 🔨 esforço (P/M/G) · ✅ feito
 
 ## Prioridade alta (próximas)
 
-1. 💥 **Som** 🔨M — o jogo é mudo! Socos, POF!, queda no vazio (grito
-   sumindo), bolada, torcida reagindo, musiquinha de menu. Web Audio +
-   efeitos gerados ou banco livre (Kenney/freesound).
-2. 💥 **Gamepad** 🔨P — 2 controles no sofá é o jeito certo de jogar
-   (Gamepad API, mapear analógico + 3 botões).
-3. 💥 **Tela de pré-luta** 🔨M — seleção de fantasia com retratos
-   grandes + escolha de mapa + "ROUND 1... LUTEM!", em vez de teclas
-   1/2/3 durante o jogo.
-4. **Agarrar a beirada** 🔨M — caiu da borda mas a mão alcançou? Fica
-   pendurado e pode subir de volta (clássico Gang Beasts, gera drama).
-5. **Arremesso com carga** 🔨P — segurando alguém/caixote, girar
-   acumula força; soltar arremessa longe.
+1. ✅ **Som** — Web Audio sintetizado (src/som.js): soco, acerto,
+   bolada, queda, torcida (murmúrio em loop + "oh!"), fanfarras,
+   bipes de menu. Liga no primeiro clique/tecla.
+2. ✅ **Gamepad** — controle i = jogador i; analógico/dpad anda,
+   A pula/confirma, X ou RB soca, B ou LB agarra. Funciona nos menus.
+3. ✅ **Tela de pré-luta** — retratos grandes + VS, cada jogador
+   confirma sua fantasia, P1 escolhe o mapa, "ROUND N... LUTEM!".
+4. ✅ **Agarrar a beirada** — caindo perto da plataforma, segurar
+   agarrar gruda a mão na borda; pulo se iça de volta.
+5. ✅ **Arremesso com carga** — girar segurando algo e soltar =
+   impulso extra proporcional ao giro.
 
 ## Combate
 
