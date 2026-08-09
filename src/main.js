@@ -1857,6 +1857,8 @@ if (PARAMS.has('servidor')) {
   $('selecao').style.display = 'none';
   const nBots = Math.min(parseInt(PARAMS.get('bots'), 10) || 0, 3);
   const configs = [{ ...selCfg[0] }, { ...selCfg[1] }];
+  // ?cpu: os dois lutadores base viram bots (auto-luta pra demo/screenshot)
+  if (PARAMS.has('cpu')) { configs[0].tipo = 'cpu'; configs[1].tipo = 'cpu'; }
   for (let i = 0; i < nBots; i++) configs.push({ tipo: 'cpu', skin: (4 + i * 3) % SKINS.length });
   montarLutadores(configs.slice(0, 4));
   updateScore();
