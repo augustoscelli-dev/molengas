@@ -674,27 +674,37 @@ const MAPAS = [
         s.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
         scene.add(s); m.meshes.push(s);
       });
-      // CASAS destrutiveis na TERRA (bordas): corra ate a terra, arranque um bloco e jogue no rival
-      const cores = [0xff6b6b, 0xffd166, 0x06d6a0, 0x4d96ff, 0xf78fb3, 0xffa552, 0xe6e6e6];
-      const torre = (px, pz, alt) => {
-        for (let col = 0; col < 2; col++) for (let a = 0; a < alt; a++) {
-          const x = px + (col - 0.5) * 0.57, yy = 0.22 + a * 0.44;
-          const rb = world.createRigidBody(
-            RAPIER.RigidBodyDesc.dynamic().setTranslation(x, yy, pz).setLinearDamping(0.15).setAngularDamping(0.35),
-          );
-          world.createCollider(
-            RAPIER.ColliderDesc.cuboid(0.28, 0.21, 0.28).setMass(3).setFriction(0.7).setCollisionGroups(PROP_GROUPS), rb,
-          );
-          const me = new THREE.Mesh(
-            new THREE.BoxGeometry(0.56, 0.42, 0.56),
-            new THREE.MeshStandardMaterial({ color: cores[(a + col) % cores.length], roughness: 0.8 }),
-          );
-          me.castShadow = true; me.receiveShadow = true; scene.add(me);
-          m.bodies.push(rb); m.meshes.push(me); m.syncPairs.push([rb, me]); m.props.push(rb); m._blocos.push([rb, x, yy, pz]);
-        }
-      };
-      // so na TERRA (fora do disco de agua, raio > 4.4)
-      torre(-6, -3, 4); torre(6, -3, 4); torre(-6.4, 2.6, 3); torre(6.4, 2.6, 3); torre(0, -6, 4); torre(0, 6, 3);
+      // CASAS destrutiveis na TERRA (bordas): casinhas de favela coloridas, empilhadas.
+      // Cor aplicada por codigo (o GLB veio sem textura). Cada casa e um prop
+      // agarravel/socavel -> arranque uma da pilha e jogue no rival.
+      const cores = [0xff6b6b, 0xffd166, 0x06d6a0, 0x4d96ff, 0xf78fb3, 0xffa552, 0xf4f4f4];
+      new GLTFLoader().load(ASSET('assets/modelos/casa-low.glb'), (g) => {
+        let geo = null;
+        g.scene.traverse((o) => { if (o.isMesh && !geo) geo = o.geometry; });
+        if (!geo) return;
+        geo = geo.clone(); geo.center();                       // casa centrada na origem
+        geo.computeVertexNormals();                            // normais (o GLB decimado perdeu) -> pega luz/cor
+        geo.computeBoundingBox();
+        const hs = new THREE.Vector3(); geo.boundingBox.getSize(hs);
+        const lado = 0.6, esc = lado / Math.max(hs.x, hs.z), hCasa = hs.y * esc;
+        let ci = 0;
+        const torre = (px, pz, alt) => {
+          for (let a = 0; a < alt; a++) {
+            const yy = hCasa * 0.5 + a * hCasa;
+            const rb = world.createRigidBody(
+              RAPIER.RigidBodyDesc.dynamic().setTranslation(px, yy, pz).setLinearDamping(0.15).setAngularDamping(0.35),
+            );
+            world.createCollider(
+              RAPIER.ColliderDesc.cuboid(lado * 0.5, hCasa * 0.5, lado * 0.5).setMass(3).setFriction(0.7).setCollisionGroups(PROP_GROUPS), rb,
+            );
+            const me = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: cores[ci++ % cores.length], roughness: 0.85 }));
+            me.scale.setScalar(esc); me.castShadow = true; me.receiveShadow = true; scene.add(me);
+            m.bodies.push(rb); m.meshes.push(me); m.syncPairs.push([rb, me]); m.props.push(rb); m._blocos.push([rb, px, yy, pz]);
+          }
+        };
+        // so na TERRA (fora do disco de agua, raio > 4.4)
+        torre(-6, -3, 4); torre(6, -3, 4); torre(-6.4, 2.6, 3); torre(6.4, 2.6, 3); torre(0, -6, 4); torre(0, 6, 3);
+      });
       m.reset = () => resetBlocos(m);
     },
   },
