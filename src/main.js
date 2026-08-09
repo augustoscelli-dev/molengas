@@ -945,9 +945,13 @@ function buildVisual(skin, fase = 0, slot = 0) {
     if (ESTILO === 'c') return new THREE.MeshStandardMaterial({ color: clarear(color, 0.12), roughness: 0.8 });
     if (ESTILO === 'f') return new THREE.MeshStandardMaterial({ color: dessaturar(color, 0.32), roughness: 0.88 });
     if (ESTILO === 'd') return toonMat(THREE, color);
+    if (ESTILO === 'm') { // mech metálico: aço tingido pela cor do lutador
+      const aco = new THREE.Color(0x8b95a4).lerp(new THREE.Color(color), 0.28);
+      return new THREE.MeshStandardMaterial({ color: aco, metalness: 0.85, roughness: 0.38, emissive: new THREE.Color(color).multiplyScalar(0.12) });
+    }
     return vinilMat(THREE, color, 1);
   };
-  const contorno = (m, esc = 1.035) => (ESTILO === 'c' || ESTILO === 'f' ? m : addOutline(THREE, m, ESTILO === 'd' ? 1.055 : esc));
+  const contorno = (m, esc = 1.035) => (ESTILO === 'c' || ESTILO === 'f' || ESTILO === 'm' ? m : addOutline(THREE, m, ESTILO === 'd' ? 1.055 : esc));
   const matFor = (cat) => mats[cat] ||= mkMat(skin.cores[cat]);
   const bolinha = (mat, r, escala) => {
     const b = new THREE.Mesh(new THREE.SphereGeometry(r, 18, 14), mat);
@@ -975,7 +979,8 @@ function buildVisual(skin, fase = 0, slot = 0) {
   };
   const CHIBI = ESTILO === 'b';
   const GB = ESTILO === 'f';
-  const ARTIC = ESTILO === 'c' || GB;
+  const MECH = ESTILO === 'm';
+  const ARTIC = ESTILO === 'c' || GB || MECH;
 
   // Estilo G (protótipo): modelo 3D profissional (GLB) colado na física
   if (ESTILO === 'g') {
@@ -1015,6 +1020,73 @@ function buildVisual(skin, fase = 0, slot = 0) {
       scene.add(obj);
       meshes[spec.name] = obj;
     }
+    return meshes;
+  }
+
+  // Estilo R (rigado): "corta" o GLB em 11 pedaços (por osso mais próximo) e cola
+  // cada um no corpo da física — o Jaeger passa a ARTICULAR (soco/chute).
+  if (ESTILO === 'r') {
+    const grupos = {};
+    for (const spec of PARTS) {
+      const g = new THREE.Group();
+      if (spec.name === 'torso') g._baseS = [1, 1, 1];
+      scene.add(g); meshes[spec.name] = g; grupos[spec.name] = g;
+    }
+    const nomesGLB = MODELO_GLB.split(',');
+    const nomeGLB = (nomesGLB[slot] || nomesGLB[0] || 'jaeger-low').trim();
+    const anchors = PARTS.map((p) => new THREE.Vector3(p.off[0], p.off[1], p.off[2]));
+    const classify = (pt) => {
+      let best = 0, bd = 1e9;
+      for (let i = 0; i < anchors.length; i++) { const d = pt.distanceToSquared(anchors[i]); if (d < bd) { bd = d; best = i; } }
+      return PARTS[best].name;
+    };
+    new GLTFLoader().load(ASSET('assets/modelos/' + nomeGLB + '.glb'), (gltf) => {
+      const modelo = gltf.scene; modelo.updateMatrixWorld(true);
+      const box = new THREE.Box3().setFromObject(modelo);
+      const size = new THREE.Vector3(), center = new THREE.Vector3();
+      box.getSize(size); box.getCenter(center);
+      const RH = 1.68, pesY = 0.08;                       // altura útil pé->cabeça do ragdoll
+      const s = RH / (size.y || 1);
+      const offX = -center.x * s, offZ = -center.z * s, offY = pesY - box.min.y * s;
+      const tinta = new THREE.Color(skin.cores.torso);
+      const partArr = {}; for (const p of PARTS) partArr[p.name] = [];
+      const vA = new THREE.Vector3(), vB = new THREE.Vector3(), vC = new THREE.Vector3(), cen = new THREE.Vector3();
+      let baseMat = null;
+      modelo.traverse((o) => {
+        if (!o.isMesh) return;
+        if (!baseMat) {
+          const src = Array.isArray(o.material) ? o.material[0] : o.material;
+          baseMat = src.clone(); baseMat.map = null; baseMat.vertexColors = false;
+          if (!baseMat.color) baseMat.color = new THREE.Color(0x8895a6);
+          baseMat.color.lerp(tinta, 0.4);
+        }
+        const g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry;
+        const pos = g.attributes.position, wm = o.matrixWorld;
+        for (let f = 0; f < pos.count; f += 3) {
+          vA.fromBufferAttribute(pos, f).applyMatrix4(wm).multiplyScalar(s);
+          vB.fromBufferAttribute(pos, f + 1).applyMatrix4(wm).multiplyScalar(s);
+          vC.fromBufferAttribute(pos, f + 2).applyMatrix4(wm).multiplyScalar(s);
+          vA.x += offX; vA.y += offY; vA.z += offZ;
+          vB.x += offX; vB.y += offY; vB.z += offZ;
+          vC.x += offX; vC.y += offY; vC.z += offZ;
+          cen.copy(vA).add(vB).add(vC).multiplyScalar(1 / 3);
+          const part = classify(cen);
+          partArr[part].push(vA.x, vA.y, vA.z, vB.x, vB.y, vB.z, vC.x, vC.y, vC.z);
+        }
+      });
+      for (const p of PARTS) {
+        const arr = partArr[p.name]; if (!arr.length) continue;
+        const f32 = new Float32Array(arr);
+        for (let i = 0; i < f32.length; i += 3) { f32[i] -= p.off[0]; f32[i + 1] -= p.off[1]; f32[i + 2] -= p.off[2]; }
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.BufferAttribute(f32, 3));
+        geo.computeVertexNormals();
+        const mesh = new THREE.Mesh(geo, baseMat);
+        mesh.castShadow = true; mesh.receiveShadow = true;
+        grupos[p.name].add(mesh);
+      }
+      registrarFlashMats(meshes);
+    });
     return meshes;
   }
 
