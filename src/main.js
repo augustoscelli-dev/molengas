@@ -719,6 +719,8 @@ const FOFURA = { arms: 1.6, legs: 1.55 };
 // Estilos de personagem em teste (?estilo=a|b|c|d):
 // a=feijão vinil · b=chibi cabeçudo · c=massinha articulada · d=cartum chapado
 const ESTILO = PARAMS.get('estilo') || 'a';
+// ?glb=NOME escolhe o modelo 3D do estilo 'g' (assets/modelos/NOME.glb)
+const MODELO_GLB = PARAMS.get('glb') || 'robo';
 
 function clarear(cor, t) {
   const f = (v) => Math.round(v + (255 - v) * t);
@@ -783,16 +785,23 @@ function buildVisual(skin, fase = 0) {
       if (spec.name === 'torso') {
         obj = new THREE.Group();
         obj._baseS = [1, 1, 1];
-        new GLTFLoader().load(ASSET('assets/modelos/robo.glb'), (gltf) => {
+        new GLTFLoader().load(ASSET('assets/modelos/' + MODELO_GLB + '.glb'), (gltf) => {
           const modelo = gltf.scene;
-          modelo.scale.setScalar(0.42);
-          modelo.position.y = -1.28; // pés do modelo no chão (tronco fica a ~1.28)
+          // Auto-encaixe: escala pra ~2.33 de altura e ancora o tronco a
+          // ~55% dos pés (funciona com qualquer GLB, não só o robo).
+          const box = new THREE.Box3().setFromObject(modelo);
+          const size = new THREE.Vector3(), center = new THREE.Vector3();
+          box.getSize(size); box.getCenter(center);
+          const alvoH = 2.33, torsoFrac = 0.55;
+          const s = alvoH / (size.y || 1);
+          modelo.scale.setScalar(s);
+          modelo.position.set(-center.x * s, -(box.min.y * s) - torsoFrac * alvoH, -center.z * s);
           const tinta = new THREE.Color(skin.cores.torso);
           modelo.traverse((o) => {
             if (o.isMesh) {
               o.castShadow = true;
               o.material = o.material.clone();
-              o.material.color.lerp(tinta, 0.45);
+              o.material.color.lerp(tinta, 0.4);
             }
           });
           obj.add(modelo);
