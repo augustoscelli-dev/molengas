@@ -184,6 +184,16 @@ export class Ragdoll {
       const av = pelvis.angvel();
       const tq = clamp(err * 14 - av.y * 3.5, -18, 18);
       pelvis.applyTorqueImpulse({ x: 0, y: tq * dt, z: 0 }, true);
+      // Tronco e cabeça acompanham a direção (suave — soco ainda gira a cabeça)
+      for (const bn of ['torso', 'head']) {
+        const b = this.parts[bn];
+        const f2 = qrot(b.rotation(), [0, 0, 1]);
+        const e2 = wrapPi(this.heading - Math.atan2(f2[0], f2[2]));
+        const av2b = b.angvel();
+        const forte = bn === 'torso';
+        const t2 = clamp(e2 * (forte ? 5 : 1.6) - av2b.y * (forte ? 1.2 : 0.4), -7, 7);
+        b.applyTorqueImpulse({ x: 0, y: t2 * dt, z: 0 }, true);
+      }
       // Pulo
       if (input.jump && grounded && now > this.jumpReadyAt) {
         this.jumpReadyAt = now + 0.7;

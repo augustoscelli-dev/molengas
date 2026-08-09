@@ -2,7 +2,7 @@ import * as THREE from '../libs/three.module.js';
 import * as RAPIER from '../libs/rapier3d.es.js';
 import { Ragdoll, PARTS, ARENA } from './ragdoll.js';
 import { MAPS, readInput, isDown } from './input.js';
-import { SKINS, getFaceTexture } from './skins.js';
+import { SKINS, getFaceTexture, toonMat, addOutline } from './skins.js';
 
 await RAPIER.init();
 
@@ -67,7 +67,10 @@ addEventListener('resize', () => {
   renderer.setSize(innerWidth, innerHeight);
 });
 
-scene.add(new THREE.HemisphereLight(0xbbbbff, 0x333322, 0.9));
+scene.add(new THREE.HemisphereLight(0xccccff, 0x443344, 1.05));
+const rim = new THREE.DirectionalLight(0x7f9dff, 0.9);
+rim.position.set(-4, 5, -7);
+scene.add(rim);
 const sun = new THREE.DirectionalLight(0xffffff, 1.6);
 sun.position.set(6, 12, 5);
 sun.castShadow = true;
@@ -104,27 +107,51 @@ const CATEGORIA = {
   thighL: 'legs', thighR: 'legs', calfL: 'legs', calfR: 'legs',
 };
 
+// Gordurinha visual por categoria (a física continua com as medidas originais)
+const FOFURA = { head: 1, torso: 1.12, pelvis: 1.16, arms: 1.28, legs: 1.22 };
+
 function buildVisual(skin) {
   const meshes = { _skin: skin };
   const mats = {};
-  const matFor = (cat) => mats[cat] ||= new THREE.MeshStandardMaterial({ color: skin.cores[cat], roughness: 0.6 });
+  const matFor = (cat) => mats[cat] ||= toonMat(THREE, skin.cores[cat]);
   for (const spec of PARTS) {
+    const cat = CATEGORIA[spec.name];
     let obj;
     if (spec.shape === 'ball') {
       obj = new THREE.Group();
+      obj.scale.setScalar(1.42); // cabeçona
       const skull = new THREE.Mesh(new THREE.SphereGeometry(spec.r, 24, 18), matFor('head'));
       skull.castShadow = true;
+      addOutline(THREE, skull);
       obj.add(skull);
       const face = new THREE.Mesh(
-        new THREE.CircleGeometry(spec.r * 0.78, 24),
+        new THREE.CircleGeometry(spec.r * 0.82, 24),
         new THREE.MeshBasicMaterial({ map: getFaceTexture(THREE, skin.face, false), transparent: true }),
       );
       face.position.z = spec.r + 0.005;
       obj.add(face);
       meshes._face = face;
     } else {
-      obj = new THREE.Mesh(new THREE.CapsuleGeometry(spec.r, spec.hh * 2, 6, 14), matFor(CATEGORIA[spec.name]));
+      const gordo = spec.r * FOFURA[cat];
+      obj = new THREE.Mesh(new THREE.CapsuleGeometry(gordo, spec.hh * 2, 6, 14), matFor(cat));
       obj.castShadow = true;
+      addOutline(THREE, obj);
+      // Mãozinhas e pezinhos
+      if (spec.name.startsWith('forearm')) {
+        const mao = new THREE.Mesh(new THREE.SphereGeometry(spec.r * 1.5, 14, 10), matFor('arms'));
+        mao.position.y = -(spec.hh + spec.r * 0.5);
+        mao.castShadow = true;
+        addOutline(THREE, mao);
+        obj.add(mao);
+      }
+      if (spec.name.startsWith('calf')) {
+        const pe = new THREE.Mesh(new THREE.SphereGeometry(spec.r * 1.45, 14, 10), matFor('legs'));
+        pe.position.set(0, -(spec.hh + spec.r * 0.35), 0.04);
+        pe.scale.set(1, 0.55, 1.4);
+        pe.castShadow = true;
+        addOutline(THREE, pe);
+        obj.add(pe);
+      }
     }
     scene.add(obj);
     meshes[spec.name] = obj;
@@ -275,11 +302,38 @@ function frame(t) {
   const b = p2.parts.pelvis.translation();
   const midX = (a.x + b.x) / 2, midZ = (a.z + b.z) / 2;
   const spread = Math.min(Math.hypot(a.x - b.x, a.z - b.z), 12);
-  const target = new THREE.Vector3(midX * 0.6, 3.9 + spread * 0.3, 6.6 + spread * 0.55);
-  camera.position.lerp(target, 0.05);
-  camera.lookAt(midX * 0.6, 0.8, midZ * 0.3);
+  if (new URLSearchParams(location.search).has('debug')) {
+    const q = p1.parts.pelvis.rotation();
+    const qh = p1.parts.head.rotation();
+    const yawQ = (r) => {
+      const fx = 2 * (r.x * r.z + r.w * r.y);
+      const fz = 1 - 2 * (r.x * r.x + r.y * r.y);
+      return Math.atan2(fx, fz).toFixed(2);
+    };
+    const d = document.getElementById('debug');
+    d.style.display = 'block';
+    d.textContent = `t=${simNow.toFixed(1)}s heading=${p1.heading.toFixed(2)} pelvisYaw=${yawQ(q)} headYaw=${yawQ(qh)}`;
+  }
+  // ?zoom na URL = câmera de retrato, pra inspecionar as fantasias de perto
+  if (new URLSearchParams(location.search).has('zoom')) {
+    camera.position.set(midX * 0.6, 1.9, 3.6);
+    camera.lookAt(midX * 0.6, 1.05, 0);
+  } else {
+    const target = new THREE.Vector3(midX * 0.6, 3.9 + spread * 0.3, 6.6 + spread * 0.55);
+    camera.position.lerp(target, 0.05);
+    camera.lookAt(midX * 0.6, 0.8, midZ * 0.3);
+  }
 
   renderer.render(scene, camera);
 }
+// ?avancar=N na URL: simula N segundos de física antes do primeiro frame (debug/screenshot)
+const avancar = parseFloat(new URLSearchParams(location.search).get('avancar') || '0');
+for (let i = 0; i < avancar * 60; i++) {
+  simNow += FIXED_DT;
+  p1.update(FIXED_DT, simNow, readInput(MAPS.p1));
+  p2.update(FIXED_DT, simNow, readInput(MAPS.p2));
+  world.step();
+}
+
 document.getElementById('carregando').style.display = 'none';
 requestAnimationFrame(frame);
