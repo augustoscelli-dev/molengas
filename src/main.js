@@ -2,7 +2,7 @@ import * as THREE from '../libs/three.module.js';
 import * as RAPIER from '../libs/rapier3d.es.js';
 import { Ragdoll, PARTS, ARENA } from './ragdoll.js';
 import { MAPS, readInput, isDown } from './input.js';
-import { SKINS, getFaceTexture, toonMat, addOutline } from './skins.js';
+import { SKINS, getFaceTexture, toonMat, addOutline, vinilMat } from './skins.js';
 import { som, initSom } from './som.js';
 import { readGamepad, mergeInput } from './gamepad.js';
 
@@ -633,11 +633,9 @@ function escurecer(cor, t) {
 function buildVisual(skin, fase = 0) {
   const meshes = { _skin: skin, _fase: fase };
   const mats = {};
-  const fantasmagorico = (m) => {
-    if (skin.opacidade) { m.transparent = true; m.opacity = skin.opacidade; }
-    return m;
-  };
-  const matFor = (cat) => mats[cat] ||= fantasmagorico(toonMat(THREE, skin.cores[cat]));
+  // Direção aprovada F1: corpo de gominha translúcida com verniz de vinil
+  const opCorpo = skin.opacidade ?? 0.9;
+  const matFor = (cat) => mats[cat] ||= vinilMat(THREE, skin.cores[cat], opCorpo);
   const bolinha = (mat, r, escala) => {
     const b = new THREE.Mesh(new THREE.SphereGeometry(r, 18, 14), mat);
     if (escala) b.scale.set(...escala);
@@ -676,7 +674,7 @@ function buildVisual(skin, fase = 0) {
           t.colorSpace = THREE.SRGBColorSpace;
           return t;
         })();
-        matTorso = toonMat(THREE, 0xffffff);
+        matTorso = vinilMat(THREE, 0xffffff, 1); // skins "vestidas" são opacas
         matTorso.map = skin._texTorso;
       }
       obj = new THREE.Mesh(new THREE.CapsuleGeometry(0.185, 0.18, 6, 16), matTorso);
@@ -686,7 +684,7 @@ function buildVisual(skin, fase = 0) {
       obj._baseY = 1.05;
       if (!skin.semBarriga) {
         const corBarriga = skin.cores.barriga ?? clarear(skin.cores.torso, 0.38);
-        const barriga = new THREE.Mesh(new THREE.SphereGeometry(0.155, 18, 14), fantasmagorico(toonMat(THREE, corBarriga)));
+        const barriga = new THREE.Mesh(new THREE.SphereGeometry(0.155, 18, 14), vinilMat(THREE, corBarriga, Math.min(1, opCorpo + 0.06)));
         barriga.position.set(0, -0.04, 0.095);
         barriga.scale.set(0.78, 1.05, 0.5);
         obj.add(barriga);
@@ -710,9 +708,9 @@ function buildVisual(skin, fase = 0) {
           obj.add(cap);
         }
       }
-      // Luvas e botas em tom mais escuro (contraste fofo)
+      // Luvas e botas em vinil opaco mais escuro (peças do brinquedo)
       if (spec.name.startsWith('forearm')) {
-        const mao = bolinha(mats.maos ||= toonMat(THREE, escurecer(skin.cores.arms, 0.28)), spec.r * 1.55);
+        const mao = bolinha(mats.maos ||= vinilMat(THREE, escurecer(skin.cores.arms, 0.28), 1), spec.r * 1.55);
         mao.position.y = -(spec.hh + spec.r * 0.5);
         obj.add(mao);
       }
@@ -720,7 +718,7 @@ function buildVisual(skin, fase = 0) {
         // Botinha: capsulinha deitada apontando pra frente
         const pe = new THREE.Mesh(
           new THREE.CapsuleGeometry(0.062, 0.09, 6, 12),
-          mats.pes ||= toonMat(THREE, escurecer(skin.cores.legs, 0.28)),
+          mats.pes ||= vinilMat(THREE, escurecer(skin.cores.legs, 0.28), 1),
         );
         pe.rotation.x = Math.PI / 2;
         pe.scale.set(1.05, 1, 0.8);

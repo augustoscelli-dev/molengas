@@ -16,6 +16,23 @@ function toonGradient(THREE) {
 export function toonMat(THREE, color) {
   return new THREE.MeshToonMaterial({ color, gradientMap: toonGradient(THREE) });
 }
+// Material "gominha de vinil" (direção F1 aprovada): gelatina translúcida
+// com verniz brilhante de art toy.
+export function vinilMat(THREE, color, opacidade = 0.9) {
+  return new THREE.MeshPhysicalMaterial({
+    color,
+    roughness: 0.16,
+    metalness: 0,
+    clearcoat: 1,
+    clearcoatRoughness: 0.12,
+    transparent: opacidade < 1,
+    opacity: opacidade,
+    // brilho interno de bala de goma (fake subsurface)
+    emissive: color,
+    emissiveIntensity: 0.32,
+  });
+}
+
 let outlineMatCache = null;
 export function addOutline(THREE, m, escala = 1.055) {
   outlineMatCache ||= new THREE.MeshBasicMaterial({ color: 0x241640, side: THREE.BackSide });
@@ -51,22 +68,20 @@ function drawFace(g, style, variant) {
   }
   if (variant === 'blink') {
     // olhos fechados felizes (arco pra baixo)
-    g.strokeStyle = '#241640';
-    g.lineWidth = 11;
+    g.strokeStyle = '#1c1226';
+    g.lineWidth = 12;
     for (const cx of eyeXs) {
-      g.beginPath(); g.arc(cx, 96, eyeR * 0.9, 0.25, Math.PI - 0.25); g.stroke();
+      g.beginPath(); g.arc(cx, 96, eyeR * 0.85, 0.25, Math.PI - 0.25); g.stroke();
     }
   } else {
-    // olhos: esclera branca, contorno, pupila e brilho
+    // Identidade F1: olhões pretos de bolinha, brilhantes, sem esclera
     for (const cx of eyeXs) {
-      g.fillStyle = '#fff';
-      g.strokeStyle = '#241640';
-      g.lineWidth = 8;
-      g.beginPath(); g.ellipse(cx, 104, eyeR, eyeR * 1.14, 0, 0, 7); g.fill(); g.stroke();
-      g.fillStyle = '#241640';
-      g.beginPath(); g.arc(cx + 3, 108, eyeR * 0.45, 0, 7); g.fill();
-      g.fillStyle = '#fff';
-      g.beginPath(); g.arc(cx + eyeR * 0.28, 96, eyeR * 0.16, 0, 7); g.fill();
+      g.fillStyle = '#1c1226';
+      g.beginPath(); g.arc(cx, 104, eyeR, 0, 7); g.fill();
+      g.fillStyle = 'rgba(255,255,255,0.95)';
+      g.beginPath(); g.arc(cx - eyeR * 0.3, 96, eyeR * 0.3, 0, 7); g.fill();
+      g.fillStyle = 'rgba(255,255,255,0.6)';
+      g.beginPath(); g.arc(cx + eyeR * 0.35, 112, eyeR * 0.14, 0, 7); g.fill();
     }
   }
   g.strokeStyle = '#241640';
@@ -109,9 +124,9 @@ export function getFaceTexture(THREE, style, variant = 'ok') {
   return faceCache[key];
 }
 
-// Helpers de acessórios
+// Helpers de acessórios (acabamento de vinil opaco, como peças do brinquedo)
 function mesh(THREE, geo, color) {
-  const m = new THREE.Mesh(geo, toonMat(THREE, color));
+  const m = new THREE.Mesh(geo, vinilMat(THREE, color, 1));
   m.castShadow = true;
   addOutline(THREE, m);
   return m;
