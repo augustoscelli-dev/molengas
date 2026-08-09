@@ -66,6 +66,8 @@ export class Ragdoll {
     this.rivals = []; // outros lutadores (briga livre: pode ter até 3)
     this.props = []; // corpos agarráveis/socáveis da arena (caixotes, bola…)
     this.stunUntil = 0;
+    this.downUntil = 0;         // nocauteado: desaba mole por um tempo (dá pra arrastar)
+    this.lastKnockdownAt = -10; // pra som/efeito de nocaute
     this.punchReadyAt = 0;
     this.punchUntil = 0;
     this.punchHit = true;
@@ -125,6 +127,16 @@ export class Ragdoll {
 
   stun(until) {
     this.stunUntil = Math.max(this.stunUntil, until);
+    this.releaseGrabs();
+  }
+
+  isDowned(now) { return now < this.downUntil; }
+
+  // NOCAUTE: desaba mole por um tempão (o oponente pode agarrar e arrastar).
+  knockdown(now, dur = 3.6) {
+    this.downUntil = Math.max(this.downUntil, now + dur);
+    this.stunUntil = Math.max(this.stunUntil, this.downUntil); // fica mole o tempo todo
+    this.lastKnockdownAt = now;
     this.releaseGrabs();
   }
 
@@ -197,8 +209,10 @@ export class Ragdoll {
   update(dt, now, input) {
     this._now = now;
     const stunned = this.isStunned(now);
-    // recuperação gradual: dano de combo esvai, fôlego volta
-    this.dano = Math.max(0, this.dano - 0.25 * dt);
+    // Fim do nocaute: zera o dano pra não cair de novo na hora e levanta
+    if (this.downUntil && now >= this.downUntil) { this.downUntil = 0; this.dano = 0.5; this.hoverBlockUntil = now; }
+    // recuperação gradual: dano de combo esvai, fôlego volta (não some no nocaute)
+    if (!this.isDowned(now)) this.dano = Math.max(0, this.dano - 0.25 * dt);
     this.folego = Math.min(1, this.folego + 0.22 * dt);
     if (this.hangingOnLedge()) this.stats.pendurado += dt;
     const pelvis = this.parts.pelvis;
@@ -389,6 +403,8 @@ export class Ragdoll {
                 rival.dano = Math.min(4, rival.dano + 1);
                 const dur = Math.min(2.6, (strong ? 1.35 : 0.4) * (1 + rival.dano * 0.35) * fator);
                 rival.stun(now + dur);
+                // Encheu o dano => NOCAUTE: desaba mole (dá pra agarrar e arrastar)
+                if (rival.dano >= 4 && !rival.isDowned(now)) rival.knockdown(now);
                 rival.lastHitLandedAt = now;
                 this.stats.acertos++;
                 this.punchHit = true;
@@ -414,11 +430,12 @@ export class Ragdoll {
     if (input.grab && !stunned) {
       const rivalGrab = this.rivals.length ? this.nearestRival() : null;
       const ot = rivalGrab ? rivalGrab.parts.torso.translation() : null;
+      const alvoCaido = !!(rivalGrab && rivalGrab.isDowned(now)); // alcance maior p/ pegar o corpo mole no chão
       const situacaoBeirada = toi === null || pp.y < 0.55;
       for (let side = 0; side < 2; side++) {
         if (this.grabJoints[side]) continue;
         const tip = this.handTip(side);
-        let best = null, bestD = 0.5;
+        let best = null, bestD = alvoCaido ? 1.0 : 0.5;
         for (const rival of this.rivals) {
           for (const pname of ['head', 'torso', 'pelvis', 'upperArmL', 'upperArmR', 'forearmL', 'forearmR']) {
             const tb = rival.parts[pname];
@@ -499,6 +516,8 @@ export class Ragdoll {
       b.setAngvel({ x: 0, y: 0, z: 0 }, true);
     }
     this.stunUntil = 0;
+    this.downUntil = 0;
+    this.dano = 0;
     this.punchReadyAt = 0;
     this.punchUntil = 0;
     this.punchHit = true;

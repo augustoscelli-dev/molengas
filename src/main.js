@@ -2224,6 +2224,13 @@ function frame(t) {
       p._stunVisto = p.stunUntil;
       puffFx(p.parts.pelvis.translation());
     }
+    // NOCAUTE: desabou mole (dá pra agarrar e arrastar) — baque forte + estrelas + grito
+    if (p.lastKnockdownAt > (p._sKO ?? -1)) {
+      p._sKO = p.lastKnockdownAt;
+      const hp = p.parts.head.translation();
+      burstEstrelas(hp); powFx(hp); som.bolada(); som.vozChoro(VOZES[l.slot]);
+      trauma = 1; hitStop = Math.max(hitStop, 0.1);
+    }
     if (p.lastPunchStartAt > (p._sSoco ?? -1)) { p._sSoco = p.lastPunchStartAt; som.soco(); som.vozSoco(VOZES[l.slot]); }
     if (p.lastJumpAt > (p._sPulo ?? -1)) { p._sPulo = p.lastJumpAt; som.pulo(); }
     if (p.lastGrabAt > (p._sGarra ?? -1)) {
