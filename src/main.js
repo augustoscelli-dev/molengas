@@ -664,46 +664,61 @@ const MAPAS = [
         }
         p.needsUpdate = true;
       };
-      // Cenario do Rio ao fundo (diorama decimado)
+      // CENARIO do Rio (diorama 3D) — a base visual do mapa (como voce curtiu no print)
       new GLTFLoader().load(ASSET('assets/modelos/rio-cenario.glb'), (gltf) => {
         const s = gltf.scene;
         const b = new THREE.Box3().setFromObject(s), sz = new THREE.Vector3(); b.getSize(sz);
-        s.scale.setScalar(20 / Math.max(sz.x, sz.z));
+        s.scale.setScalar(16 / Math.max(sz.x, sz.z));
         const b2 = new THREE.Box3().setFromObject(s);
-        s.position.set(0, -b2.min.y - 3.2, -6);
+        s.position.set(0, -b2.min.y - 2.4, -2);
         s.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
         scene.add(s); m.meshes.push(s);
       });
-      // CASAS destrutiveis na TERRA (bordas): casinhas de favela coloridas, empilhadas.
-      // Cor aplicada por codigo (o GLB veio sem textura). Cada casa e um prop
-      // agarravel/socavel -> arranque uma da pilha e jogue no rival.
+      // CASAS destrutiveis: mistura de modelos de favela (cor aplicada por codigo).
+      // Cada casa e um prop agarravel/socavel -> arranque uma e jogue no rival.
       const cores = [0xff6b6b, 0xffd166, 0x06d6a0, 0x4d96ff, 0xf78fb3, 0xffa552, 0xf4f4f4];
-      new GLTFLoader().load(ASSET('assets/modelos/casa-low.glb'), (g) => {
-        let geo = null;
-        g.scene.traverse((o) => { if (o.isMesh && !geo) geo = o.geometry; });
-        if (!geo) return;
-        geo = geo.clone(); geo.center();                       // casa centrada na origem
-        geo.computeVertexNormals();                            // normais (o GLB decimado perdeu) -> pega luz/cor
-        geo.computeBoundingBox();
-        const hs = new THREE.Vector3(); geo.boundingBox.getSize(hs);
-        const lado = 0.6, esc = lado / Math.max(hs.x, hs.z), hCasa = hs.y * esc;
-        let ci = 0;
+      const carregarGeo = (arq) => new Promise((res) => {
+        new GLTFLoader().load(ASSET(arq), (g) => {
+          let geo = null; g.scene.traverse((o) => { if (o.isMesh && !geo) geo = o.geometry; });
+          if (!geo) { res(null); return; }
+          geo = geo.clone(); geo.center(); geo.computeVertexNormals(); geo.computeBoundingBox();
+          res(geo);
+        }, undefined, () => res(null));
+      });
+      Promise.all(['casa-low', 'casa-b', 'casa-c', 'casa-d'].map((n) => carregarGeo('assets/modelos/' + n + '.glb'))).then((gs) => {
+        const info = gs.filter(Boolean).map((geo) => {
+          const s = new THREE.Vector3(); geo.boundingBox.getSize(s);
+          return { geo, esc: 0.6 / Math.max(s.x, s.z), h: s.y * (0.6 / Math.max(s.x, s.z)) };
+        });
+        if (!info.length) return;
+        let ci = 0, pick = 0;
         const torre = (px, pz, alt) => {
+          let y = 0;
           for (let a = 0; a < alt; a++) {
-            const yy = hCasa * 0.5 + a * hCasa;
-            const rb = world.createRigidBody(
-              RAPIER.RigidBodyDesc.dynamic().setTranslation(px, yy, pz).setLinearDamping(0.15).setAngularDamping(0.35),
-            );
-            world.createCollider(
-              RAPIER.ColliderDesc.cuboid(lado * 0.5, hCasa * 0.5, lado * 0.5).setMass(3).setFriction(0.7).setCollisionGroups(PROP_GROUPS), rb,
-            );
-            const me = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: cores[ci++ % cores.length], roughness: 0.85 }));
-            me.scale.setScalar(esc); me.castShadow = true; me.receiveShadow = true; scene.add(me);
+            const it = info[pick++ % info.length];
+            const yy = y + it.h * 0.5;
+            const rb = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(px, yy, pz).setLinearDamping(0.15).setAngularDamping(0.35));
+            world.createCollider(RAPIER.ColliderDesc.cuboid(0.3, it.h * 0.5, 0.3).setMass(3).setFriction(0.7).setCollisionGroups(PROP_GROUPS), rb);
+            const me = new THREE.Mesh(it.geo, new THREE.MeshStandardMaterial({ color: cores[ci++ % cores.length], roughness: 0.85 }));
+            me.scale.setScalar(it.esc); me.castShadow = true; me.receiveShadow = true; scene.add(me);
             m.bodies.push(rb); m.meshes.push(me); m.syncPairs.push([rb, me]); m.props.push(rb); m._blocos.push([rb, px, yy, pz]);
+            y += it.h;
           }
         };
         // so na TERRA (fora do disco de agua, raio > 4.4)
         torre(-6, -3, 4); torre(6, -3, 4); torre(-6.4, 2.6, 3); torre(6.4, 2.6, 3); torre(0, -6, 4); torre(0, 6, 3);
+      });
+      // Palmeiras decorativas na terra
+      carregarGeo('assets/modelos/palmeira-low.glb').then((geo) => {
+        if (!geo) return;
+        const s = new THREE.Vector3(); geo.boundingBox.getSize(s);
+        const esc = 2.4 / (s.y || 1);
+        for (const [px, pz] of [[-7.8, -0.5], [7.8, -0.5], [-2.5, 7.2], [3.5, -7.2], [8, 3.5]]) {
+          const me = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0x4a9b46, roughness: 0.9 }));
+          me.scale.setScalar(esc);
+          me.position.set(px, -geo.boundingBox.min.y * esc, pz);
+          me.castShadow = true; scene.add(me); m.meshes.push(me);
+        }
       });
       m.reset = () => resetBlocos(m);
     },
