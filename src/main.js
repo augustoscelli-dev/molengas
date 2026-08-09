@@ -635,117 +635,19 @@ const MAPAS = [
   {
     nome: 'RIO',
     build(m) {
-      // ---- AMBIENTE cinematografico do Rio: ceu por-do-sol + mar + neblina quente ----
-      backMesh.visible = false; // esconde a torcida/estadio padrao
-      scene.fog.color.setHex(0xf1c49a); scene.fog.near = 26; scene.fog.far = 130;
-      const skyC = document.createElement('canvas'); skyC.width = 1024; skyC.height = 512;
-      const sg = skyC.getContext('2d');
-      const grd = sg.createLinearGradient(0, 0, 0, 512);
-      grd.addColorStop(0, '#1e3f7a'); grd.addColorStop(0.42, '#6fa6d6');
-      grd.addColorStop(0.55, '#ffd9a0'); grd.addColorStop(0.63, '#ff9e6b'); grd.addColorStop(1, '#ffb98a');
-      sg.fillStyle = grd; sg.fillRect(0, 0, 1024, 512);
-      const sun = sg.createRadialGradient(560, 300, 8, 560, 300, 150);
-      sun.addColorStop(0, 'rgba(255,246,214,0.95)'); sun.addColorStop(1, 'rgba(255,246,214,0)');
-      sg.fillStyle = sun; sg.fillRect(410, 150, 300, 300);
-      sg.fillStyle = '#2f5a5e'; // morros na silhueta (sem monumentos)
-      const hill = (cx, w, h) => { sg.beginPath(); sg.moveTo(cx - w, 302); sg.quadraticCurveTo(cx, 302 - h, cx + w, 302); sg.closePath(); sg.fill(); };
-      hill(150, 130, 95); hill(360, 90, 140); hill(770, 160, 115); hill(930, 80, 70);
-      const skyTex = new THREE.CanvasTexture(skyC); skyTex.colorSpace = THREE.SRGBColorSpace;
-      const domo = new THREE.Mesh(
-        new THREE.SphereGeometry(120, 32, 16),
-        new THREE.MeshBasicMaterial({ map: skyTex, side: THREE.BackSide, fog: false }),
-      );
-      scene.add(domo); m.meshes.push(domo);
-      // MAR ao redor (a arena fica numa ilha de areia)
-      const mar = new THREE.Mesh(
-        new THREE.PlaneGeometry(420, 420),
-        new THREE.MeshStandardMaterial({ color: 0x2b7fb0, roughness: 0.22, metalness: 0.15 }),
-      );
-      mar.rotation.x = -Math.PI / 2; mar.position.y = -0.4;
-      scene.add(mar); m.meshes.push(mar);
-
-      // Colisor de chao (todos ficam de pe; agua/terra sao visuais)
-      chaoFixo(m, 13, 10, new THREE.MeshBasicMaterial({ visible: false }));
-      // TERRA: chao visual (areia) em volta — onde ficam as casas destrutiveis
-      const terra = new THREE.Mesh(
-        new THREE.PlaneGeometry(28, 22),
-        new THREE.MeshStandardMaterial({ color: 0x9c7a4d, roughness: 0.96 }),
-      );
-      terra.rotation.x = -Math.PI / 2; terra.receiveShadow = true; scene.add(terra); m.meshes.push(terra);
-      // (sem piscina no meio — o chao da favela e a propria arena)
-      // CENARIO detalhado do Rio (diorama) — morro ao fundo, tingido de verde (vegetacao)
+      // Arena: chao plano no meio (os lutadores lutam aqui), emoldurado pelo morro
+      chaoFixo(m, 6, 4.5, new THREE.MeshStandardMaterial({ color: 0x8a8f7a, roughness: 0.95 }));
+      // Morro detalhado do Rio (diorama) emoldurando a arena — como voce aprovou
       new GLTFLoader().load(ASSET('assets/modelos/rio-cenario.glb'), (gltf) => {
         const s = gltf.scene;
-        const b = new THREE.Box3().setFromObject(s), sz = new THREE.Vector3(); b.getSize(sz);
-        s.scale.setScalar(22 / Math.max(sz.x, sz.z));
+        const box = new THREE.Box3().setFromObject(s);
+        const size = new THREE.Vector3(); box.getSize(size);
+        s.scale.setScalar(16 / Math.max(size.x, size.z));
         const b2 = new THREE.Box3().setFromObject(s);
-        s.position.set(0, -b2.min.y - 2.5, -17);
-        const verde = new THREE.Color(0x5f7a44);
-        s.traverse((o) => {
-          if (o.isMesh) {
-            o.castShadow = true; o.receiveShadow = true;
-            o.material = o.material.clone(); o.material.color.lerp(verde, 0.55);
-          }
-        });
+        s.position.set(0, -b2.min.y - 2.4, -2);
+        s.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
         scene.add(s); m.meshes.push(s);
       });
-      // CASAS destrutiveis: mistura de modelos de favela (cor aplicada por codigo).
-      // Cada casa e um prop agarravel/socavel -> arranque uma e jogue no rival.
-      const cores = [0xff6b6b, 0xffd166, 0x06d6a0, 0x4d96ff, 0xf78fb3, 0xffa552, 0xf4f4f4];
-      const carregarGeo = (arq) => new Promise((res) => {
-        new GLTFLoader().load(ASSET(arq), (g) => {
-          let geo = null; g.scene.traverse((o) => { if (o.isMesh && !geo) geo = o.geometry; });
-          if (!geo) { res(null); return; }
-          geo = geo.clone(); geo.center(); geo.computeVertexNormals(); geo.computeBoundingBox();
-          res(geo);
-        }, undefined, () => res(null));
-      });
-      Promise.all(['casa-low', 'casa-b', 'casa-c', 'casa-d'].map((n) => carregarGeo('assets/modelos/' + n + '.glb'))).then((gs) => {
-        const info = gs.filter(Boolean).map((geo) => {
-          const s = new THREE.Vector3(); geo.boundingBox.getSize(s);
-          return { geo, esc: 0.6 / Math.max(s.x, s.z), h: s.y * (0.6 / Math.max(s.x, s.z)) };
-        });
-        if (!info.length) return;
-        const maxH = Math.max(...info.map((it) => it.h));
-        let ci = 0, pick = 0;
-        const casa = (px, py, pz) => {
-          const it = info[pick++ % info.length];
-          const rb = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(px, py, pz).setLinearDamping(0.2).setAngularDamping(0.4));
-          world.createCollider(RAPIER.ColliderDesc.cuboid(0.3, it.h * 0.5, 0.3).setMass(3).setFriction(0.95).setCollisionGroups(PROP_GROUPS), rb);
-          const me = new THREE.Mesh(it.geo, new THREE.MeshStandardMaterial({ color: cores[ci++ % cores.length], roughness: 0.85 }));
-          me.scale.setScalar(it.esc); me.castShadow = true; me.receiveShadow = true; scene.add(me);
-          m.bodies.push(rb); m.meshes.push(me); m.syncPairs.push([rb, me]); m.props.push(rb); m._blocos.push([rb, px, py, pz]);
-        };
-        // MORRO de casas: pilha em piramide (favela subindo a ladeira). Tudo destrutivel.
-        const morro = (cx, cz, baseW, baseD, layers, recuoZ) => {
-          for (let ly = 0; ly < layers; ly++) {
-            const w = baseW - ly, d = baseD - ly;
-            if (w < 1 || d < 1) break;
-            const py = maxH * 0.5 + ly * maxH * 0.94;
-            for (let ix = 0; ix < w; ix++) for (let iz = 0; iz < d; iz++) {
-              const px = cx + (ix - (w - 1) / 2) * 0.66;
-              const pz = cz + (iz - (d - 1) / 2) * 0.66 + ly * recuoZ;
-              casa(px, py, pz);
-            }
-          }
-        };
-        morro(0, -8, 7, 3, 4, -0.3);   // morro principal (fundo) — favela subindo
-        morro(-7.5, 0, 3, 3, 3, 0);    // morro lateral esquerdo
-        morro(7.5, 0, 3, 3, 3, 0);     // morro lateral direito
-      });
-      // Palmeiras decorativas na terra
-      carregarGeo('assets/modelos/palmeira-low.glb').then((geo) => {
-        if (!geo) return;
-        const s = new THREE.Vector3(); geo.boundingBox.getSize(s);
-        const esc = 2.4 / (s.y || 1);
-        for (const [px, pz] of [[-7.8, -0.5], [7.8, -0.5], [-2.5, 7.2], [3.5, -7.2], [8, 3.5]]) {
-          const me = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0x4a9b46, roughness: 0.9 }));
-          me.scale.setScalar(esc);
-          me.position.set(px, -geo.boundingBox.min.y * esc, pz);
-          me.castShadow = true; scene.add(me); m.meshes.push(me);
-        }
-      });
-      m.reset = () => resetBlocos(m);
     },
   },
 ];
