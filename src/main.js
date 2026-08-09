@@ -662,14 +662,17 @@ const MAPAS = [
         s.scale.setScalar(16 / Math.max(size.x, size.z));
         const b2 = new THREE.Box3().setFromObject(s);
         s.position.set(0, -b2.min.y - 2.4, -2);
-        // Favela colorida: pinta por FACE (triangulo), em manchas grandes (~casas),
-        // cada mancha uma cor solida. Paleta = casas coloridas + verdes de mata.
-        const paleta = [
-          0xff6b6b, 0xffd166, 0x06d6a0, 0x4d96ff, 0xf78fb3, 0xffa552, 0xf4f4f4,
-          0xe8d7a0, 0xc0533f, 0x88c0d0, 0xd88fc0, 0xf3722c, 0x90be6d,
-          0x577590, 0xf9c74f, 0x43aa8b, 0x4f7a3a, 0x6f9a45, 0x3f6b2e,
-        ].map((h) => new THREE.Color(h).convertSRGBToLinear());
+        // Morro coerente (não arco-íris): usa a INCLINAÇÃO de cada face.
+        //  - face vertical (parede) => cor de casa de favela (tom terroso), por célula
+        //  - face horizontal (topo/chão) => mata verde, às vezes telhado terracota
+        const casas = [0xb5651d, 0xd9a441, 0x6fa8a0, 0xc98a8a, 0xe8dcc0, 0x7a9cc0, 0xd98a6a, 0xcbb892]
+          .map((h) => new THREE.Color(h).convertSRGBToLinear());   // tons de favela, suaves
+        const verdes = [0x3f6b2e, 0x4f7a3a, 0x5c8a44, 0x34611f]
+          .map((h) => new THREE.Color(h).convertSRGBToLinear());   // mata
+        const terra = new THREE.Color(0x9c6b4a).convertSRGBToLinear(); // telhado/terra
         const hash = (i) => { const x = Math.sin(i * 127.1) * 43758.5453; return x - Math.floor(x); };
+        const A = new THREE.Vector3(), B = new THREE.Vector3(), C = new THREE.Vector3();
+        const e1 = new THREE.Vector3(), e2 = new THREE.Vector3(), nrm = new THREE.Vector3();
         s.traverse((o) => {
           if (!o.isMesh) return;
           o.castShadow = true; o.receiveShadow = true;
@@ -680,23 +683,29 @@ const MAPAS = [
           const celY = Math.max(0.001, sz.y / 5);
           const pos = g.attributes.position, n = pos.count;
           const col = new Float32Array(n * 3);
-          for (let f = 0; f < n; f += 3) {              // por triangulo (centroide)
-            const mx = (pos.getX(f) + pos.getX(f + 1) + pos.getX(f + 2)) / 3;
-            const my = (pos.getY(f) + pos.getY(f + 1) + pos.getY(f + 2)) / 3;
-            const mz = (pos.getZ(f) + pos.getZ(f + 1) + pos.getZ(f + 2)) / 3;
-            const cx = Math.floor((mx - bb.min.x) / cel);
-            const cy = Math.floor((my - bb.min.y) / celY);
-            const cz = Math.floor((mz - bb.min.z) / cel);
+          for (let f = 0; f < n; f += 3) {
+            A.fromBufferAttribute(pos, f); B.fromBufferAttribute(pos, f + 1); C.fromBufferAttribute(pos, f + 2);
+            e1.subVectors(B, A); e2.subVectors(C, A); nrm.crossVectors(e1, e2).normalize();
+            const ny = Math.abs(nrm.y); // 1=horizontal (topo/chão), 0=vertical (parede)
+            const cx = Math.floor(((A.x + B.x + C.x) / 3 - bb.min.x) / cel);
+            const cy = Math.floor(((A.y + B.y + C.y) / 3 - bb.min.y) / celY);
+            const cz = Math.floor(((A.z + B.z + C.z) / 3 - bb.min.z) / cel);
             const id = Math.abs((cx * 73856093) ^ (cy * 19349663) ^ (cz * 83492791));
-            const c = paleta[Math.floor(hash(id) * paleta.length) % paleta.length];
-            const br = 0.85 + hash(id * 3.3) * 0.22;
+            const h = hash(id);
+            let c;
+            if (ny < 0.5) {                          // parede => casa colorida (por célula)
+              c = casas[Math.floor(h * casas.length) % casas.length];
+            } else {                                 // topo/chão => mata verde, às vezes telhado
+              c = h < 0.7 ? verdes[Math.floor(hash(id * 1.7) * verdes.length) % verdes.length] : terra;
+            }
+            const br = 0.88 + hash(id * 3.3) * 0.18;
             for (let k = 0; k < 3; k++) { col[(f + k) * 3] = c.r * br; col[(f + k) * 3 + 1] = c.g * br; col[(f + k) * 3 + 2] = c.b * br; }
           }
           g.setAttribute('color', new THREE.BufferAttribute(col, 3));
           g.computeVertexNormals();
           o.geometry = g;
           o.material = new THREE.MeshStandardMaterial({
-            vertexColors: true, roughness: 0.9, metalness: 0, flatShading: true,
+            vertexColors: true, roughness: 0.92, metalness: 0, flatShading: true,
           });
         });
         scene.add(s); m.meshes.push(s);
