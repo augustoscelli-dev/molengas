@@ -1,4 +1,32 @@
-# MOLENGAS! — Lista de melhorias (rodada 2)
+# MOLENGAS! — Lista de melhorias (rodada 3)
+
+## Prioridade alta (próximas 5)
+
+1. 💥 **3 mapas novos** 🔨M — GELO (escorregadio, fricção quase zero),
+   MORTE SÚBITA (plataforma encolhe a cada round) e MARTELO (pêndulo
+   gigante varrendo a arena). O sistema de mapas já engole tudo.
+2. 💥 **Pacote de combate** 🔨M — voadora (pulo+soco = tackle),
+   dash de ombro (2× na direção), nocaute acumulativo (combo atordoa
+   mais) e cansaço (spam de soco esgota).
+3. **+5 fantasias** 🔨M — abacaxi, robô, banana, fantasma e unicórnio
+   (pipeline pronto: cores + acessórios + retrato Pollinations).
+4. **Modos de jogo** 🔨M — SUMÔ (sem soco, arena redonda que encolhe)
+   e BATATA QUENTE (bomba passa de mão, explode quem segura).
+5. **Estatísticas + emotes** 🔨P — tela pós-partida (socos acertados,
+   quedas, tempo pendurado, maior arremesso) e tecla de provocação
+   (acena/dancinha).
+
+## Rodada 4 (dedicada): ONLINE 🌐
+
+O projetão declarado — merece uma rodada inteira só dele:
+- **Fase 1: LAN** — servidor Node rodando a física oficial (Rapier já
+  roda no Node), navegadores conectam por WebSocket na mesma rede.
+- **Fase 2: nuvem + salas** — hospedar o servidor, código de sala.
+- **Fase 3: netcode fino** — interpolação, previsão, lag compensation.
+
+---
+
+# Histórico — rodada 2
 
 Legenda: 💥 impacto alto · 🔨 esforço (P/M/G) · ✅ feito
 
