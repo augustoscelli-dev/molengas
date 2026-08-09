@@ -634,6 +634,7 @@ const MAPAS = [
   },
   {
     nome: 'RIO',
+    fundo: 'assets/fundo-rio.png',
     build(m) {
       // Colisor/fundo submerso (os lutadores pisam aqui, na agua)
       chaoFixo(m, 7, 5.5, new THREE.MeshStandardMaterial({ color: 0x0e3a4f, roughness: 0.5 }));
@@ -664,29 +665,38 @@ const MAPAS = [
         s.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
         scene.add(s); m.meshes.push(s);
       });
-      // CASAS destrutiveis NO MORRO (nas bordas, na beira da agua) — coloridas por codigo
+      // CASAS destrutiveis (mistura dos 4 modelos, coloridas) nas BORDAS/pe do morro
       const cores = [0xff6b6b, 0xffd166, 0x06d6a0, 0x4d96ff, 0xf78fb3, 0xffa552, 0xf4f4f4];
-      new GLTFLoader().load(ASSET('assets/modelos/casa-low.glb'), (g) => {
-        let geo = null; g.scene.traverse((o) => { if (o.isMesh && !geo) geo = o.geometry; });
-        if (!geo) return;
-        geo = geo.clone(); geo.center(); geo.computeVertexNormals(); geo.computeBoundingBox();
-        const hs = new THREE.Vector3(); geo.boundingBox.getSize(hs);
-        const esc = 0.6 / Math.max(hs.x, hs.z), hCasa = hs.y * esc;
-        let ci = 0;
+      const carregarGeo = (arq) => new Promise((res) => {
+        new GLTFLoader().load(ASSET(arq), (g) => {
+          let geo = null; g.scene.traverse((o) => { if (o.isMesh && !geo) geo = o.geometry; });
+          if (!geo) { res(null); return; }
+          geo = geo.clone(); geo.center(); geo.computeVertexNormals(); geo.computeBoundingBox();
+          res(geo);
+        }, undefined, () => res(null));
+      });
+      Promise.all(['casa-low', 'casa-b', 'casa-c', 'casa-d'].map((n) => carregarGeo('assets/modelos/' + n + '.glb'))).then((gs) => {
+        const info = gs.filter(Boolean).map((geo) => { const z = new THREE.Vector3(); geo.boundingBox.getSize(z); return { geo, esc: 0.6 / Math.max(z.x, z.z), h: z.y * (0.6 / Math.max(z.x, z.z)) }; });
+        if (!info.length) return;
+        let ci = 0, pick = 0;
         const torre = (px, pz, alt) => {
+          let y = 0;
           for (let a = 0; a < alt; a++) {
-            const yy = hCasa * 0.5 + a * hCasa;
+            const it = info[pick++ % info.length];
+            const yy = y + it.h * 0.5;
             const rb = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(px, yy, pz).setLinearDamping(0.2).setAngularDamping(0.4));
-            world.createCollider(RAPIER.ColliderDesc.cuboid(0.3, hCasa * 0.5, 0.3).setMass(3).setFriction(0.9).setCollisionGroups(PROP_GROUPS), rb);
-            const me = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: cores[ci++ % cores.length], roughness: 0.85 }));
-            me.scale.setScalar(esc); me.castShadow = true; me.receiveShadow = true; scene.add(me);
+            world.createCollider(RAPIER.ColliderDesc.cuboid(0.3, it.h * 0.5, 0.3).setMass(3).setFriction(0.9).setCollisionGroups(PROP_GROUPS), rb);
+            const me = new THREE.Mesh(it.geo, new THREE.MeshStandardMaterial({ color: cores[ci++ % cores.length], roughness: 0.85 }));
+            me.scale.setScalar(it.esc); me.castShadow = true; me.receiveShadow = true; scene.add(me);
             m.bodies.push(rb); m.meshes.push(me); m.syncPairs.push([rb, me]); m.props.push(rb); m._blocos.push([rb, px, yy, pz]);
+            y += it.h;
           }
         };
-        // so nas laterais/fundo (deixa o meio livre pra agua/luta)
-        torre(-5.5, -3, 3); torre(-6, 0, 2); torre(-5.5, 3, 3);
-        torre(5.5, -3, 3); torre(6, 0, 2); torre(5.5, 3, 3);
-        torre(-3, -4.5, 2); torre(3, -4.5, 2);
+        // bordas laterais + fundo (deixa o meio livre pra agua/luta)
+        const pos = [[-5.6,-4,3],[-6.1,-2,2],[-6.3,0,3],[-6.1,2,2],[-5.6,4,3],
+                     [5.6,-4,3],[6.1,-2,2],[6.3,0,3],[6.1,2,2],[5.6,4,3],
+                     [-3,-5,2],[-1,-5.6,3],[1,-5.6,2],[3,-5,3]];
+        for (const [x,z,a] of pos) torre(x, z, a);
         m.reset = () => resetBlocos(m);
       });
     },
