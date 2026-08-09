@@ -34,7 +34,7 @@ export function vinilMat(THREE, color, opacidade = 0.9) {
 }
 
 let outlineMatCache = null;
-export function addOutline(THREE, m, escala = 1.055) {
+export function addOutline(THREE, m, escala = 1.04) {
   outlineMatCache ||= new THREE.MeshBasicMaterial({ color: 0x241640, side: THREE.BackSide });
   const o = new THREE.Mesh(m.geometry, outlineMatCache);
   o.scale.setScalar(escala);

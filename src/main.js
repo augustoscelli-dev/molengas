@@ -619,7 +619,7 @@ const CATEGORIA = {
   upperArmL: 'arms', upperArmR: 'arms', forearmL: 'arms', forearmR: 'arms',
   thighL: 'legs', thighR: 'legs', calfL: 'legs', calfR: 'legs',
 };
-const FOFURA = { arms: 1.28, legs: 1.22 };
+const FOFURA = { arms: 1.6, legs: 1.55 };
 
 function clarear(cor, t) {
   const f = (v) => Math.round(v + (255 - v) * t);
@@ -633,8 +633,9 @@ function escurecer(cor, t) {
 function buildVisual(skin, fase = 0) {
   const meshes = { _skin: skin, _fase: fase };
   const mats = {};
-  // Direção aprovada F1: corpo de gominha translúcida com verniz de vinil
-  const opCorpo = skin.opacidade ?? 0.9;
+  // Direção aprovada F1: gominha de vinil — opaca (transparência criava
+  // costuras entre as partes), o doce vem do verniz + glow interno
+  const opCorpo = skin.opacidade ?? 1;
   const matFor = (cat) => mats[cat] ||= vinilMat(THREE, skin.cores[cat], opCorpo);
   const bolinha = (mat, r, escala) => {
     const b = new THREE.Mesh(new THREE.SphereGeometry(r, 18, 14), mat);
@@ -648,18 +649,19 @@ function buildVisual(skin, fase = 0) {
     let obj;
     if (spec.shape === 'ball') {
       obj = new THREE.Group();
-      obj.scale.setScalar(1.42); // cabeçona
+      obj.scale.setScalar(1.5); // cabeçona
       const skull = bolinha(matFor('head'), spec.r, [1, 1.03, 0.96]);
+      skull.position.y = -0.03; // assentada nos ombros, sem pescoço aparente
       obj.add(skull);
       const face = new THREE.Mesh(
-        new THREE.CircleGeometry(spec.r * 0.9, 24),
+        new THREE.CircleGeometry(spec.r * 0.94, 24),
         new THREE.MeshBasicMaterial({ map: getFaceTexture(THREE, skin.face, 'ok'), transparent: true }),
       );
-      face.position.set(0, -0.008, spec.r + 0.006);
+      face.position.set(0, -0.035, spec.r + 0.004);
       obj.add(face);
       meshes._face = face;
-      // Pescocinho ligando a cabeça ao corpo
-      const pescoco = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.085, 0.12, 12), matFor('head'));
+      // Pescoço grosso escondido na emenda
+      const pescoco = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.125, 0.16, 12), matFor('head'));
       pescoco.position.y = -0.15;
       obj.add(pescoco);
     } else if (spec.name === 'torso') {
@@ -677,11 +679,11 @@ function buildVisual(skin, fase = 0) {
         matTorso = vinilMat(THREE, 0xffffff, 1); // skins "vestidas" são opacas
         matTorso.map = skin._texTorso;
       }
-      obj = new THREE.Mesh(new THREE.CapsuleGeometry(0.185, 0.18, 6, 16), matTorso);
-      obj.scale.set(1.15, 1.05, 0.9);
+      obj = new THREE.Mesh(new THREE.CapsuleGeometry(0.2, 0.18, 6, 16), matTorso);
+      obj.scale.set(1.22, 1.08, 0.95);
       obj.castShadow = true;
       addOutline(THREE, obj);
-      obj._baseY = 1.05;
+      obj._baseY = 1.08;
       if (!skin.semBarriga) {
         const corBarriga = skin.cores.barriga ?? clarear(skin.cores.torso, 0.38);
         const barriga = new THREE.Mesh(new THREE.SphereGeometry(0.155, 18, 14), vinilMat(THREE, corBarriga, Math.min(1, opCorpo + 0.06)));
@@ -690,9 +692,9 @@ function buildVisual(skin, fase = 0) {
         obj.add(barriga);
       }
     } else if (spec.name === 'pelvis') {
-      // "Shorts": capsulinha larga e baixa
-      obj = new THREE.Mesh(new THREE.CapsuleGeometry(0.16, 0.08, 6, 16), matFor('pelvis'));
-      obj.scale.set(1.25, 0.9, 1.05);
+      // "Shorts": capsulão largo emendando no tronco
+      obj = new THREE.Mesh(new THREE.CapsuleGeometry(0.185, 0.12, 6, 16), matFor('pelvis'));
+      obj.scale.set(1.3, 1.0, 1.1);
       obj.castShadow = true;
       addOutline(THREE, obj);
     } else {
@@ -700,29 +702,28 @@ function buildVisual(skin, fase = 0) {
       obj = new THREE.Mesh(new THREE.CapsuleGeometry(gordo, spec.hh * 2, 6, 14), matFor(cat));
       obj.castShadow = true;
       addOutline(THREE, obj);
-      // Tampas nas juntas (ombro/cotovelo/quadril/joelho) pra dobra ficar contínua
+      // Tampas gordas nas juntas — braço/perna viram uma linguicinha contínua
       if (spec.name.startsWith('upperArm') || spec.name.startsWith('thigh')) {
         for (const py of [spec.hh, -spec.hh]) {
-          const cap = bolinha(matFor(cat), gordo * 1.03);
+          const cap = bolinha(matFor(cat), gordo * 1.12);
           cap.position.y = py;
           obj.add(cap);
         }
       }
-      // Luvas e botas em vinil opaco mais escuro (peças do brinquedo)
+      // Punhos e botas de brinquedo, bem grandes (F1)
       if (spec.name.startsWith('forearm')) {
-        const mao = bolinha(mats.maos ||= vinilMat(THREE, escurecer(skin.cores.arms, 0.28), 1), spec.r * 1.55);
-        mao.position.y = -(spec.hh + spec.r * 0.5);
+        const mao = bolinha(mats.maos ||= vinilMat(THREE, escurecer(skin.cores.arms, 0.22), 1), spec.r * 1.9);
+        mao.position.y = -(spec.hh + spec.r * 0.55);
         obj.add(mao);
       }
       if (spec.name.startsWith('calf')) {
-        // Botinha: capsulinha deitada apontando pra frente
         const pe = new THREE.Mesh(
-          new THREE.CapsuleGeometry(0.062, 0.09, 6, 12),
-          mats.pes ||= vinilMat(THREE, escurecer(skin.cores.legs, 0.28), 1),
+          new THREE.CapsuleGeometry(0.082, 0.1, 6, 12),
+          mats.pes ||= vinilMat(THREE, escurecer(skin.cores.legs, 0.22), 1),
         );
         pe.rotation.x = Math.PI / 2;
-        pe.scale.set(1.05, 1, 0.8);
-        pe.position.set(0, -(spec.hh + 0.025), 0.05);
+        pe.scale.set(1.05, 1, 0.85);
+        pe.position.set(0, -(spec.hh + 0.03), 0.05);
         pe.castShadow = true;
         addOutline(THREE, pe);
         obj.add(pe);
