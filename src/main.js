@@ -1584,6 +1584,7 @@ function destroyVisual(meshes) {
 // Flash de dano: coleta os materiais do lutador que têm canal emissivo, guardando
 // o valor base pra restaurar. Funciona em todos os estilos (vinil/toon/standard/GLB).
 const COR_FLASH = new THREE.Color(1.0, 0.55, 0.5); // branco-quente avermelhado (dor)
+const COR_ESQUIVA = new THREE.Color(0.35, 0.85, 1.0); // ciano (invencível na esquiva)
 function registrarFlashMats(meshes) {
   const mats = [], visto = new Set();
   const raizes = PARTS.map((s) => meshes[s.name]).concat(meshes._flashExtra || []);
@@ -1627,6 +1628,15 @@ function syncVisual(rag, meshes, now) {
     } else if (meshes._flashOn) { // restaura uma vez quando o flash acaba
       meshes._flashOn = false;
       for (const fm of meshes._flashMats) { fm.mat.emissive.copy(fm.base); fm.mat.emissiveIntensity = fm.baseInt; }
+    }
+    // Esquiva: brilho ciano pulsante enquanto está invencível (i-frames)
+    if (rag.isEsquivando(now)) {
+      const pulso = 0.5 + 0.5 * Math.sin(now * 42);
+      meshes._flashOn = true;
+      for (const fm of meshes._flashMats) {
+        fm.mat.emissive.copy(fm.base).lerp(COR_ESQUIVA, 0.55 + 0.35 * pulso);
+        fm.mat.emissiveIntensity = fm.baseInt + 0.8 + pulso * 0.9;
+      }
     }
   }
   const bs = meshes.torso._baseS ?? [1, 1, 1];
