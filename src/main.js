@@ -6,6 +6,10 @@ import { SKINS, getFaceTexture, toonMat, addOutline, vinilMat } from './skins.js
 import { som, initSom } from './som.js';
 import { readGamepad, mergeInput } from './gamepad.js';
 import { GLTFLoader } from '../libs/jsm/loaders/GLTFLoader.js';
+import { EffectComposer } from '../libs/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from '../libs/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from '../libs/jsm/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from '../libs/jsm/postprocessing/OutputPass.js';
 
 await RAPIER.init();
 
@@ -64,10 +68,29 @@ r3.shadowMap.type = THREE.PCFSoftShadowMap;
 r3.toneMapping = THREE.ACESFilmicToneMapping;
 r3.toneMappingExposure = 1.12;
 document.body.appendChild(r3.domElement);
+
+// ---------- Pós-processamento: bloom (brilho no laser/água/holofotes/neon) ----------
+// ?nobloom desliga (fallback). Composer renderiza a cena, aplica bloom e faz a
+// saída (tonemap ACES + sRGB) no OutputPass.
+const USA_BLOOM = !PARAMS.has('nobloom');
+let composer = null, bloomPass = null;
+if (USA_BLOOM) {
+  composer = new EffectComposer(r3);
+  composer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  composer.setSize(innerWidth, innerHeight);
+  composer.addPass(new RenderPass(scene, camera));
+  bloomPass = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.5, 0.4, 0.9); // força, raio, limiar
+  composer.addPass(bloomPass);
+  composer.addPass(new OutputPass());
+}
+function renderCena() { if (composer) composer.render(); else r3.render(scene, camera); }
+
 addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
   r3.setSize(innerWidth, innerHeight);
+  composer?.setSize(innerWidth, innerHeight);
+  bloomPass?.setSize(innerWidth, innerHeight);
 });
 
 const hemi = new THREE.HemisphereLight(0xccccff, 0x443344, 1.05);
@@ -2324,7 +2347,7 @@ function frameOnline(t, fdt) {
   const shake = trauma * trauma * 0.26;
   camera.position.x += Math.sin(t * 0.061) * shake;
   camera.position.y += Math.cos(t * 0.047) * shake * 0.7;
-  r3.render(scene, camera);
+  renderCena();
 }
 
 // ---------- Loop ----------
@@ -2360,7 +2383,7 @@ function frame(t) {
     mirarHolofotes(simNow);
     cairConfetes(fdt, simNow);
     atualizarSkins();
-    r3.render(scene, camera);
+    renderCena();
     return;
   }
 
@@ -2568,7 +2591,7 @@ function frame(t) {
 
   updateHudBarras(simNow);
   atualizarSkins();
-  r3.render(scene, camera);
+  renderCena();
 }
 
 // ---------- Início ----------
