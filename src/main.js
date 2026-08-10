@@ -10,6 +10,8 @@ import { EffectComposer } from '../libs/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from '../libs/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from '../libs/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from '../libs/jsm/postprocessing/OutputPass.js';
+import { SMAAPass } from '../libs/jsm/postprocessing/SMAAPass.js';
+import { RoomEnvironment } from '../libs/jsm/environments/RoomEnvironment.js';
 
 await RAPIER.init();
 
@@ -69,11 +71,20 @@ r3.toneMapping = THREE.ACESFilmicToneMapping;
 r3.toneMappingExposure = 1.12;
 document.body.appendChild(r3.domElement);
 
+// ---------- Reflexo de ambiente (IBL) — opt-in por ?env ----------
+// Dá reflexo no metal, mas o IBL soma luz e briga com o bloom (estoura). Pra ligar
+// de verdade precisa rebaixar as luzes dos mapas antes — fica pra um passe futuro.
+if (PARAMS.has('env')) {
+  const pmrem = new THREE.PMREMGenerator(r3);
+  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+  scene.environmentIntensity = 0.18;
+}
+
 // ---------- Pós-processamento: bloom (brilho no laser/água/holofotes/neon) ----------
 // ?nobloom desliga (fallback). Composer renderiza a cena, aplica bloom e faz a
 // saída (tonemap ACES + sRGB) no OutputPass.
 const USA_BLOOM = !PARAMS.has('nobloom');
-let composer = null, bloomPass = null;
+let composer = null, bloomPass = null, smaaPass = null;
 if (USA_BLOOM) {
   composer = new EffectComposer(r3);
   composer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -82,6 +93,8 @@ if (USA_BLOOM) {
   bloomPass = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.5, 0.4, 0.9); // força, raio, limiar
   composer.addPass(bloomPass);
   composer.addPass(new OutputPass());
+  smaaPass = new SMAAPass(innerWidth, innerHeight); // anti-serrilhado (bordas limpas)
+  composer.addPass(smaaPass);
 }
 function renderCena() { if (composer) composer.render(); else r3.render(scene, camera); }
 
@@ -91,6 +104,7 @@ addEventListener('resize', () => {
   r3.setSize(innerWidth, innerHeight);
   composer?.setSize(innerWidth, innerHeight);
   bloomPass?.setSize(innerWidth, innerHeight);
+  smaaPass?.setSize(innerWidth, innerHeight);
 });
 
 const hemi = new THREE.HemisphereLight(0xccccff, 0x443344, 1.05);
