@@ -213,6 +213,24 @@ const ARMAS_DEF = {
       return g;
     },
   },
+  // Arma de TIRO: segurar + apertar soco dispara um laser na direção que olha.
+  laser: {
+    y0: 0.4, massa: 1.5, alcance: 0.42, forca: 4,
+    tiro: true, alcanceTiro: 7, cadencia: 0.5, danoTiro: 1, cor: 0x37e5ff,
+    collider: () => RAPIER.ColliderDesc.capsule(0.1, 0.1),
+    mesh: () => {
+      const g = new THREE.Group();
+      const corpo = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.16, 0.36), new THREE.MeshStandardMaterial({ color: 0x2b3040, metalness: 0.7, roughness: 0.4 }));
+      const cano = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.3, 12), new THREE.MeshStandardMaterial({ color: 0x8890a0, metalness: 0.8, roughness: 0.3 }));
+      cano.rotation.x = Math.PI / 2; cano.position.set(0, 0.02, 0.28);
+      const cabo = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.2, 0.12), new THREE.MeshStandardMaterial({ color: 0x22262e, roughness: 0.7 }));
+      cabo.position.set(0, -0.17, -0.08);
+      const ponta = new THREE.Mesh(new THREE.SphereGeometry(0.05, 12, 8), new THREE.MeshBasicMaterial({ color: 0x37e5ff }));
+      ponta.position.set(0, 0.02, 0.44);
+      g.add(corpo, cano, cabo, ponta);
+      return g;
+    },
+  },
 };
 function soltarArma(m, x, z, tipo = 'bastao') {
   const def = ARMAS_DEF[tipo] || ARMAS_DEF.bastao;
@@ -222,8 +240,74 @@ function soltarArma(m, x, z, tipo = 'bastao') {
   world.createCollider(def.collider().setMass(def.massa).setFriction(0.6).setCollisionGroups(PROP_GROUPS), b);
   const mesh = def.mesh(); mesh.castShadow = true; scene.add(mesh);
   m.bodies.push(b); m.meshes.push(mesh); m.syncPairs.push([b, mesh]); m.props.push(b);
-  (m.armas ||= []).push({ body: b, mesh, alcance: def.alcance, forca: def.forca, nascido: 0 });
+  (m.armas ||= []).push({
+    body: b, mesh, alcance: def.alcance, forca: def.forca,
+    tiro: !!def.tiro, alcanceTiro: def.alcanceTiro || 0, cadencia: def.cadencia || 0.5,
+    danoTiro: def.danoTiro || 1, cor: def.cor || 0x37e5ff,
+  });
   return b;
+}
+// Feixes de laser (efeito curto). Cilindro do cano até o ponto de impacto.
+const laserBeams = [];
+function spawnBeam(fx, fy, fz, tx, ty, tz, cor) {
+  const dv = new THREE.Vector3(tx - fx, ty - fy, tz - fz); const len = dv.length() || 0.01;
+  const grp = new THREE.Group();
+  const core = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.04, 0.04, len, 8),
+    new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 1, fog: false }),
+  );
+  const glow = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.11, 0.11, len, 10),
+    new THREE.MeshBasicMaterial({ color: cor, transparent: true, opacity: 0.5, fog: false }),
+  );
+  grp.add(core, glow);
+  grp.position.set(fx + dv.x * 0.5, fy + dv.y * 0.5, fz + dv.z * 0.5);
+  grp.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dv.clone().normalize());
+  scene.add(grp); laserBeams.push({ m: grp, core, glow, vida: 0.18, max: 0.18 });
+}
+function updateBeams(dt) {
+  for (let i = laserBeams.length - 1; i >= 0; i--) {
+    const b = laserBeams[i]; b.vida -= dt;
+    const k = Math.max(0, b.vida / b.max);
+    b.core.material.opacity = k; b.glow.material.opacity = k * 0.5;
+    b.m.scale.x = b.m.scale.z = 1 + (1 - k) * 1.6;
+    if (b.vida <= 0) {
+      scene.remove(b.m);
+      b.core.geometry.dispose(); b.core.material.dispose();
+      b.glow.geometry.dispose(); b.glow.material.dispose();
+      laserBeams.splice(i, 1);
+    }
+  }
+}
+// Dispara o laser do blaster na direção que o lutador olha (hitscan).
+function dispararLaser(l, arma) {
+  const h = l.rag.heading;
+  const dx = Math.sin(h), dz = Math.cos(h);
+  const mp = arma.body.translation();
+  const fx = mp.x, fy = mp.y, fz = mp.z, range = arma.alcanceTiro;
+  let alvo = null, alvoT = range, ap = null;
+  for (const o of lutadores) {
+    if (o === l || !o.vivo) continue;
+    const tp = o.rag.parts.torso.translation();
+    const rx = tp.x - fx, ry = tp.y - fy, rz = tp.z - fz;
+    const t = rx * dx + rz * dz;                 // distância ao longo do feixe (horizontal)
+    if (t < 0.2 || t > range) continue;
+    const px = rx - dx * t, pz = rz - dz * t;    // perpendicular
+    const perp = Math.hypot(px, ry, pz);
+    if (perp < 0.75 && t < alvoT) { alvoT = t; alvo = o; ap = tp; }
+  }
+  const ex = fx + dx * (alvo ? alvoT : range), ez = fz + dz * (alvo ? alvoT : range);
+  spawnBeam(fx, fy, fz, ex, fy, ez, arma.cor);
+  powFx({ x: fx + dx * 0.4, y: fy, z: fz + dz * 0.4 });
+  som.arremesso();
+  if (alvo) {
+    alvo.rag.dano = Math.min(4, alvo.rag.dano + arma.danoTiro);
+    alvo.rag.stun(simNow + 0.85);
+    if (alvo.rag.dano >= 4 && !alvo.rag.isDowned(simNow)) alvo.rag.knockdown(simNow);
+    for (const pn of ['torso', 'pelvis']) alvo.rag.parts[pn].applyImpulse({ x: dx * 7, y: 1.6, z: dz * 7 }, true);
+    alvo.rag.lastHitLandedAt = simNow;
+    burstEstrelas(ap); powFx(ap); trauma = Math.min(1, trauma + 0.4); hitStop = Math.max(hitStop, 0.05);
+  }
 }
 function removerArma(m, arma) {
   const i = (m.armas || []).indexOf(arma); if (i >= 0) m.armas.splice(i, 1);
@@ -1564,6 +1648,22 @@ function botInput(l) {
     out.move.x = dx / dl;
     out.move.z = dz / dl;
   }
+  // Armas: se está segurando uma, usa (encara o alvo e ataca); senão pega a que
+  // estiver por perto. Faz o bot mostrar as armas na luta.
+  if (rC < 3.3) {
+    const minhaArma = mapa.armas && mapa.armas.find((a) => l.rag.grabJoints.some((g) => g && g.body === a.body));
+    if (minhaArma) {
+      out.grab = true; out.move.x = dx / dl; out.move.z = dz / dl; // segura + encara
+      const alcance = minhaArma.tiro ? minhaArma.alcanceTiro : 1.15;
+      if (dAlvo < alcance && simNow > (l._botFire ?? 0)) { out.punch = true; l._botFire = simNow + (minhaArma.tiro ? 0.55 : 0.75); }
+      return out;
+    }
+    if (mapa.armas && mapa.armas.length && !l.rag.grabJoints.some((g) => g)) {
+      let aw = null, ad = 2.4;
+      for (const a of mapa.armas) { const q = a.body.translation(); const d = Math.hypot(q.x - me.x, q.z - me.z); if (d < ad) { ad = d; aw = a; } }
+      if (aw) { const q = aw.body.translation(); const wx = q.x - me.x, wz = q.z - me.z, wl = Math.hypot(wx, wz) || 1; out.move.x = wx / wl; out.move.z = wz / wl; if (ad < 0.85) out.grab = true; return out; }
+    }
+  }
   // decidir soco ou agarrão quando chega perto
   if (dAlvo < 0.95 && simNow > (l._botCd ?? 0)) {
     if (Math.random() < 0.55) {
@@ -2315,12 +2415,24 @@ function frame(t) {
     if (simNow > proxArmaEm && (mapa.armas ? mapa.armas.length : 0) < 3) {
       const ax = (Math.random() * 2 - 1) * 2.4; // perto do centro (serve p/ arenas de vários tamanhos)
       const az = (Math.random() * 2 - 1) * 1.8;
-      const b = soltarArma(mapa, ax, az, Math.random() < 0.5 ? 'bastao' : 'cano');
+      const tipos = ['bastao', 'cano', 'laser', 'bastao', 'cano'];
+      const b = soltarArma(mapa, ax, az, tipos[(Math.random() * tipos.length) | 0]);
       b.setTranslation({ x: ax, y: 4.2, z: az }, true);
       puffFx({ x: ax, y: 4.2, z: az });
       proxArmaEm = simNow + 9 + Math.random() * 5;
     }
   }
+  // TIRO: quem segura um blaster e aperta soco dispara um laser (mira p/ onde olha)
+  for (const l of lutadores) {
+    const arma = mapa.armas && mapa.armas.find((a) => a.tiro && l.rag.grabJoints.some((g) => g && g.body === a.body));
+    if (!arma) continue;
+    if (l.rag.lastPunchStartAt > (l._tiroVisto ?? -1) && simNow > (l._tiroCd ?? 0)) {
+      l._tiroVisto = l.rag.lastPunchStartAt;
+      l._tiroCd = simNow + arma.cadencia;
+      dispararLaser(l, arma);
+    }
+  }
+  updateBeams(fdt);
 
   // Efeitos + sons por lutador
   for (const l of lutadores) {
