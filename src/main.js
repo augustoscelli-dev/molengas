@@ -1261,7 +1261,8 @@ function buildVisual(skin, fase = 0, slot = 0) {
     meshes.torso._baseS = [1, 1, 1];
     meshes._jrig = null;
     const nomesGLB = MODELO_GLB.split(',');
-    const nomeGLB = (nomesGLB[slot] || nomesGLB[0] || 'jaeger-rigado').trim();
+    let nomeGLB = (nomesGLB[slot] || nomesGLB[0] || '').trim();
+    if (!nomeGLB || nomeGLB === 'jaeger-low') nomeGLB = 'jaeger-rigado'; // 'j' precisa de um GLB rigado
     const tinta = new THREE.Color(skin.cores.torso);
     // De qual corpo da física cada osso do esqueleto Meshy segue:
     const BONE2BODY = {
@@ -1603,10 +1604,10 @@ function montarLutadores(configs) {
   for (const l of lutadores) l.rag.rivals = lutadores.filter((o) => o !== l).map((o) => o.rag);
 }
 
-// Tecla M: alterna entre o estilo base e o modelo 3D (GLB) em runtime,
+// Tecla M: alterna entre o estilo base e o Jaeger rigado ('j') em runtime,
 // reconstruindo os visuais dos lutadores em cena (mesmo caminho da troca de skin).
 function alternarModelo3D() {
-  ESTILO = ESTILO === 'g' ? (ESTILO_BASE === 'g' ? 'a' : ESTILO_BASE) : 'g';
+  ESTILO = ESTILO === 'j' ? (ESTILO_BASE === 'j' ? 'a' : ESTILO_BASE) : 'j';
   for (const l of lutadores) {
     destroyVisual(l.meshes);
     l.meshes = buildVisual(SKINS[l.cfg.skin], l.slot * 1.9, l.slot);
