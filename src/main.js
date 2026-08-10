@@ -1280,7 +1280,18 @@ function buildVisual(skin, fase = 0, slot = 0) {
         if (o.isMesh) {
           o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false;
           const src = Array.isArray(o.material) ? o.material[0] : o.material;
-          if (src) { o.material = src.clone(); if (o.material.color) o.material.color.lerp(tinta, 0.35); }
+          if (src && src.map) {
+            // modelo tem textura: preserva, só deixa metálico e tinge de leve
+            o.material = src.clone(); o.material.metalness = 0.5; o.material.roughness = 0.5;
+            if (o.material.color) o.material.color.lerp(tinta, 0.28);
+          } else {
+            // sem textura (caso do jaeger-rigado): aço tingido pela cor do jogador
+            o.material = new THREE.MeshStandardMaterial({
+              color: new THREE.Color(0x8b95a6).lerp(tinta, 0.5),
+              metalness: 0.6, roughness: 0.48,
+              emissive: new THREE.Color(tinta).multiplyScalar(0.06),
+            });
+          }
         }
       });
       if (!skinned) { console.log('estilo j: GLB sem SkinnedMesh (não rigado)'); return; }
