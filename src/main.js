@@ -18,7 +18,16 @@ await RAPIER.init();
 // Carimbo visível na tela — se o número não bater com o do repo, é cache velho
 const VERSAO = 'v15-cidade';
 
-const WIN_SCORE = 5;
+let WIN_SCORE = 5; // rounds pra vencer a partida (definido pelo modo escolhido)
+// Modos de jogo (escolhidos no menu com a tecla N)
+const MODOS = [
+  { nome: 'Melhor de 5', vitorias: 5, caos: false },
+  { nome: 'Melhor de 3', vitorias: 3, caos: false },
+  { nome: 'Morte Súbita', vitorias: 1, caos: false },
+  { nome: 'CAOS ⚔️ (armas sem parar)', vitorias: 5, caos: true },
+];
+let modoIdx = 0;
+let MODO_CAOS = false; // partida atual usa drop de armas acelerado?
 const IDLE_IN = { move: { x: 0, z: 0 }, punch: false, grab: false, jump: false };
 
 // Na versão publicada (arquivo único), os assets viram data-URIs injetados aqui.
@@ -2004,6 +2013,8 @@ function atualizarSelecao() {
   }
   $('sel-mapa').style.display = selFase === 'mapa' ? 'block' : 'none';
   $('sel-mapa-nome').textContent = MAPAS[mapaIdx].nome;
+  if ($('sel-modo-nome')) $('sel-modo-nome').textContent = MODOS[modoIdx].nome;
+  if ($('sel-jaeger')) $('sel-jaeger').textContent = ESTILO === 'j' ? 'SIM 🤖' : 'não';
 }
 function checarFaseMapa() {
   const ativos = selCfg.filter((c) => c.ativo);
@@ -2040,6 +2051,8 @@ function startIntro(roundN) {
 }
 function iniciarLuta() {
   $('selecao').style.display = 'none';
+  WIN_SCORE = MODOS[modoIdx].vitorias;   // aplica o modo escolhido
+  MODO_CAOS = MODOS[modoIdx].caos;
   const configs = selCfg.filter((c) => c.ativo).map((c) => ({ ...c }));
   montarLutadores(configs);
   mapa.reset?.(true);
@@ -2108,6 +2121,8 @@ addEventListener('keydown', (e) => {
     if (e.code === 'KeyA') { setMapa(mapaIdx - 1); som.selecionar(); }
     if (e.code === 'KeyD') { setMapa(mapaIdx + 1); som.selecionar(); }
     if (e.code === 'KeyC') addBot();
+    if (e.code === 'KeyN') { modoIdx = (modoIdx + 1) % MODOS.length; som.selecionar(); } // modo de jogo
+    if (e.code === 'KeyJ') alternarModelo3D(); // liga/desliga o Jaeger (preview + partida)
     if (e.code === 'KeyF') { iniciarLuta(); return; }
   }
   atualizarSelecao();
@@ -2529,15 +2544,16 @@ function frame(t) {
   }
   // Drop de arma de tempos em tempos (cai do alto), no máx. 3 na arena
   if (state === 'luta') {
-    if (proxArmaEm === 0) proxArmaEm = simNow + 5;
-    if (simNow > proxArmaEm && (mapa.armas ? mapa.armas.length : 0) < 3) {
+    const capArmas = MODO_CAOS ? 6 : 3, atrasoArma = MODO_CAOS ? 2.5 : 9;
+    if (proxArmaEm === 0) proxArmaEm = simNow + (MODO_CAOS ? 1.5 : 5);
+    if (simNow > proxArmaEm && (mapa.armas ? mapa.armas.length : 0) < capArmas) {
       const ax = (Math.random() * 2 - 1) * 2.4; // perto do centro (serve p/ arenas de vários tamanhos)
       const az = (Math.random() * 2 - 1) * 1.8;
       const tipos = ['bastao', 'cano', 'laser', 'bastao', 'cano'];
       const b = soltarArma(mapa, ax, az, tipos[(Math.random() * tipos.length) | 0]);
       b.setTranslation({ x: ax, y: 4.2, z: az }, true);
       puffFx({ x: ax, y: 4.2, z: az });
-      proxArmaEm = simNow + 9 + Math.random() * 5;
+      proxArmaEm = simNow + atrasoArma + Math.random() * (MODO_CAOS ? 2 : 5);
     }
   }
   // Resfria as armas de tiro (superaquecimento: trava até esfriar de novo)
