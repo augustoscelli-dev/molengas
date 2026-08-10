@@ -1788,12 +1788,36 @@ function iniciarLuta() {
 }
 
 function updateScore() {
-  if (!lutadores.length) { $('placar').innerHTML = ''; return; }
-  $('placar').innerHTML = lutadores.map((l) => {
+  const placar = $('placar');
+  if (!lutadores.length) { placar.innerHTML = ''; return; }
+  placar.innerHTML = lutadores.map((l, i) => {
     const s = SKINS[l.cfg.skin];
-    return `<img class="retrato" src="${ASSET(`assets/retratos/${s.id}.jpg`)}" onerror="this.style.display='none'">` +
-      `<span>${l.score}</span>`;
-  }).join(' &nbsp;·&nbsp; ');
+    return `<div class="pcard" data-i="${i}">`
+      + `<div class="pdev">`
+      + `<img class="retrato" src="${ASSET(`assets/retratos/${s.id}.jpg`)}" onerror="this.style.display='none'">`
+      + `<span>${l.score}</span></div>`
+      + `<div class="pbar ko"><i></i></div>`
+      + `<div class="pbar fol"><i></i></div>`
+      + `</div>`;
+  }).join('');
+  // guarda refs das barras pra atualizar por frame (dano/fôlego ao vivo)
+  lutadores.forEach((l, i) => {
+    const card = placar.querySelector(`.pcard[data-i="${i}"]`);
+    l._hudCard = card;
+    l._hudKO = card && card.querySelector('.ko i');
+    l._hudFol = card && card.querySelector('.fol i');
+  });
+}
+// Atualiza as barras de nocaute (dano) e fôlego a cada frame.
+function updateHudBarras(now) {
+  for (const l of lutadores) {
+    if (!l._hudKO) continue;
+    const ko = Math.min(1, l.rag.dano / 4);
+    l._hudKO.style.width = (ko * 100).toFixed(0) + '%';
+    l._hudFol.style.width = (Math.max(0, Math.min(1, l.rag.folego)) * 100).toFixed(0) + '%';
+    const down = l.rag.isDowned(now);
+    if (l._hudCard) l._hudCard.classList.toggle('down', down);
+  }
 }
 function showMsg(txt, sub = '') {
   $('msg').innerHTML = txt + (sub ? `<div class="sub">${sub}</div>` : '');
@@ -2291,6 +2315,7 @@ function frame(t) {
   camera.position.x += Math.sin(t * 0.061) * shake;
   camera.position.y += Math.cos(t * 0.047) * shake * 0.7;
 
+  updateHudBarras(simNow);
   atualizarSkins();
   r3.render(scene, camera);
 }
