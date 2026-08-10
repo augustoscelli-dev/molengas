@@ -228,6 +228,7 @@ function resetCaixotes(m) {
 // enquanto — depois entra o GLB do Meshy (arma não precisa de rig).
 const ARMAS_DEF = {
   bastao: {
+    icone: '🏏',
     y0: 0.55, massa: 2.6, alcance: 0.72, forca: 10,
     collider: () => RAPIER.ColliderDesc.capsule(0.32, 0.06),
     mesh: () => {
@@ -239,6 +240,7 @@ const ARMAS_DEF = {
     },
   },
   cano: {
+    icone: '🔧',
     y0: 0.5, massa: 3.2, alcance: 0.66, forca: 12,
     collider: () => RAPIER.ColliderDesc.capsule(0.36, 0.05),
     mesh: () => {
@@ -252,8 +254,10 @@ const ARMAS_DEF = {
   },
   // Arma de TIRO: segurar + apertar soco dispara um laser na direção que olha.
   laser: {
+    icone: '🔫',
     y0: 0.4, massa: 1.5, alcance: 0.42, forca: 4,
-    tiro: true, alcanceTiro: 7, cadencia: 0.5, danoTiro: 1, cor: 0x37e5ff,
+    tiro: true, alcanceTiro: 7, cadencia: 0.28, danoTiro: 1, cor: 0x37e5ff,
+    calorMax: 6, calorPorTiro: 1, resfria: 2.2, // superaquecimento: 6 tiros seguidos e trava até esfriar
     glb: 'raygun-low', escala: 0.62, corMat: 0xc79a4a, // ray gun do Meshy (metálico dourado)
     collider: () => RAPIER.ColliderDesc.capsule(0.12, 0.13),
     mesh: () => { // fallback caso o GLB não tenha carregado ainda
@@ -297,9 +301,10 @@ function soltarArma(m, x, z, tipo = 'bastao') {
   mesh.castShadow = true; scene.add(mesh);
   m.bodies.push(b); m.meshes.push(mesh); m.syncPairs.push([b, mesh]); m.props.push(b);
   (m.armas ||= []).push({
-    body: b, mesh, alcance: def.alcance, forca: def.forca,
+    body: b, mesh, icone: def.icone || '🔩', alcance: def.alcance, forca: def.forca,
     tiro: !!def.tiro, alcanceTiro: def.alcanceTiro || 0, cadencia: def.cadencia || 0.5,
     danoTiro: def.danoTiro || 1, cor: def.cor || 0x37e5ff,
+    calor: 0, calorMax: def.calorMax || 6, calorPorTiro: def.calorPorTiro || 1, resfria: def.resfria || 2.2, quente: false,
   });
   return b;
 }
@@ -354,6 +359,7 @@ function dispararLaser(l, arma) {
   }
   const ex = fx + dx * (alvo ? alvoT : range), ez = fz + dz * (alvo ? alvoT : range);
   spawnBeam(fx, fy, fz, ex, fy, ez, arma.cor);
+  spawnFlash(fx + dx * 0.45, fy, fz + dz * 0.45, arma.cor); // flash no cano
   powFx({ x: fx + dx * 0.4, y: fy, z: fz + dz * 0.4 });
   som.arremesso();
   if (alvo) {
@@ -364,6 +370,41 @@ function dispararLaser(l, arma) {
     alvo.rag.lastHitLandedAt = simNow;
     burstEstrelas(ap); powFx(ap); trauma = Math.min(1, trauma + 0.4); hitStop = Math.max(hitStop, 0.05);
   }
+}
+// Flash do cano (bola brilhante que some rápido) — usa a mesma lista dos feixes
+function spawnFlash(x, y, z, cor) {
+  const grp = new THREE.Group();
+  const core = new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 8), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 1, fog: false }));
+  const glow = new THREE.Mesh(new THREE.SphereGeometry(0.2, 10, 8), new THREE.MeshBasicMaterial({ color: cor, transparent: true, opacity: 0.6, fog: false }));
+  grp.add(core, glow); grp.position.set(x, y, z);
+  scene.add(grp); laserBeams.push({ m: grp, core, glow, vida: 0.12, max: 0.12 });
+}
+// Mira do laser: linha fina (ciano; vermelha se superaquecida) do cano até o 1o rival
+const _UP = new THREE.Vector3(0, 1, 0);
+function criarSight() {
+  const grp = new THREE.Group();
+  const linha = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 1, 6), new THREE.MeshBasicMaterial({ color: 0x66f0ff, transparent: true, opacity: 0.3, fog: false }));
+  const ponto = new THREE.Mesh(new THREE.SphereGeometry(0.05, 10, 8), new THREE.MeshBasicMaterial({ color: 0xff5a5a, transparent: true, opacity: 0.75, fog: false }));
+  grp.add(linha, ponto);
+  return { grp, linha, ponto };
+}
+function atualizarSight(s, rag, arma) {
+  const h = rag.heading, dx = Math.sin(h), dz = Math.cos(h);
+  const mp = arma.body.translation(), range = arma.alcanceTiro;
+  let t = range;
+  for (const o of lutadores) {
+    if (o.rag === rag || !o.vivo) continue;
+    const tp = o.rag.parts.torso.translation();
+    const rx = tp.x - mp.x, rz = tp.z - mp.z, dd = rx * dx + rz * dz;
+    if (dd < 0.2 || dd > range) continue;
+    if (Math.hypot(rx - dx * dd, rz - dz * dd) < 0.75) t = Math.min(t, dd);
+  }
+  const len = Math.max(0.2, t);
+  s.grp.position.set(mp.x, mp.y, mp.z);
+  s.grp.quaternion.setFromUnitVectors(_UP, new THREE.Vector3(dx, 0, dz));
+  s.linha.scale.set(1, len, 1); s.linha.position.set(0, len / 2, 0);
+  s.ponto.position.set(0, len, 0);
+  s.linha.material.color.setHex(arma.quente ? 0xff4030 : 0x66f0ff);
 }
 function removerArma(m, arma) {
   const i = (m.armas || []).indexOf(arma); if (i >= 0) m.armas.splice(i, 1);
@@ -1636,6 +1677,7 @@ function montarLutadores(configs) {
   for (const l of lutadores) {
     destroyVisual(l.meshes);
     l.rag.destroy();
+    if (l._sight) { scene.remove(l._sight.grp); l._sight = null; }
   }
   lutadores = configs.map((cfg, i) => {
     const [sx, sz] = SPAWNS[i];
@@ -2015,7 +2057,7 @@ function updateScore() {
     return `<div class="pcard" data-i="${i}">`
       + `<div class="pdev">`
       + `<img class="retrato" src="${ASSET(`assets/retratos/${s.id}.jpg`)}" onerror="this.style.display='none'">`
-      + `<span>${l.score}</span></div>`
+      + `<span>${l.score}</span><span class="parma"></span></div>`
       + `<div class="pbar ko"><i></i></div>`
       + `<div class="pbar fol"><i></i></div>`
       + `</div>`;
@@ -2026,6 +2068,7 @@ function updateScore() {
     l._hudCard = card;
     l._hudKO = card && card.querySelector('.ko i');
     l._hudFol = card && card.querySelector('.fol i');
+    l._hudArma = card && card.querySelector('.parma');
   });
 }
 // Atualiza as barras de nocaute (dano) e fôlego a cada frame.
@@ -2037,6 +2080,12 @@ function updateHudBarras(now) {
     l._hudFol.style.width = (Math.max(0, Math.min(1, l.rag.folego)) * 100).toFixed(0) + '%';
     const down = l.rag.isDowned(now);
     if (l._hudCard) l._hudCard.classList.toggle('down', down);
+    // ícone da arma que está segurando (esmaece se superaquecida)
+    if (l._hudArma) {
+      const arma = mapa.armas && mapa.armas.find((a) => l.rag.grabJoints.some((g) => g && g.body === a.body));
+      l._hudArma.textContent = arma ? arma.icone : '';
+      l._hudArma.style.opacity = (arma && arma.tiro && arma.quente) ? '0.35' : '1';
+    }
   }
 }
 function showMsg(txt, sub = '') {
@@ -2491,13 +2540,25 @@ function frame(t) {
       proxArmaEm = simNow + 9 + Math.random() * 5;
     }
   }
+  // Resfria as armas de tiro (superaquecimento: trava até esfriar de novo)
+  for (const arma of (mapa.armas || [])) {
+    if (!arma.tiro) continue;
+    arma.calor = Math.max(0, arma.calor - arma.resfria * fdt);
+    if (arma.quente && arma.calor <= 0.02) arma.quente = false;
+  }
   // TIRO: quem segura um blaster e aperta soco dispara um laser (mira p/ onde olha)
   for (const l of lutadores) {
     const arma = mapa.armas && mapa.armas.find((a) => a.tiro && l.rag.grabJoints.some((g) => g && g.body === a.body));
+    // Mira do laser: linha fina enquanto segura o blaster
+    if (arma) { l._sight ||= criarSight(); atualizarSight(l._sight, l.rag, arma); l._sight.grp.visible = true; }
+    else if (l._sight) l._sight.grp.visible = false;
     if (!arma) continue;
     if (l.rag.lastPunchStartAt > (l._tiroVisto ?? -1) && simNow > (l._tiroCd ?? 0)) {
       l._tiroVisto = l.rag.lastPunchStartAt;
+      if (arma.quente) continue; // superaquecido: não dispara
       l._tiroCd = simNow + arma.cadencia;
+      arma.calor = Math.min(arma.calorMax, arma.calor + arma.calorPorTiro);
+      if (arma.calor >= arma.calorMax) arma.quente = true;
       dispararLaser(l, arma);
     }
   }

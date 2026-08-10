@@ -499,11 +499,13 @@ export class Ragdoll {
             if (d < bestD) { bestD = d; best = tb; bestRival = rival; }
           }
         }
-        // Objetos da arena também são agarráveis (caixote, bola…)
+        // Objetos da arena (caixote, bola, ARMAS…): íman de pickup — alcance bem
+        // maior que agarrar rival, pra pegar arma do chão sem precisar mirar fino.
         for (const pb of this.props) {
           const tp = pb.translation();
-          const d = Math.hypot(tip[0] - tp.x, tip[1] - tp.y, tip[2] - tp.z) - 0.25;
-          if (d < bestD) { bestD = d; best = pb; bestRival = null; }
+          const d = Math.hypot(tip[0] - tp.x, tip[1] - tp.y, tip[2] - tp.z) - 0.35;
+          const lim = best ? bestD : 1.0; // sem rival por perto, agarra prop até ~1m
+          if (d < lim) { bestD = d; best = pb; bestRival = null; }
         }
         const hand = this.parts[side === 0 ? 'forearmL' : 'forearmR'];
         if (best) {
