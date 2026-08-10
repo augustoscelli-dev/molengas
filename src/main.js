@@ -28,7 +28,7 @@ const MODOS = [
 ];
 let modoIdx = 0;
 let MODO_CAOS = false; // partida atual usa drop de armas acelerado?
-const IDLE_IN = { move: { x: 0, z: 0 }, punch: false, grab: false, jump: false };
+const IDLE_IN = { move: { x: 0, z: 0 }, punch: false, grab: false, jump: false, esquiva: false };
 
 // Na versão publicada (arquivo único), os assets viram data-URIs injetados aqui.
 const ASSET = (p) => (globalThis.MOLENGAS_ASSETS && globalThis.MOLENGAS_ASSETS[p]) || p;
@@ -357,7 +357,7 @@ function dispararLaser(l, arma) {
   const fx = mp.x, fy = mp.y, fz = mp.z, range = arma.alcanceTiro;
   let alvo = null, alvoT = range, ap = null;
   for (const o of lutadores) {
-    if (o === l || !o.vivo) continue;
+    if (o === l || !o.vivo || o.rag.isEsquivando(simNow)) continue; // esquiva desvia o tiro
     const tp = o.rag.parts.torso.translation();
     const rx = tp.x - fx, ry = tp.y - fy, rz = tp.z - fz;
     const t = rx * dx + rz * dz;                 // distância ao longo do feixe (horizontal)
@@ -1734,6 +1734,12 @@ function detectarDash(l, inp, now) {
   l._movHeld = mag > 0.3;
 }
 
+// Esquiva: dispara na borda (apertou), rola na direção segurada
+function detectarEsquiva(l, inp, now) {
+  if (inp.esquiva && !l._esqHeld) l.rag.esquiva(now, inp.move.x, inp.move.z);
+  l._esqHeld = !!inp.esquiva;
+}
+
 // ---------- Bot ----------
 function botInput(l) {
   const out = { move: { x: 0, z: 0 }, punch: false, grab: false, jump: false };
@@ -2475,7 +2481,7 @@ function frame(t) {
       let inp = lutando && l.vivo ? inputDoLutador(l) : IDLE_IN;
       if (inp !== IDLE_IN) {
         if (mapa.semSoco && inp.punch) inp = { ...inp, punch: false };
-        if (l.cfg.tipo !== 'cpu') detectarDash(l, inp, simNow);
+        if (l.cfg.tipo !== 'cpu') { detectarDash(l, inp, simNow); detectarEsquiva(l, inp, simNow); }
       }
       l.rag.update(FIXED_DT, simNow, inp);
     }

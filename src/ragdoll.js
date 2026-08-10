@@ -90,6 +90,9 @@ export class Ragdoll {
     this.dano = 0; // nocaute acumulativo: apanhar seguido atordoa mais
     this.folego = 1; // cansaço: spam de soco esgota
     this.dashReadyAt = 0;
+    this.esquivaReadyAt = 0;   // cooldown da esquiva
+    this.esquivaUntil = 0;     // janela de invencibilidade (i-frames)
+    this.lastEsquivaAt = -10;
     this.emoteReadyAt = 0;
     this.stats = { socos: 0, acertos: 0, quedas: 0, pendurado: 0, arremessos: 0 };
 
@@ -222,6 +225,28 @@ export class Ragdoll {
     const dir = [Math.sin(this.heading), 0, Math.cos(this.heading)];
     this.parts.pelvis.applyImpulse({ x: dir[0] * 10, y: 1, z: dir[2] * 10 }, true);
     this.parts.torso.applyImpulse({ x: dir[0] * 6, y: 0.5, z: dir[2] * 6 }, true);
+  }
+
+  // Durante a esquiva o lutador fica invencível (golpes e tiros atravessam)
+  isEsquivando(now) { return now < this.esquivaUntil; }
+
+  // Esquiva: rolamento evasivo rápido com breve invencibilidade (i-frames).
+  // Vai pra onde estiver segurando; parado, rola pra trás.
+  esquiva(now, mx = 0, mz = 0) {
+    if (now < this.esquivaReadyAt || this.isStunned(now)) return;
+    this.esquivaReadyAt = now + 1.0;
+    this.lastEsquivaAt = now;
+    this.esquivaUntil = now + 0.4;
+    this.hoverBlockUntil = Math.max(this.hoverBlockUntil, now + 0.12);
+    let dx = mx, dz = mz;
+    const mag = Math.hypot(dx, dz);
+    if (mag > 0.2) { dx /= mag; dz /= mag; }
+    else { dx = -Math.sin(this.heading); dz = -Math.cos(this.heading); } // parado => pra trás
+    const p = this.parts.pelvis, v = p.linvel();
+    p.setLinvel({ x: v.x * 0.3, y: v.y, z: v.z * 0.3 }, true); // corta a velocidade atual pro impulso ser limpo
+    p.applyImpulse({ x: dx * 12, y: 1.5, z: dz * 12 }, true);
+    this.parts.torso.applyImpulse({ x: dx * 6, y: 0.5, z: dz * 6 }, true);
+    p.applyTorqueImpulse({ x: dz * 3, y: 0, z: -dx * 3 }, true); // giro de rolamento
   }
 
   update(dt, now, input) {
@@ -457,6 +482,7 @@ export class Ragdoll {
         const alc = this._chute ? 0.56 : 0.48;
         outer: for (const tip of tips) {
           for (const rival of this.rivals) {
+            if (rival.isEsquivando(now)) continue; // i-frames: o golpe atravessa
             for (const pname of ['head', 'torso', 'pelvis']) {
               const tb = rival.parts[pname];
               const tp = tb.translation();

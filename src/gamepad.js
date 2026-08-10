@@ -15,6 +15,7 @@ export function readGamepad(idx) {
     grab: bt(1) || bt(4) || bt(7),
     jump: bt(0),
     emote: bt(3),
+    esquiva: bt(6) || bt(10), // LT ou clique do analógico esquerdo
   };
 }
 
@@ -29,5 +30,6 @@ export function mergeInput(teclado, controle) {
     grab: teclado.grab || controle.grab,
     jump: teclado.jump || controle.jump,
     emote: teclado.emote || controle.emote,
+    esquiva: teclado.esquiva || controle.esquiva,
   };
 }
