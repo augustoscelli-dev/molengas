@@ -1742,7 +1742,7 @@ function detectarEsquiva(l, inp, now) {
 
 // ---------- Bot ----------
 function botInput(l) {
-  const out = { move: { x: 0, z: 0 }, punch: false, grab: false, jump: false };
+  const out = { move: { x: 0, z: 0 }, punch: false, grab: false, jump: false, esquiva: false };
   const me = l.rag.parts.pelvis.translation();
   const alvos = lutadores.filter((o) => o !== l && o.vivo);
   if (!alvos.length) return out;
@@ -1788,6 +1788,20 @@ function botInput(l) {
       let aw = null, ad = 2.4;
       for (const a of mapa.armas) { const q = a.body.translation(); const d = Math.hypot(q.x - me.x, q.z - me.z); if (d < ad) { ad = d; aw = a; } }
       if (aw) { const q = aw.body.translation(); const wx = q.x - me.x, wz = q.z - me.z, wl = Math.hypot(wx, wz) || 1; out.move.x = wx / wl; out.move.z = wz / wl; if (ad < 0.85) out.grab = true; return out; }
+    }
+  }
+  // Esquiva reativa: se o alvo armou um golpe pertinho e está encarando, o bot desvia de lado
+  if (dAlvo < 1.5 && simNow > (l._botEsq ?? 0) && !l.rag.grabbedRival()) {
+    const ra = alvo.rag;
+    const armouGolpe = simNow - (ra.lastPunchStartAt ?? -9) < 0.16;
+    const rdx = Math.sin(ra.heading), rdz = Math.cos(ra.heading);
+    const tox = me.x - ap.x, toz = me.z - ap.z, tl = Math.hypot(tox, toz) || 1;
+    const encara = (rdx * tox + rdz * toz) / tl > 0.45;
+    if (armouGolpe && encara && Math.random() < 0.6) {
+      out.esquiva = true;
+      out.move.x = -rdz; out.move.z = rdx; // sidestep perpendicular ao golpe
+      l._botEsq = simNow + 1.4;
+      return out;
     }
   }
   // decidir soco ou agarrão quando chega perto
@@ -2481,7 +2495,8 @@ function frame(t) {
       let inp = lutando && l.vivo ? inputDoLutador(l) : IDLE_IN;
       if (inp !== IDLE_IN) {
         if (mapa.semSoco && inp.punch) inp = { ...inp, punch: false };
-        if (l.cfg.tipo !== 'cpu') { detectarDash(l, inp, simNow); detectarEsquiva(l, inp, simNow); }
+        if (l.cfg.tipo !== 'cpu') detectarDash(l, inp, simNow);
+        detectarEsquiva(l, inp, simNow); // humanos e bots podem esquivar
       }
       l.rag.update(FIXED_DT, simNow, inp);
     }
