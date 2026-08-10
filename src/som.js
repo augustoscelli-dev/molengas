@@ -144,6 +144,9 @@ export const som = {
   pulo() { tom(280, 0.1, { type: 'square', vol: 0.15, slideTo: 520 }); },
   agarra() { sopro(0.05, { freq: 1400, vol: 0.25 }); },
   arremesso() { sopro(0.25, { freq: 500, slideTo: 1600, vol: 0.35 }); },
+  esquiva() { sopro(0.16, { freq: 1300, slideTo: 380, vol: 0.22, type: 'bandpass' }); }, // whoosh curto e leve
+  laser() { tom(1250, 0.16, { type: 'sawtooth', vol: 0.26, slideTo: 260 }); sopro(0.06, { freq: 3200, vol: 0.14 }); }, // pew sci-fi
+  overheat() { sopro(0.3, { freq: 2600, slideTo: 700, vol: 0.18, type: 'highpass' }); tom(180, 0.18, { type: 'square', vol: 0.1, slideTo: 90 }); }, // chiado de superaquecido
   selecionar() { tom(600, 0.06, { vol: 0.15 }); },
   confirmar() { tom(700, 0.09, { vol: 0.2 }); tom(1050, 0.12, { vol: 0.2, delay: 0.08 }); },
   lutem() { [392, 523, 659].forEach((f, i) => tom(f, 0.12, { vol: 0.3, delay: i * 0.06 })); },

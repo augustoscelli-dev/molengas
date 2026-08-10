@@ -370,7 +370,7 @@ function dispararLaser(l, arma) {
   spawnBeam(fx, fy, fz, ex, fy, ez, arma.cor);
   spawnFlash(fx + dx * 0.45, fy, fz + dz * 0.45, arma.cor); // flash no cano
   powFx({ x: fx + dx * 0.4, y: fy, z: fz + dz * 0.4 });
-  som.arremesso();
+  som.laser?.();
   if (alvo) {
     alvo.rag.dano = Math.min(4, alvo.rag.dano + arma.danoTiro);
     alvo.rag.stun(simNow + 0.85);
@@ -2580,7 +2580,7 @@ function frame(t) {
       if (arma.quente) continue; // superaquecido: não dispara
       l._tiroCd = simNow + arma.cadencia;
       arma.calor = Math.min(arma.calorMax, arma.calor + arma.calorPorTiro);
-      if (arma.calor >= arma.calorMax) arma.quente = true;
+      if (arma.calor >= arma.calorMax && !arma.quente) { arma.quente = true; som.overheat?.(); }
       dispararLaser(l, arma);
     }
   }
@@ -2637,6 +2637,11 @@ function frame(t) {
     if (p.lastDashAt > (p._sDash ?? -1)) {
       p._sDash = p.lastDashAt;
       som.arremesso();
+      puffFx(p.parts.pelvis.translation());
+    }
+    if (p.lastEsquivaAt > (p._sEsq ?? -1)) {
+      p._sEsq = p.lastEsquivaAt;
+      som.esquiva?.();
       puffFx(p.parts.pelvis.translation());
     }
     if (p.lastEmoteAt > (p._sEmote ?? -1)) {
