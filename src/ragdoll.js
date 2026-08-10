@@ -76,6 +76,8 @@ export class Ragdoll {
     this.gaitT = 0;
     this.lastHitLandedAt = -10;
     this.lastPunchStartAt = -10;
+    this.lastCabecadaAt = -10; // cabeçada (agarrar+soco)
+    this.lastChuteAt = -10;    // chute (trás+soco)
     this.lastJumpAt = -10;
     this.lastGrabAt = -10;
     this.lastThrowAt = -10;
@@ -162,6 +164,21 @@ export class Ragdoll {
 
   hangingOnLedge() {
     return this.grabJoints.some((g) => g && g.chao);
+  }
+
+  // Rival que está agarrado agora (pra cabeçada no agarrão), ou null.
+  grabbedRival() {
+    for (const g of this.grabJoints) if (g && g.rival && !g.rival.isDowned(this._now || 0)) return g.rival;
+    for (const g of this.grabJoints) if (g && g.rival) return g.rival;
+    return null;
+  }
+
+  // Ponta do pé (pra chute)
+  footTip(side) {
+    const calf = this.parts[side === 0 ? 'calfL' : 'calfR'];
+    const p = calf.translation();
+    const d = qrot(calf.rotation(), [0, -0.2, 0]);
+    return [p.x + d[0], p.y + d[1], p.z + d[2]];
   }
 
   // Rival mais próximo (pela distância entre troncos)
@@ -353,50 +370,88 @@ export class Ragdoll {
         pelvis.applyImpulse({ x: 0, y: 20, z: 0 }, true);
         this.parts.torso.applyImpulse({ x: 0, y: 12, z: 0 }, true);
       }
-      // Soco (cansaço: sem fôlego sai fraco e lento; no ar vira voadora)
+      // Ataques com o botão de soco: CABEÇADA (agarrando), CHUTE (segurando trás) ou SOCO
       if (input.punch && now >= this.punchReadyAt) {
-        this._socoFraco = this.folego < 0.3;
-        this.folego = Math.max(0, this.folego - 0.34);
-        this._voadora = !grounded;
-        this.punchReadyAt = now + (this._socoFraco ? 1.3 : 0.8);
-        this.punchUntil = now + (this._voadora ? 0.32 : 0.25);
-        this.punchHit = false;
-        this.lastPunchStartAt = now;
-        this.stats.socos++;
         const dir = [Math.sin(this.heading), 0, Math.cos(this.heading)];
-        const forca = this._socoFraco ? 3.5 : 7;
-        for (const h of ['forearmL', 'forearmR']) {
-          this.parts[h].applyImpulse({ x: dir[0] * forca, y: 1.2, z: dir[2] * forca }, true);
-        }
-        if (this._voadora) {
-          // tackle: o corpo inteiro vai junto — e depois desaba (risco × recompensa)
-          this.parts.torso.applyImpulse({ x: dir[0] * 6, y: 0.5, z: dir[2] * 6 }, true);
-          pelvis.applyImpulse({ x: dir[0] * 5, y: 0, z: dir[2] * 5 }, true);
-          this.hoverBlockUntil = Math.max(this.hoverBlockUntil, now + 0.7);
+        const alvoAgarrado = this.grabbedRival();
+        const querChute = grounded && input.move && input.move.z > 0.5; // segurar p/ trás/baixo + soco
+        if (alvoAgarrado) {
+          // CABEÇADA: puxa o inimigo agarrado e dá uma cabeçada (enche o nocaute rápido)
+          this.punchReadyAt = now + 0.6;
+          this.lastCabecadaAt = now;
+          this.folego = Math.max(0, this.folego - 0.15);
+          const mh = this.parts.head.translation();
+          const rb = alvoAgarrado.parts.head, rh = rb.translation();
+          const ddx = rh.x - mh.x, ddz = rh.z - mh.z, dl = Math.hypot(ddx, ddz) || 1;
+          this.parts.head.applyImpulse({ x: (ddx / dl) * 5, y: 1.2, z: (ddz / dl) * 5 }, true);
+          rb.applyImpulse({ x: (ddx / dl) * 7, y: 2.4, z: (ddz / dl) * 7 }, true);
+          alvoAgarrado.dano = Math.min(4, alvoAgarrado.dano + 2); // cabeçada dói o dobro
+          alvoAgarrado.stun(now + Math.min(2.6, 1.2 * (1 + alvoAgarrado.dano * 0.35)));
+          if (alvoAgarrado.dano >= 4 && !alvoAgarrado.isDowned(now)) alvoAgarrado.knockdown(now);
+          alvoAgarrado.lastHitLandedAt = now;
+          this.stats.acertos++;
+        } else {
+          this._socoFraco = this.folego < 0.3;
+          this.folego = Math.max(0, this.folego - (querChute ? 0.4 : 0.34));
+          this._voadora = !grounded;
+          this._chute = querChute;
+          this.punchReadyAt = now + (this._socoFraco ? 1.3 : querChute ? 0.95 : 0.8);
+          this.punchUntil = now + (this._voadora ? 0.32 : querChute ? 0.3 : 0.25);
+          this.punchHit = false;
+          this.lastPunchStartAt = now;
+          if (querChute) this.lastChuteAt = now;
+          this.stats.socos++;
+          if (querChute) {
+            // CHUTE: joga uma perna pra frente (a janela detecta o pé no rival)
+            this._chutePerna = this._chutePerna === 'calfL' ? 'calfR' : 'calfL';
+            const perna = this.parts[this._chutePerna];
+            perna.applyImpulse({ x: dir[0] * 9, y: 3.2, z: dir[2] * 9 }, true);
+            this.parts.torso.applyImpulse({ x: -dir[0] * 1.5, y: 0, z: -dir[2] * 1.5 }, true);
+          } else {
+            const forca = this._socoFraco ? 3.5 : 7;
+            for (const h of ['forearmL', 'forearmR']) {
+              this.parts[h].applyImpulse({ x: dir[0] * forca, y: 1.2, z: dir[2] * forca }, true);
+            }
+          }
+          if (this._voadora) {
+            // tackle: o corpo inteiro vai junto — e depois desaba (risco × recompensa)
+            this.parts.torso.applyImpulse({ x: dir[0] * 6, y: 0.5, z: dir[2] * 6 }, true);
+            pelvis.applyImpulse({ x: dir[0] * 5, y: 0, z: dir[2] * 5 }, true);
+            this.hoverBlockUntil = Math.max(this.hoverBlockUntil, now + 0.7);
+          }
         }
       }
     }
 
-    // Janela do soco: braços continuam indo pra frente + detecção de acerto
+    // Janela do golpe: o membro continua indo pra frente + detecção de acerto.
+    // Soco = punhos; chute = a perna chutando (this._chutePerna).
     if (now < this.punchUntil) {
       const dir = [Math.sin(this.heading), 0, Math.cos(this.heading)];
-      for (const h of ['forearmL', 'forearmR']) {
-        this.parts[h].applyImpulse({ x: dir[0] * 26 * dt, y: 0, z: dir[2] * 26 * dt }, true);
+      if (this._chute) {
+        this.parts[this._chutePerna].applyImpulse({ x: dir[0] * 30 * dt, y: 2 * dt, z: dir[2] * 30 * dt }, true);
+      } else {
+        for (const h of ['forearmL', 'forearmR']) {
+          this.parts[h].applyImpulse({ x: dir[0] * 26 * dt, y: 0, z: dir[2] * 26 * dt }, true);
+        }
       }
       if (!this.punchHit && this.rivals.length) {
-        outer: for (let side = 0; side < 2; side++) {
-          const tip = this.handTip(side);
+        // pontos que golpeiam: chute = ponta do pé; soco = as duas mãos
+        const tips = this._chute
+          ? [this.footTip(this._chutePerna === 'calfL' ? 0 : 1)]
+          : [this.handTip(0), this.handTip(1)];
+        const alc = this._chute ? 0.56 : 0.48;
+        outer: for (const tip of tips) {
           for (const rival of this.rivals) {
             for (const pname of ['head', 'torso', 'pelvis']) {
               const tb = rival.parts[pname];
               const tp = tb.translation();
               const d = Math.hypot(tip[0] - tp.x, tip[1] - tp.y, tip[2] - tp.z);
-              if (d < 0.48) {
+              if (d < alc) {
                 const strong = pname === 'head';
-                const fator = (this._voadora ? 1.35 : 1) * (this._socoFraco ? 0.55 : 1);
+                const fator = (this._voadora ? 1.35 : 1) * (this._socoFraco ? 0.55 : 1) * (this._chute ? 1.3 : 1);
                 tb.applyImpulse({
                   x: dir[0] * (strong ? 6.5 : 5) * fator,
-                  y: (strong ? 2.2 : 1.5) * fator,
+                  y: (this._chute ? 1.0 : (strong ? 2.2 : 1.5)) * fator, // chute empurra mais reto (bom p/ ring-out)
                   z: dir[2] * (strong ? 6.5 : 5) * fator,
                 }, true);
                 // nocaute acumulativo: combo atordoa cada vez mais
@@ -412,7 +467,7 @@ export class Ragdoll {
               }
             }
           }
-          // Objetos da arena também levam soco
+          // Objetos da arena também levam o golpe
           for (const pb of this.props) {
             const tp = pb.translation();
             const d = Math.hypot(tip[0] - tp.x, tip[1] - tp.y, tip[2] - tp.z);
@@ -435,25 +490,25 @@ export class Ragdoll {
       for (let side = 0; side < 2; side++) {
         if (this.grabJoints[side]) continue;
         const tip = this.handTip(side);
-        let best = null, bestD = alvoCaido ? 1.0 : 0.5;
+        let best = null, bestD = alvoCaido ? 1.0 : 0.5, bestRival = null;
         for (const rival of this.rivals) {
           for (const pname of ['head', 'torso', 'pelvis', 'upperArmL', 'upperArmR', 'forearmL', 'forearmR']) {
             const tb = rival.parts[pname];
             const tp = tb.translation();
             const d = Math.hypot(tip[0] - tp.x, tip[1] - tp.y, tip[2] - tp.z);
-            if (d < bestD) { bestD = d; best = tb; }
+            if (d < bestD) { bestD = d; best = tb; bestRival = rival; }
           }
         }
         // Objetos da arena também são agarráveis (caixote, bola…)
         for (const pb of this.props) {
           const tp = pb.translation();
           const d = Math.hypot(tip[0] - tp.x, tip[1] - tp.y, tip[2] - tp.z) - 0.25;
-          if (d < bestD) { bestD = d; best = pb; }
+          if (d < bestD) { bestD = d; best = pb; bestRival = null; }
         }
         const hand = this.parts[side === 0 ? 'forearmL' : 'forearmR'];
         if (best) {
           const data = this.R.JointData.spherical({ x: 0, y: -0.12, z: 0 }, { x: 0, y: 0, z: 0 });
-          this.grabJoints[side] = { j: this.world.createImpulseJoint(data, hand, best, true), body: best, chao: false };
+          this.grabJoints[side] = { j: this.world.createImpulseJoint(data, hand, best, true), body: best, chao: false, rival: bestRival };
           this.lastGrabAt = now;
         } else if (situacaoBeirada && this.world.projectPoint) {
           // Caindo perto da plataforma: a mão gruda na beirada

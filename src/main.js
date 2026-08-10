@@ -1526,11 +1526,12 @@ function botInput(l) {
   }
   if (simNow < (l._botGrabAte ?? 0)) {
     out.grab = true;
-    // agarrou alguém? arrasta pra borda mais próxima
-    if (l.rag.grabJoints[0] || l.rag.grabJoints[1]) {
+    // agarrou um rival? dá cabeçada de vez em quando e arrasta pra borda mais próxima
+    if (l.rag.grabbedRival()) {
       const rl = Math.hypot(me.x, me.z) || 1;
       out.move.x = me.x / rl;
       out.move.z = me.z / rl;
+      if (simNow > (l._botCab ?? 0)) { out.punch = true; l._botCab = simNow + 0.9 + Math.random() * 0.6; }
     }
   }
   if (l.rag.hangingOnLedge()) out.jump = true;
@@ -2256,6 +2257,8 @@ function frame(t) {
       trauma = 1; hitStop = Math.max(hitStop, 0.1);
     }
     if (p.lastPunchStartAt > (p._sSoco ?? -1)) { p._sSoco = p.lastPunchStartAt; som.soco(); som.vozSoco(VOZES[l.slot]); }
+    if (p.lastCabecadaAt > (p._sCab ?? -1)) { p._sCab = p.lastCabecadaAt; som.soco(); som.vozSoco(VOZES[l.slot]); trauma = Math.min(1, trauma + 0.4); hitStop = Math.max(hitStop, 0.06); }
+    if (p.lastChuteAt > (p._sChu ?? -1)) { p._sChu = p.lastChuteAt; som.soco(); }
     if (p.lastJumpAt > (p._sPulo ?? -1)) { p._sPulo = p.lastJumpAt; som.pulo(); }
     if (p.lastGrabAt > (p._sGarra ?? -1)) {
       p._sGarra = p.lastGrabAt;
