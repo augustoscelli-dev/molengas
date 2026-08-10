@@ -72,6 +72,7 @@ export class Ragdoll {
     this.punchUntil = 0;
     this.punchHit = true;
     this.jumpReadyAt = 0;
+    this._jumpPrev = false; this._pulosAr = 0; // duplo pulo
     this.hoverBlockUntil = 0;
     this.gaitT = 0;
     this.lastHitLandedAt = -10;
@@ -238,6 +239,20 @@ export class Ragdoll {
     const toi = stunned ? null : this.groundToi();
     const surfaceY = toi !== null ? pp.y - toi : 0;
     const grounded = toi !== null && toi < 1.25 && Math.abs(pv.y) < 3;
+
+    // Duplo pulo: 1 pulo extra no ar (detecta o clique, não o segurar).
+    if (grounded) this._pulosAr = 0;
+    const jumpEdge = input.jump && !this._jumpPrev;
+    this._jumpPrev = input.jump;
+    if (jumpEdge && !grounded && !stunned && (this._pulosAr || 0) < 1) {
+      this._pulosAr = (this._pulosAr || 0) + 1;
+      this.lastJumpAt = now;
+      this.hoverBlockUntil = now + 0.35;
+      const v = pelvis.linvel();
+      if (v.y < 0) pelvis.setLinvel({ x: v.x, y: 0, z: v.z }, true); // corta a queda pro pulo dar impulso limpo
+      pelvis.applyImpulse({ x: 0, y: 17, z: 0 }, true);
+      this.parts.torso.applyImpulse({ x: 0, y: 10, z: 0 }, true);
+    }
 
     // "Em pé" = anti-gravidade parcial + molas de marionete + torque de vertical.
     const standing = !stunned && toi !== null && now > this.hoverBlockUntil;
