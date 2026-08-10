@@ -217,8 +217,9 @@ const ARMAS_DEF = {
   laser: {
     y0: 0.4, massa: 1.5, alcance: 0.42, forca: 4,
     tiro: true, alcanceTiro: 7, cadencia: 0.5, danoTiro: 1, cor: 0x37e5ff,
-    collider: () => RAPIER.ColliderDesc.capsule(0.1, 0.1),
-    mesh: () => {
+    glb: 'raygun-low', escala: 0.62, corMat: 0xc79a4a, // ray gun do Meshy (metálico dourado)
+    collider: () => RAPIER.ColliderDesc.capsule(0.12, 0.13),
+    mesh: () => { // fallback caso o GLB não tenha carregado ainda
       const g = new THREE.Group();
       const corpo = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.16, 0.36), new THREE.MeshStandardMaterial({ color: 0x2b3040, metalness: 0.7, roughness: 0.4 }));
       const cano = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.3, 12), new THREE.MeshStandardMaterial({ color: 0x8890a0, metalness: 0.8, roughness: 0.3 }));
@@ -232,13 +233,31 @@ const ARMAS_DEF = {
     },
   },
 };
+// Cache dos modelos de arma (GLB do Meshy) — carrega uma vez, clona a cada drop.
+const armaGLBcache = {};
+function preloadArmaGLB(def) {
+  new GLTFLoader().load(ASSET('assets/modelos/' + def.glb + '.glb'), (g) => {
+    const s = g.scene;
+    const mat = new THREE.MeshStandardMaterial({ color: def.corMat ?? 0xb8b8c0, metalness: 0.65, roughness: 0.4 });
+    s.traverse((o) => { if (o.isMesh) { o.material = mat; o.castShadow = true; o.receiveShadow = true; } });
+    // centraliza e escala pra caber na mão
+    const box = new THREE.Box3().setFromObject(s), size = new THREE.Vector3(); box.getSize(size);
+    s.scale.setScalar((def.escala || 0.5) / (Math.max(size.x, size.y, size.z) || 1));
+    const g2 = new THREE.Group(); g2.add(s);
+    const c2 = new THREE.Vector3(); new THREE.Box3().setFromObject(g2).getCenter(c2); s.position.sub(c2);
+    armaGLBcache[def.glb] = g2;
+  });
+}
+for (const d of Object.values(ARMAS_DEF)) if (d.glb) preloadArmaGLB(d);
+
 function soltarArma(m, x, z, tipo = 'bastao') {
   const def = ARMAS_DEF[tipo] || ARMAS_DEF.bastao;
   const b = world.createRigidBody(
     RAPIER.RigidBodyDesc.dynamic().setTranslation(x, def.y0, z).setLinearDamping(0.2).setAngularDamping(0.45),
   );
   world.createCollider(def.collider().setMass(def.massa).setFriction(0.6).setCollisionGroups(PROP_GROUPS), b);
-  const mesh = def.mesh(); mesh.castShadow = true; scene.add(mesh);
+  const mesh = (def.glb && armaGLBcache[def.glb]) ? armaGLBcache[def.glb].clone(true) : def.mesh();
+  mesh.castShadow = true; scene.add(mesh);
   m.bodies.push(b); m.meshes.push(mesh); m.syncPairs.push([b, mesh]); m.props.push(b);
   (m.armas ||= []).push({
     body: b, mesh, alcance: def.alcance, forca: def.forca,
