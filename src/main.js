@@ -834,6 +834,7 @@ const MAPAS = [
         emissive: 0x14323d, emissiveIntensity: 0.18,
       }));
       agua.rotation.x = -Math.PI / 2; agua.position.y = 0.06; agua.receiveShadow = true;
+      m.aguaY = 0.06; // superfície da água (pra splash de nocaute ao cair no mar)
       scene.add(agua); m.meshes.push(agua);
       const baseA = posA.array.slice();
       m.update = (t) => {
@@ -2464,6 +2465,19 @@ function frame(t) {
     }
   }
   updateBeams(fdt);
+  // Splash: cair no mar (mapas com m.aguaY, tipo RIO) faz splash + som de queda
+  if (mapa.aguaY != null) {
+    for (const l of lutadores) {
+      const py = l.rag.parts.pelvis.translation();
+      if (py.y > mapa.aguaY) { l._naAgua = false; continue; }
+      if (py.y < mapa.aguaY - 1.1 && !l._naAgua) {
+        l._naAgua = true;
+        puffFx({ x: py.x, y: mapa.aguaY + 0.1, z: py.z });
+        puffFx({ x: py.x + 0.3, y: mapa.aguaY + 0.25, z: py.z });
+        som.queda?.(); trauma = Math.min(1, trauma + 0.3);
+      }
+    }
+  }
 
   // Efeitos + sons por lutador
   for (const l of lutadores) {
