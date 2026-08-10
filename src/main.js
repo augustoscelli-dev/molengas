@@ -184,6 +184,55 @@ function resetCaixotes(m) {
     b.setAngvel({ x: 0, y: 0, z: 0 }, true);
   }
 }
+
+// ---------- Armas (dropam no mapa, qualquer um pega e usa) ----------
+// Cada arma é um prop (agarrável/arremessável); em velocidade, o corpo dela
+// machuca quem encostar (menos quem a segura). O visual é placeholder por
+// enquanto — depois entra o GLB do Meshy (arma não precisa de rig).
+const ARMAS_DEF = {
+  bastao: {
+    y0: 0.55, massa: 2.6, alcance: 0.72, forca: 10,
+    collider: () => RAPIER.ColliderDesc.capsule(0.32, 0.06),
+    mesh: () => {
+      const g = new THREE.Group();
+      const cabo = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.075, 0.74, 12), toonMat(THREE, 0x9a6b3f));
+      const punho = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.16, 12), toonMat(THREE, 0x2e2e38));
+      punho.position.y = -0.36; g.add(cabo, punho);
+      return g;
+    },
+  },
+  cano: {
+    y0: 0.5, massa: 3.2, alcance: 0.66, forca: 12,
+    collider: () => RAPIER.ColliderDesc.capsule(0.36, 0.05),
+    mesh: () => {
+      const g = new THREE.Group();
+      const m1 = new THREE.MeshStandardMaterial({ color: 0x9aa4b0, metalness: 0.8, roughness: 0.35 });
+      const tubo = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.82, 14), m1);
+      const anel = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.065, 0.06, 14), m1); anel.position.y = 0.4;
+      g.add(tubo, anel);
+      return g;
+    },
+  },
+};
+function soltarArma(m, x, z, tipo = 'bastao') {
+  const def = ARMAS_DEF[tipo] || ARMAS_DEF.bastao;
+  const b = world.createRigidBody(
+    RAPIER.RigidBodyDesc.dynamic().setTranslation(x, def.y0, z).setLinearDamping(0.2).setAngularDamping(0.45),
+  );
+  world.createCollider(def.collider().setMass(def.massa).setFriction(0.6).setCollisionGroups(PROP_GROUPS), b);
+  const mesh = def.mesh(); mesh.castShadow = true; scene.add(mesh);
+  m.bodies.push(b); m.meshes.push(mesh); m.syncPairs.push([b, mesh]); m.props.push(b);
+  (m.armas ||= []).push({ body: b, mesh, alcance: def.alcance, forca: def.forca, nascido: 0 });
+  return b;
+}
+function removerArma(m, arma) {
+  const i = (m.armas || []).indexOf(arma); if (i >= 0) m.armas.splice(i, 1);
+  world.removeRigidBody(arma.body);
+  scene.remove(arma.mesh);
+  const pi = m.props.indexOf(arma.body); if (pi >= 0) m.props.splice(pi, 1);
+  const si = m.syncPairs.findIndex((s) => s[0] === arma.body); if (si >= 0) m.syncPairs.splice(si, 1);
+  const bi = m.bodies.indexOf(arma.body); if (bi >= 0) m.bodies.splice(bi, 1);
+}
 function chaoFixo(m, hx, hz, mat, atrito = 0.8) {
   const g = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, -0.3, 0));
   world.createCollider(RAPIER.ColliderDesc.cuboid(hx, 0.3, hz).setFriction(atrito).setCollisionGroups(GROUND_GROUPS), g);
@@ -836,7 +885,8 @@ function setMapa(idx) {
     for (const me of mapa.meshes) scene.remove(me);
   }
   mapaIdx = ((idx % MAPAS.length) + MAPAS.length) % MAPAS.length;
-  mapa = { bodies: [], meshes: [], syncPairs: [], props: [], bolas: [], _caixotes: [], _blocos: [], reset: null, update: null };
+  mapa = { bodies: [], meshes: [], syncPairs: [], props: [], bolas: [], armas: [], _caixotes: [], _blocos: [], reset: null, update: null };
+  proxArmaEm = 0; // reinicia o cronômetro de drop de armas
   // Restaura o ambiente padrao (um mapa pode sobrescrever luz/ceu/neblina no build)
   backMesh.visible = true;
   scene.background = new THREE.Color(0x141433);
@@ -2153,6 +2203,7 @@ let last = performance.now();
 let simNow = 0;
 let trauma = 0;
 let hitStop = 0; // freeze-frame: congela a física por alguns ms no impacto (peso)
+let proxArmaEm = 0; // cronômetro do próximo drop de arma
 const camPos = new THREE.Vector3(0, 6, 10);
 
 function frame(t) {
@@ -2228,6 +2279,46 @@ function frame(t) {
         som.bolada();
         trauma = Math.min(1, trauma + 0.5);
       }
+    }
+  }
+
+  // ARMAS: em velocidade (arremessadas/balançadas) machucam quem encostam,
+  // menos quem está segurando a arma. Some da arena => é removida (libera vaga).
+  for (const arma of (mapa.armas || []).slice()) {
+    const ap = arma.body.translation();
+    if (ap.y < -6) { removerArma(mapa, arma); continue; }
+    const av = arma.body.linvel();
+    const sp = Math.hypot(av.x, av.y, av.z);
+    if (sp < 3.4) continue; // parada/carregada devagar não machuca
+    for (const l of lutadores) {
+      if (simNow < (l._armaCd ?? 0)) continue;
+      if (l.rag.grabJoints.some((g) => g && g.body === arma.body)) continue; // não fere quem segura
+      const tp = l.rag.parts.torso.translation();
+      if (Math.hypot(ap.x - tp.x, ap.y - tp.y, ap.z - tp.z) < arma.alcance) {
+        l._armaCd = simNow + 0.7;
+        const forte = sp > 7.5;
+        l.rag.dano = Math.min(4, l.rag.dano + (forte ? 2 : 1));
+        l.rag.stun(simNow + (forte ? 1.5 : 1.0));
+        if (l.rag.dano >= 4 && !l.rag.isDowned(simNow)) l.rag.knockdown(simNow);
+        const dl = Math.hypot(av.x, av.z) || 1;
+        for (const pn of ['torso', 'pelvis']) {
+          l.rag.parts[pn].applyImpulse({ x: (av.x / dl) * arma.forca, y: 2, z: (av.z / dl) * arma.forca }, true);
+        }
+        l.rag.lastHitLandedAt = simNow;
+        som.bolada(); trauma = Math.min(1, trauma + 0.5); hitStop = Math.max(hitStop, 0.06);
+      }
+    }
+  }
+  // Drop de arma de tempos em tempos (cai do alto), no máx. 3 na arena
+  if (state === 'luta') {
+    if (proxArmaEm === 0) proxArmaEm = simNow + 5;
+    if (simNow > proxArmaEm && (mapa.armas ? mapa.armas.length : 0) < 3) {
+      const ax = (Math.random() * 2 - 1) * 2.4; // perto do centro (serve p/ arenas de vários tamanhos)
+      const az = (Math.random() * 2 - 1) * 1.8;
+      const b = soltarArma(mapa, ax, az, Math.random() < 0.5 ? 'bastao' : 'cano');
+      b.setTranslation({ x: ax, y: 4.2, z: az }, true);
+      puffFx({ x: ax, y: 4.2, z: az });
+      proxArmaEm = simNow + 9 + Math.random() * 5;
     }
   }
 
