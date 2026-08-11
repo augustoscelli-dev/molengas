@@ -2643,13 +2643,16 @@ function receberSnap(m) {
     }
     for (const [id, e] of online.powerVis) if (!vistosP.has(id)) { scene.remove(e.s); online.powerVis.delete(id); }
   }
-  // Placar compacto (encolhe quando tem muita gente — até 20)
+  // Placar compacto (encolhe quando tem muita gente — até 20) + barra de nocaute
   const tam = m.pl.length > 6 ? 24 : 40;
   $('placar').innerHTML = m.pl.map((pl) => {
     const nm = SKINS[pl.sk % SKINS.length];
     const mortoOp = pl.v ? '' : 'opacity:.35;';
-    return `<span style="display:inline-flex;align-items:center;gap:3px;${mortoOp}">` +
-      `<img class="retrato" style="width:${tam}px;height:${tam}px;margin:0 2px" src="${ASSET(`assets/retratos/${nm.id}.jpg`)}" onerror="this.style.display='none'"><b>${pl.sc}</b></span>`;
+    const ko = Math.round(((pl.d || 0) / 4) * 100); // 0..100% até o nocaute
+    const quase = (pl.d || 0) >= 3.5 ? 'box-shadow:0 0 6px rgba(255,60,50,.9);' : '';
+    return `<span style="display:inline-flex;flex-direction:column;align-items:center;gap:2px;${mortoOp}">` +
+      `<span style="display:inline-flex;align-items:center;gap:3px"><img class="retrato" style="width:${tam}px;height:${tam}px;margin:0 2px" src="${ASSET(`assets/retratos/${nm.id}.jpg`)}" onerror="this.style.display='none'"><b>${pl.sc}</b></span>` +
+      `<span style="width:${tam + 12}px;height:4px;border-radius:3px;background:rgba(0,0,0,.45);overflow:hidden;${quase}"><span style="display:block;height:100%;width:${ko}%;background:linear-gradient(90deg,#ffd34a,#ff7a2f);transition:width .1s"></span></span></span>`;
   }).join('');
   // Lobby: mostra modo + quantos na sala + o que o host aperta
   if (touchAtivo() && $('online-acoes')) $('online-acoes').style.display = (m.st === 'lobby' || m.st === 'fim') ? 'flex' : 'none';
