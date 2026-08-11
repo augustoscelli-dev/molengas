@@ -2607,6 +2607,27 @@ function avisoOnline(txt, ms = 4500) {
   avisoOnline._t = setTimeout(() => { if ($('mapa')) $('mapa').textContent = ''; }, ms);
 }
 
+// Tela de vitória do online: retrato do campeão + placar (top 6) + confete
+function mostrarVitoriaOnline(m) {
+  const ord = [...m.pl].sort((a, b) => b.sc - a.sc);
+  const campeao = ord[0];
+  if (!campeao) { showMsg(m.msg); return; }
+  const nm = SKINS[campeao.sk % SKINS.length];
+  const top = ord.slice(0, 6).map((pl, i) => {
+    const n = SKINS[pl.sk % SKINS.length];
+    const eu = pl.s === online.slot;
+    return `<div class="vit-linha${i === 0 ? ' mvp' : ''}"><span class="vl-nome">${i === 0 ? '🏆 ' : ''}${n.nome}${eu ? ' (você)' : ''}</span><span>${pl.sc} pts</span></div>`;
+  }).join('');
+  const resto = ord.length > 6 ? `<div class="vit-linha"><span class="vl-nome">+ ${ord.length - 6} jogadores</span><span></span></div>` : '';
+  $('msg').innerHTML =
+    `<div class="vitoria"><img class="vit-retrato" src="${ASSET(`assets/retratos/${nm.id}.jpg`)}" alt="">` +
+    `<div class="vit-tit">🏆 ${nm.nome} VENCEU!</div>` +
+    `<div class="vit-stats">${top}${resto}</div>` +
+    `<div class="vit-dica">host aperta F pra reiniciar</div></div>`;
+  $('msg').style.display = 'block';
+  confete();
+}
+
 function receberSnap(m) {
   online.buf.push({ rx: performance.now() / 1000, m });
   if (online.buf.length > 30) online.buf.shift();
@@ -2675,10 +2696,12 @@ function receberSnap(m) {
   if (touchAtivo() && $('online-acoes')) $('online-acoes').style.display = (m.st === 'lobby' || m.st === 'fim') ? 'flex' : 'none';
   if (m.st === 'lobby') {
     showMsg('SALA ONLINE 🌐', `${m.mo || ''} — <b>${m.na || 0}/${m.cap || 0}</b> na sala &nbsp;·&nbsp; ${m.pt || ''} &nbsp;·&nbsp; 🤖×🦖 ${m.jg ? 'SIM' : 'não'}<br>host (jogador 1): <b>F</b> começa &nbsp;·&nbsp; <b>M</b> modo &nbsp;·&nbsp; <b>N</b> pontuação &nbsp;·&nbsp; <b>J</b> robôs×monstros`);
-    online.msgAtual = '__lobby__';
-  } else if (m.msg !== online.msgAtual) {
-    online.msgAtual = m.msg;
-    showMsg(m.msg);
+    online.msgAtual = '__lobby__'; online._fimMostrado = false;
+  } else if (m.st === 'fim') {
+    if (!online._fimMostrado) { online._fimMostrado = true; online.msgAtual = m.msg; mostrarVitoriaOnline(m); }
+  } else {
+    online._fimMostrado = false;
+    if (m.msg !== online.msgAtual) { online.msgAtual = m.msg; showMsg(m.msg); }
   }
   for (const evn of m.ev) {
     const [tipo, x, y, z] = evn;
