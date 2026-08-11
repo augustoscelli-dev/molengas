@@ -336,6 +336,16 @@ function preloadArmaGLB(def) {
 }
 for (const d of Object.values(ARMAS_DEF)) if (d.glb) preloadArmaGLB(d);
 
+// Índice de tipo de arma no protocolo online (espelha ARMA_TIPOS do servidor)
+const ARMA_TIPOS_CLI = ['bastao', 'cano', 'martelo', 'laser', 'bomba'];
+// Só o mesh de uma arma (usado no online, que recebe a arma pronta do servidor)
+function armaMeshDe(tipo) {
+  const def = ARMAS_DEF[tipo] || ARMAS_DEF.bastao;
+  const mesh = (def.glb && armaGLBcache[def.glb]) ? armaGLBcache[def.glb].clone(true) : def.mesh();
+  mesh.castShadow = true;
+  return mesh;
+}
+
 function soltarArma(m, x, z, tipo = 'bastao') {
   const def = ARMAS_DEF[tipo] || ARMAS_DEF.bastao;
   const b = world.createRigidBody(
@@ -2496,7 +2506,7 @@ function iniciarOnline() {
   $('selecao').style.display = 'none';
   showMsg('CONECTANDO…');
   const ws = new WebSocket(`ws://${location.host}`);
-  online = { ws, slot: null, visuais: new Map(), buf: [], msgAtual: null };
+  online = { ws, slot: null, visuais: new Map(), armasVis: new Map(), buf: [], msgAtual: null };
   ws.addEventListener('open', () => {
     ws.send(JSON.stringify({ t: 'entrar', skin: selCfg[0].skin }));
     showMsg('NA SALA! 🌐', 'quando todos entrarem, o host (1º jogador) aperta F');
@@ -2543,6 +2553,21 @@ function receberSnap(m) {
       online.visuais.delete(s);
     }
   }
+  // Armas: cria/remove os meshes conforme o servidor (posições vêm na interpolação)
+  if (m.wp) {
+    const vistos = new Set();
+    for (const w of m.wp) {
+      vistos.add(w.id);
+      if (!online.armasVis.has(w.id)) {
+        const mesh = armaMeshDe(ARMA_TIPOS_CLI[w.ti] || 'bastao');
+        scene.add(mesh);
+        online.armasVis.set(w.id, { mesh });
+      }
+    }
+    for (const [id, a] of online.armasVis) {
+      if (!vistos.has(id)) { scene.remove(a.mesh); online.armasVis.delete(id); }
+    }
+  }
   // Placar compacto (encolhe quando tem muita gente — até 20)
   const tam = m.pl.length > 6 ? 24 : 40;
   $('placar').innerHTML = m.pl.map((pl) => {
@@ -2576,6 +2601,16 @@ function receberSnap(m) {
     else if (tipo === 'queda') som.queda();
     else if (tipo === 'vitoria') { som.vitoria(); som.musica('menu'); }
     else if (tipo === 'bolada') som.bolada();
+    else if (tipo === 'laser') { // [_, fx,fy,fz, ex,ey,ez]
+      spawnBeam(evn[1], evn[2], evn[3], evn[4], evn[5], evn[6], 0x37e5ff);
+      spawnFlash(evn[1], evn[2], evn[3], 0x37e5ff); som.laser?.();
+      trauma = Math.min(1, trauma + 0.3);
+    } else if (tipo === 'explosao') { // [_, x,y,z]
+      const pos = { x: evn[1], y: evn[2], z: evn[3] };
+      powFx(pos); burstEstrelas(pos); puffFx(pos);
+      for (let i = 0; i < 10; i++) { const a = (i / 10) * Math.PI * 2; spawnFx(puffTex, pos, { escala: 0.5, vida: 0.5, cresce: 2, cor: i % 2 ? 0xff8a3c : 0xffd24a, vx: Math.cos(a) * 3, vz: Math.sin(a) * 3, vy: 1.5 }); }
+      som.bolada?.(); trauma = 1;
+    }
   }
 }
 
@@ -2612,6 +2647,17 @@ function aplicarSnapOnline(m1, m2, f) {
     body.setTranslation({ x: lerp(b1[0], b2[0]), y: lerp(b1[1], b2[1]), z: lerp(b1[2], b2[2]) }, false);
     body.setRotation({ x: b2[3], y: b2[4], z: b2[5], w: b2[6] }, false);
   });
+  // armas: interpola o mesh de cada arma pelo id
+  if (m2.wp) {
+    for (const w2 of m2.wp) {
+      const a = online.armasVis.get(w2.id);
+      if (!a) continue;
+      const w1 = (m1.wp && m1.wp.find((x) => x.id === w2.id)) || w2;
+      const p1 = w1.p, p2 = w2.p;
+      a.mesh.position.set(lerp(p1[0], p2[0]), lerp(p1[1], p2[1]), lerp(p1[2], p2[2]));
+      a.mesh.quaternion.set(p2[3], p2[4], p2[5], p2[6]);
+    }
+  }
 }
 
 function frameOnline(t, fdt) {
