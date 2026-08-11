@@ -2517,7 +2517,7 @@ function iniciarOnline() {
   showMsg('CONECTANDO…');
   const ws = new WebSocket(`ws://${location.host}`);
   ws.binaryType = 'arraybuffer'; // snapshots vêm em binário (poses Int16)
-  online = { ws, slot: null, visuais: new Map(), armasVis: new Map(), powerVis: new Map(), buf: [], msgAtual: null, jaeger: false };
+  online = { ws, slot: null, visuais: new Map(), armasVis: new Map(), powerVis: new Map(), buf: [], msgAtual: null, jaeger: false, forcarGominha: false };
   online.marcador = new THREE.Sprite(new THREE.SpriteMaterial({ map: voceTex, transparent: true, depthWrite: false, fog: false }));
   online.marcador.scale.setScalar(0.55); online.marcador.visible = false; scene.add(online.marcador);
   ws.addEventListener('open', () => {
@@ -2588,15 +2588,32 @@ function iniciarOnline() {
   });
 }
 
+// Estilo efetivo do online = Jaeger se a sala pediu E o fallback de performance
+// não desligou. Reconstrói os bonecos só quando o estilo muda de fato.
+function aplicarEstiloOnline() {
+  const querJ = online.jaeger && !online.forcarGominha;
+  const novo = querJ ? 'j' : ESTILO_BASE;
+  if (novo === ESTILO) return;
+  ESTILO = novo;
+  for (const [, v] of online.visuais) destroyVisual(v.meshes);
+  online.visuais.clear();
+}
+
+// Avisinho que some sozinho (usa a linha de dica de baixo, vazia no online)
+function avisoOnline(txt, ms = 4500) {
+  const el = $('mapa'); if (!el) return;
+  el.textContent = txt;
+  clearTimeout(avisoOnline._t);
+  avisoOnline._t = setTimeout(() => { if ($('mapa')) $('mapa').textContent = ''; }, ms);
+}
+
 function receberSnap(m) {
   online.buf.push({ rx: performance.now() / 1000, m });
   if (online.buf.length > 30) online.buf.shift();
-  // Toggle Jaeger×Kaiju: troca o estilo e reconstrói os bonecos
+  // Toggle Jaeger×Kaiju (o servidor manda 'jg'); aplica respeitando o fallback local
   if (m.jg !== undefined && !!m.jg !== online.jaeger) {
     online.jaeger = !!m.jg;
-    ESTILO = online.jaeger ? 'j' : ESTILO_BASE;
-    for (const [, v] of online.visuais) destroyVisual(v.meshes);
-    online.visuais.clear();
+    aplicarEstiloOnline();
   }
   for (const pl of m.pl) {
     let v = online.visuais.get(pl.s);
@@ -2741,6 +2758,23 @@ function aplicarSnapOnline(m1, m2, f) {
 }
 
 function frameOnline(t, fdt) {
+  // Fallback de performance: se o FPS ficar baixo com muitos Jaeger, cai pra gominha
+  if (online.jaeger && !online.forcarGominha && !PARAMS.has('semfallback')) {
+    online._fN = (online._fN || 0) + 1;
+    if (!online._fT) online._fT = t;
+    const dt = t - online._fT;
+    if (dt >= 2000) {
+      const fps = online._fN / (dt / 1000);
+      online._fN = 0; online._fT = t;
+      if (fps < 32 && online.visuais.size >= 8) {
+        if ((online._baixo = (online._baixo || 0) + 1) >= 2) { // 2 janelas ruins seguidas
+          online.forcarGominha = true;
+          aplicarEstiloOnline();
+          avisoOnline('⚡ Modo leve ativado (pra manter fluido com muita gente)');
+        }
+      } else online._baixo = 0;
+    }
+  }
   const alvo = performance.now() / 1000 - 0.12;
   const buf = online.buf;
   let i = buf.length - 1;
