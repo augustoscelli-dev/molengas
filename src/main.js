@@ -1784,21 +1784,29 @@ function botInput(l) {
     out.move.x = dx / dl;
     out.move.z = dz / dl;
   }
-  // Armas: se está segurando uma, usa (encara o alvo e ataca); senão pega a que
-  // estiver por perto. Faz o bot mostrar as armas na luta.
-  if (rC < 3.3) {
-    const minhaArma = mapa.armas && mapa.armas.find((a) => l.rag.grabJoints.some((g) => g && g.body === a.body));
-    if (minhaArma) {
-      out.grab = true; out.move.x = dx / dl; out.move.z = dz / dl; // segura + encara
-      const alcance = minhaArma.tiro ? minhaArma.alcanceTiro : 1.15;
-      if (dAlvo < alcance && simNow > (l._botFire ?? 0)) { out.punch = true; l._botFire = simNow + (minhaArma.tiro ? 0.55 : 0.75); }
-      return out;
+  // Armas: se segura uma, usa; senão vai buscar a mais próxima. Serve pra qualquer
+  // posição da arena (não só no centro), respeitando o medo da beirada.
+  const fx = dx / dl, fz = dz / dl;
+  const minhaArma = mapa.armas && mapa.armas.find((a) => l.rag.grabJoints.some((g) => g && g.body === a.body));
+  if (minhaArma) {
+    out.grab = true;
+    if (minhaArma.tiro) {
+      // Arma de tiro: mira de longe. Só avança se o alvo saiu do alcance; senão
+      // fica no lugar mirando e atira em cadência.
+      const longe = dAlvo > minhaArma.alcanceTiro - 1;
+      out.move.x = fx * (longe ? 1 : 0.28); out.move.z = fz * (longe ? 1 : 0.28); // move pequeno = mira sem sair correndo
+      if (dAlvo < minhaArma.alcanceTiro && simNow > (l._botFire ?? 0)) { out.punch = true; l._botFire = simNow + 0.5; }
+    } else {
+      out.move.x = fx; out.move.z = fz; // arma branca: encara e parte pra cima
+      if (dAlvo < 1.2 && simNow > (l._botFire ?? 0)) { out.punch = true; l._botFire = simNow + 0.7; }
     }
-    if (mapa.armas && mapa.armas.length && !l.rag.grabJoints.some((g) => g)) {
-      let aw = null, ad = 2.4;
-      for (const a of mapa.armas) { const q = a.body.translation(); const d = Math.hypot(q.x - me.x, q.z - me.z); if (d < ad) { ad = d; aw = a; } }
-      if (aw) { const q = aw.body.translation(); const wx = q.x - me.x, wz = q.z - me.z, wl = Math.hypot(wx, wz) || 1; out.move.x = wx / wl; out.move.z = wz / wl; if (ad < 0.85) out.grab = true; return out; }
-    }
+    if (rC > 3.4) { out.move.x = -me.x / (rC || 1); out.move.z = -me.z / (rC || 1); } // beira: volta pro centro
+    return out;
+  }
+  if (mapa.armas && mapa.armas.length && !l.rag.grabJoints.some((g) => g) && rC < 3.4) {
+    let aw = null, ad = 3.6; // raio de busca maior: os bots correm atrás da arma
+    for (const a of mapa.armas) { const q = a.body.translation(); const d = Math.hypot(q.x - me.x, q.z - me.z); if (d < ad) { ad = d; aw = a; } }
+    if (aw) { const q = aw.body.translation(); const wx = q.x - me.x, wz = q.z - me.z, wl = Math.hypot(wx, wz) || 1; out.move.x = wx / wl; out.move.z = wz / wl; if (ad < 0.85) out.grab = true; return out; }
   }
   // Esquiva reativa: se o alvo armou um golpe pertinho e está encarando, o bot desvia de lado
   if (dAlvo < 1.5 && simNow > (l._botEsq ?? 0) && !l.rag.grabbedRival()) {
