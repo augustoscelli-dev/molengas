@@ -2531,7 +2531,16 @@ function iniciarOnline() {
       }));
     }, 33);
   });
-  ws.addEventListener('close', () => showMsg('DESCONECTOU 😵', 'o servidor fechou — recarrega a página'));
+  ws.addEventListener('close', () => {
+    showMsg('DESCONECTOU 😵', 'o servidor fechou — recarrega a página');
+    // limpa a cena pra não deixar bonecos/armas congelados
+    for (const [, v] of online.visuais) destroyVisual(v.meshes);
+    for (const [, a] of online.armasVis) scene.remove(a.mesh);
+    for (const [, e] of online.powerVis) scene.remove(e.s);
+    online.visuais.clear(); online.armasVis.clear(); online.powerVis.clear();
+    if (online.marcador) online.marcador.visible = false;
+    if (touchAtivo() && $('online-acoes')) $('online-acoes').style.display = 'none';
+  });
   ws.addEventListener('message', (e) => {
     let m;
     try { m = JSON.parse(e.data); } catch { return; }
