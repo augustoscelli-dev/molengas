@@ -1906,6 +1906,7 @@ function spawnFx(tex, pos, opts) {
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
   s.position.set(pos.x + (opts.dx || 0), pos.y + (opts.dy || 0), pos.z + (opts.dz || 0));
   s.scale.setScalar(opts.escala ?? 0.24);
+  if (opts.cor != null) s.material.color.set(opts.cor);
   scene.add(s);
   efeitos.push({
     s, vida: opts.vida ?? 0.55, vx: opts.vx || 0, vy: opts.vy || 0, vz: opts.vz || 0,
@@ -1924,6 +1925,10 @@ function burstEstrelas(pos) {
 let powN = 0;
 function powFx(pos) {
   spawnFx(powTexs[powN++ % powTexs.length], pos, { dy: 0.5, escala: 0.14, vida: 0.6, vy: 0.55, cresce: 4.2, teto: 0.9 });
+}
+// Rastro colorido: um blob que some rápido, deixado ao longo do movimento
+function trailFx(pos, cor, escala = 0.42) {
+  spawnFx(puffTex, pos, { escala, vida: 0.3, cresce: 0.5, cor });
 }
 function puffFx(pos) {
   for (let i = 0; i < 5; i++) {
@@ -2652,7 +2657,18 @@ function frame(t) {
     if (p.lastPunchStartAt > (p._sSoco ?? -1)) { p._sSoco = p.lastPunchStartAt; som.soco(); som.vozSoco(VOZES[l.slot]); }
     if (p.lastCabecadaAt > (p._sCab ?? -1)) { p._sCab = p.lastCabecadaAt; som.soco(); som.vozSoco(VOZES[l.slot]); trauma = Math.min(1, trauma + 0.4); hitStop = Math.max(hitStop, 0.06); }
     if (p.lastChuteAt > (p._sChu ?? -1)) { p._sChu = p.lastChuteAt; som.soco(); }
-    if (p.lastJumpAt > (p._sPulo ?? -1)) { p._sPulo = p.lastJumpAt; som.pulo(); }
+    if (p.lastJumpAt > (p._sPulo ?? -1)) { p._sPulo = p.lastJumpAt; som.pulo(); puffFx(p.parts.pelvis.translation()); }
+    // Rastro de movimento no dash (dourado) e na esquiva (ciano) — pontilhado ao longo do caminho
+    const emDash = simNow - p.lastDashAt < 0.28;
+    const emEsq = p.isEsquivando(simNow);
+    if (emDash || emEsq) {
+      const tp = p.parts.torso.translation();
+      const lt = p._trailPos;
+      if (!lt || Math.hypot(tp.x - lt.x, tp.y - lt.y, tp.z - lt.z) > 0.16) {
+        trailFx(tp, emEsq ? 0x66e0ff : 0xffe08a);
+        p._trailPos = { x: tp.x, y: tp.y, z: tp.z };
+      }
+    } else if (p._trailPos) { p._trailPos = null; }
     if (p.lastGrabAt > (p._sGarra ?? -1)) {
       p._sGarra = p.lastGrabAt;
       som.agarra();
