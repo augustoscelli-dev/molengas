@@ -29,6 +29,13 @@ const MODOS = [
 ];
 let modoIdx = 0;
 let MODO_CAOS = false; // partida atual usa drop de armas acelerado?
+// Dificuldade dos bots: reação, agressividade e mira mudam com o nível.
+const NIVEIS = [
+  { nome: 'Fácil', reacao: 1.7, esquiva: 0.25, ataque: 1.4, mira: 0.9 },
+  { nome: 'Médio', reacao: 1.0, esquiva: 0.55, ataque: 1.0, mira: 0.55 },
+  { nome: 'Difícil', reacao: 0.6, esquiva: 0.85, ataque: 0.7, mira: 0.28 },
+];
+let nivelIdx = 1;
 const IDLE_IN = { move: { x: 0, z: 0 }, punch: false, grab: false, jump: false, esquiva: false };
 
 // Na versão publicada (arquivo único), os assets viram data-URIs injetados aqui.
@@ -1797,6 +1804,7 @@ function detectarEsquiva(l, inp, now) {
 function botInput(l) {
   const out = { move: { x: 0, z: 0 }, punch: false, grab: false, jump: false, esquiva: false };
   const me = l.rag.parts.pelvis.translation();
+  const nv = NIVEIS[nivelIdx]; // dificuldade escolhida no menu
   const alvos = lutadores.filter((o) => o !== l && o.vivo);
   if (!alvos.length) return out;
   let alvo = alvos[0], dAlvo = Infinity;
@@ -1838,10 +1846,10 @@ function botInput(l) {
       // fica no lugar mirando e atira em cadência.
       const longe = dAlvo > minhaArma.alcanceTiro - 1;
       out.move.x = fx * (longe ? 1 : 0.28); out.move.z = fz * (longe ? 1 : 0.28); // move pequeno = mira sem sair correndo
-      if (dAlvo < minhaArma.alcanceTiro && simNow > (l._botFire ?? 0)) { out.punch = true; l._botFire = simNow + 0.5; }
+      if (dAlvo < minhaArma.alcanceTiro && simNow > (l._botFire ?? 0)) { out.punch = true; l._botFire = simNow + 0.5 * nv.ataque; }
     } else {
       out.move.x = fx; out.move.z = fz; // arma branca: encara e parte pra cima
-      if (dAlvo < 1.2 && simNow > (l._botFire ?? 0)) { out.punch = true; l._botFire = simNow + 0.7; }
+      if (dAlvo < 1.2 && simNow > (l._botFire ?? 0)) { out.punch = true; l._botFire = simNow + 0.7 * nv.ataque; }
     }
     if (rC > 3.4) { out.move.x = -me.x / (rC || 1); out.move.z = -me.z / (rC || 1); } // beira: volta pro centro
     return out;
@@ -1858,10 +1866,10 @@ function botInput(l) {
     const rdx = Math.sin(ra.heading), rdz = Math.cos(ra.heading);
     const tox = me.x - ap.x, toz = me.z - ap.z, tl = Math.hypot(tox, toz) || 1;
     const encara = (rdx * tox + rdz * toz) / tl > 0.45;
-    if (armouGolpe && encara && Math.random() < 0.6) {
+    if (armouGolpe && encara && Math.random() < nv.esquiva) {
       out.esquiva = true;
       out.move.x = -rdz; out.move.z = rdx; // sidestep perpendicular ao golpe
-      l._botEsq = simNow + 1.4;
+      l._botEsq = simNow + 1.4 * nv.reacao;
       return out;
     }
   }
@@ -1869,10 +1877,10 @@ function botInput(l) {
   if (dAlvo < 0.95 && simNow > (l._botCd ?? 0)) {
     if (Math.random() < 0.55) {
       out.punch = true;
-      l._botCd = simNow + 0.9 + Math.random() * 0.7;
+      l._botCd = simNow + (0.9 + Math.random() * 0.7) * nv.ataque;
     } else {
       l._botGrabAte = simNow + 1.3 + Math.random() * 0.6;
-      l._botCd = simNow + 2 + Math.random();
+      l._botCd = simNow + (2 + Math.random()) * nv.ataque;
     }
   }
   if (simNow < (l._botGrabAte ?? 0)) {
@@ -2151,6 +2159,7 @@ function atualizarSelecao() {
   $('sel-mapa-nome').textContent = MAPAS[mapaIdx].nome;
   if ($('sel-modo-nome')) $('sel-modo-nome').textContent = MODOS[modoIdx].nome;
   if ($('sel-jaeger')) $('sel-jaeger').textContent = ESTILO === 'j' ? 'SIM 🤖' : 'não';
+  if ($('sel-nivel')) $('sel-nivel').textContent = NIVEIS[nivelIdx].nome;
 }
 function checarFaseMapa() {
   const ativos = selCfg.filter((c) => c.ativo);
@@ -2293,6 +2302,7 @@ addEventListener('keydown', (e) => {
     if (e.code === 'KeyD') { setMapa(mapaIdx + 1); som.selecionar(); }
     if (e.code === 'KeyC') addBot();
     if (e.code === 'KeyN') { modoIdx = (modoIdx + 1) % MODOS.length; som.selecionar(); } // modo de jogo
+    if (e.code === 'KeyV') { nivelIdx = (nivelIdx + 1) % NIVEIS.length; som.selecionar(); } // dificuldade dos bots
     if (e.code === 'KeyJ') alternarModelo3D(); // liga/desliga o Jaeger (preview + partida)
     if (e.code === 'KeyF') { iniciarLuta(); return; }
   }
