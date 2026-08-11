@@ -2651,15 +2651,12 @@ function aplicarSnapOnline(m1, m2, f) {
     for (const spec of PARTS) {
       const msh = v.meshes[spec.name];
       msh.position.set(lerp(pl1.p[o], pl2.p[o]), lerp(pl1.p[o + 1], pl2.p[o + 1]), lerp(pl1.p[o + 2], pl2.p[o + 2]));
-      const dot = pl1.p[o + 3] * pl2.p[o + 3] + pl1.p[o + 4] * pl2.p[o + 4] + pl1.p[o + 5] * pl2.p[o + 5] + pl1.p[o + 6] * pl2.p[o + 6];
-      const s2 = dot < 0 ? -1 : 1;
-      msh.quaternion.set(
-        lerp(pl1.p[o + 3] * s2, pl2.p[o + 3]),
-        lerp(pl1.p[o + 4] * s2, pl2.p[o + 4]),
-        lerp(pl1.p[o + 5] * s2, pl2.p[o + 5]),
-        lerp(pl1.p[o + 6] * s2, pl2.p[o + 6]),
-      ).normalize();
-      o += 7;
+      // Quaternion sem w: reconstrói (q e -q são a mesma rotação, então w >= 0)
+      const x1 = pl1.p[o + 3], y1 = pl1.p[o + 4], z1 = pl1.p[o + 5], w1 = Math.sqrt(Math.max(0, 1 - x1 * x1 - y1 * y1 - z1 * z1));
+      const x2 = pl2.p[o + 3], y2 = pl2.p[o + 4], z2 = pl2.p[o + 5], w2 = Math.sqrt(Math.max(0, 1 - x2 * x2 - y2 * y2 - z2 * z2));
+      const s2 = (x1 * x2 + y1 * y2 + z1 * z2 + w1 * w2) < 0 ? -1 : 1;
+      msh.quaternion.set(lerp(x1 * s2, x2), lerp(y1 * s2, y2), lerp(z1 * s2, z2), lerp(w1 * s2, w2)).normalize();
+      o += 6;
     }
     // Carinha + respiração só existem no estilo gominha; no Jaeger ('j') o esqueleto cuida
     if (v.meshes._face) {

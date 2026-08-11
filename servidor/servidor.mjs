@@ -380,6 +380,7 @@ function rounds() {
 // ---------- Loop de física + snapshots ----------
 let tick = 0;
 const q = (v) => Math.round(v * 1000) / 1000;
+const q2 = (v) => Math.round(v * 100) / 100; // posições em cm (economiza banda)
 
 setInterval(() => {
   now += DT;
@@ -429,7 +430,8 @@ setInterval(() => {
   if (AUTO && estado === 'lobby' && jogadores.size >= 2) comecarPartida();
 
   // snapshot a 20Hz
-  if (tick % 3 === 0) {
+  const passo = jogadores.size > 10 ? 4 : 3; // 15Hz em salas grandes, 20Hz no resto
+  if (tick % passo === 0) {
     const snap = {
       t: 's',
       st: estado,
@@ -442,7 +444,7 @@ setInterval(() => {
           const b = j.rag.parts[spec.name];
           const tr = b.translation();
           const ro = b.rotation();
-          p.push(q(tr.x), q(tr.y), q(tr.z), q(ro.x), q(ro.y), q(ro.z), q(ro.w));
+          p.push(q2(tr.x), q2(tr.y), q2(tr.z), q(ro.x), q(ro.y), q(ro.z)); // 6 por parte: w é reconstruído no cliente
         }
         return { s: j.slot, sk: j.skin, v: j.vivo ? 1 : 0, at: j.rag.isStunned(now) ? 1 : 0, sc: j.score, p };
       }),
