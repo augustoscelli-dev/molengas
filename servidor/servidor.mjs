@@ -20,7 +20,7 @@ const PORTA = 8877;
 const AUTO = process.argv.includes('--auto');
 const WIN_SCORE = 5;
 const DT = 1 / 60;
-const IDLE = { move: { x: 0, z: 0 }, punch: false, grab: false, jump: false, emote: false };
+const IDLE = { move: { x: 0, z: 0 }, punch: false, grab: false, jump: false, emote: false, esquiva: false };
 const SPAWNS = [[-2.2, 0], [2.2, 0], [0, -2.6], [0, 2.6]];
 const PLAYER_BITS = [0x0002, 0x0004, 0x0020, 0x0040];
 const TODOS_PLAYERS = 0x0066;
@@ -176,7 +176,15 @@ setInterval(() => {
   tick++;
   const lutando = estado === 'luta';
   for (const j of jogadores.values()) {
-    j.rag.update(DT, now, (lutando && j.vivo) || estado === 'lobby' ? j.input : IDLE);
+    const input = (lutando && j.vivo) || estado === 'lobby' ? j.input : IDLE;
+    // Detecção de dash (toque duplo na direção) e esquiva (borda) — igual ao cliente,
+    // mas aqui no servidor, que é dono da física.
+    const mag = Math.hypot(input.move.x, input.move.z);
+    if (mag > 0.5 && !j._movHeld) { if (now - (j._lastPress ?? -9) < 0.33) j.rag.dash(now); j._lastPress = now; }
+    j._movHeld = mag > 0.3;
+    if (input.esquiva && !j._esqHeld) j.rag.esquiva(now, input.move.x, input.move.z);
+    j._esqHeld = !!input.esquiva;
+    j.rag.update(DT, now, input);
     // ganchos de som → eventos
     const r = j.rag;
     if (r.lastPunchStartAt > (r._evSoco ?? -1)) { r._evSoco = r.lastPunchStartAt; ev('soco'); }
@@ -186,6 +194,8 @@ setInterval(() => {
       ev('hit', q(hp.x), q(hp.y), q(hp.z));
     }
     if (r.lastJumpAt > (r._evPulo ?? -1)) { r._evPulo = r.lastJumpAt; ev('pulo'); }
+    if (r.lastDashAt > (r._evDash ?? -1)) { r._evDash = r.lastDashAt; ev('dash'); }
+    if (r.lastEsquivaAt > (r._evEsq ?? -1)) { r._evEsq = r.lastEsquivaAt; ev('esquiva'); }
   }
   world.step();
   // bolada
@@ -273,7 +283,7 @@ wss.on('connection', (ws) => {
       if (j) {
         j.input = {
           move: { x: +m.m[0] || 0, z: +m.m[1] || 0 },
-          punch: !!m.p, grab: !!m.g, jump: !!m.j, emote: !!m.e,
+          punch: !!m.p, grab: !!m.g, jump: !!m.j, emote: !!m.e, esquiva: !!m.d,
         };
       }
     } else if (m.t === 'comecar') {

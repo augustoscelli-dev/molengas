@@ -2361,7 +2361,7 @@ function iniciarOnline() {
       const inp = mergeInput(readInput(MAPS.p1), readGamepad(0));
       ws.send(JSON.stringify({
         t: 'input', m: [inp.move.x, inp.move.z],
-        p: inp.punch, g: inp.grab, j: inp.jump, e: inp.emote,
+        p: inp.punch, g: inp.grab, j: inp.jump, e: inp.emote, d: inp.esquiva,
       }));
     }, 33);
   });
@@ -2412,6 +2412,8 @@ function receberSnap(m) {
       trauma = Math.min(1, trauma + 0.5);
     } else if (tipo === 'soco') som.soco();
     else if (tipo === 'pulo') som.pulo();
+    else if (tipo === 'esquiva') som.esquiva?.();
+    else if (tipo === 'dash') som.arremesso();
     else if (tipo === 'lutem') { som.lutem(); som.musica('luta'); }
     else if (tipo === 'ponto') { som.ponto(); som.torcidaOh(); }
     else if (tipo === 'queda') som.queda();
