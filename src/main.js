@@ -1393,7 +1393,9 @@ function buildVisual(skin, fase = 0, slot = 0) {
       if (!skinned) { console.log('estilo j: GLB sem SkinnedMesh (não rigado)'); return; }
       armature.updateMatrixWorld(true);
       const box = new THREE.Box3().setFromObject(skinned), sz = new THREE.Vector3(); box.getSize(sz);
-      armature.scale.setScalar(1.9 / (sz.y || 1)); // altura alvo ~1.9
+      const s = 1.9 / (sz.y || 1); // altura alvo ~1.9
+      const achata = /kaiju/i.test(nomeGLB) ? 0.9 : 1; // Kaiju é mais largo: fica um pouco mais baixo
+      armature.scale.set(s, s * achata, s);
       scene.add(armature); armature.updateMatrixWorld(true);
       // bindOffset por osso = inverse(corpo em repouso) * osso no bind (tudo em world/metros)
       const q0 = new THREE.Quaternion(), one = new THREE.Vector3(1, 1, 1);
