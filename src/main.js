@@ -338,6 +338,7 @@ for (const d of Object.values(ARMAS_DEF)) if (d.glb) preloadArmaGLB(d);
 
 // Índice de tipo de arma no protocolo online (espelha ARMA_TIPOS do servidor)
 const ARMA_TIPOS_CLI = ['bastao', 'cano', 'martelo', 'laser', 'bomba'];
+const POWER_TIPOS_CLI = ['cura', 'vel', 'forca']; // espelha POWER_TIPOS do servidor
 // Só o mesh de uma arma (usado no online, que recebe a arma pronta do servidor)
 function armaMeshDe(tipo) {
   const def = ARMAS_DEF[tipo] || ARMAS_DEF.bastao;
@@ -2506,7 +2507,7 @@ function iniciarOnline() {
   $('selecao').style.display = 'none';
   showMsg('CONECTANDO…');
   const ws = new WebSocket(`ws://${location.host}`);
-  online = { ws, slot: null, visuais: new Map(), armasVis: new Map(), buf: [], msgAtual: null };
+  online = { ws, slot: null, visuais: new Map(), armasVis: new Map(), powerVis: new Map(), buf: [], msgAtual: null };
   ws.addEventListener('open', () => {
     ws.send(JSON.stringify({ t: 'entrar', skin: selCfg[0].skin }));
     showMsg('NA SALA! 🌐', 'quando todos entrarem, o host (1º jogador) aperta F');
@@ -2568,6 +2569,22 @@ function receberSnap(m) {
       if (!vistos.has(id)) { scene.remove(a.mesh); online.armasVis.delete(id); }
     }
   }
+  // Power-ups: sprites flutuantes (posição fixa, com bob local no frameOnline)
+  if (m.pu) {
+    const vistosP = new Set();
+    for (const pw of m.pu) {
+      vistosP.add(pw.id);
+      let e = online.powerVis.get(pw.id);
+      if (!e) {
+        const tipo = POWER_TIPOS_CLI[pw.ti] || 'cura';
+        const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: POWERDEF[tipo].tex, transparent: true, depthWrite: false }));
+        s.scale.setScalar(0.62); scene.add(s);
+        e = { s, baseY: pw.p[1] }; online.powerVis.set(pw.id, e);
+      }
+      e.s.position.set(pw.p[0], pw.p[1], pw.p[2]); e.baseY = pw.p[1];
+    }
+    for (const [id, e] of online.powerVis) if (!vistosP.has(id)) { scene.remove(e.s); online.powerVis.delete(id); }
+  }
   // Placar compacto (encolhe quando tem muita gente — até 20)
   const tam = m.pl.length > 6 ? 24 : 40;
   $('placar').innerHTML = m.pl.map((pl) => {
@@ -2601,6 +2618,7 @@ function receberSnap(m) {
     else if (tipo === 'queda') som.queda();
     else if (tipo === 'vitoria') { som.vitoria(); som.musica('menu'); }
     else if (tipo === 'bolada') som.bolada();
+    else if (tipo === 'power') { const pos = { x: evn[1], y: evn[2], z: evn[3] }; powFx(pos); burstEstrelas(pos); som.ponto?.(); }
     else if (tipo === 'laser') { // [_, fx,fy,fz, ex,ey,ez]
       spawnBeam(evn[1], evn[2], evn[3], evn[4], evn[5], evn[6], 0x37e5ff);
       spawnFlash(evn[1], evn[2], evn[3], 0x37e5ff); som.laser?.();
@@ -2672,6 +2690,7 @@ function frameOnline(t, fdt) {
     const f = Math.min(1, Math.max(0, (alvo - b1.rx) / span));
     aplicarSnapOnline(b1.m, b2.m, f);
   }
+  for (const e of online.powerVis.values()) e.s.position.y = e.baseY + Math.sin(t * 0.003) * 0.12; // bob dos power-ups
   for (const [body, mesh] of mapa.syncPairs) {
     const tp = body.translation();
     const rp = body.rotation();

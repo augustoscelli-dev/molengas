@@ -232,6 +232,36 @@ function tickArmas() {
   }
 }
 
+// ---------- Power-ups (pontos flutuantes; pega por proximidade) ----------
+const POWER_TIPOS = ['cura', 'vel', 'forca'];
+const aplicarPower = {
+  cura: (rag) => { rag.dano = 0; rag.folego = 1; },
+  vel: (rag) => { rag.buffVel = 1.6; rag.buffVelAte = now + 6; },
+  forca: (rag) => { rag.buffForca = 1.8; rag.buffForcaAte = now + 6; },
+};
+let powerups = [];
+let proxPowerEm = 0, proxPowerId = 1;
+function limparPowerups() { powerups = []; proxPowerEm = 0; }
+function tickPowerups() {
+  const maxP = salaModo === 'loucura' ? 4 : 2;
+  if (proxPowerEm === 0) proxPowerEm = now + (salaModo === 'loucura' ? 5 : 8);
+  if (now > proxPowerEm && powerups.length < maxP) {
+    const px = (Math.random() * 2 - 1) * arenaHX * 0.5, pz = (Math.random() * 2 - 1) * arenaHZ * 0.5;
+    powerups.push({ id: proxPowerId++, tipo: POWER_TIPOS[(Math.random() * POWER_TIPOS.length) | 0], x: px, z: pz, y: 1.4, vida: 16 });
+    proxPowerEm = now + (salaModo === 'loucura' ? 8 : 12) + Math.random() * 6;
+  }
+  for (let i = powerups.length - 1; i >= 0; i--) {
+    const p = powerups[i]; p.vida -= DT;
+    let pego = false;
+    for (const j of jogadores.values()) {
+      if (!j.vivo) continue;
+      const t = j.rag.parts.torso.translation();
+      if (Math.hypot(t.x - p.x, t.y - p.y, t.z - p.z) < 0.8) { aplicarPower[p.tipo](j.rag); ev('power', q(p.x), q(p.y), q(p.z)); pego = true; break; }
+    }
+    if (pego || p.vida <= 0) powerups.splice(i, 1);
+  }
+}
+
 // ---------- Jogadores ----------
 function slotsLivres() {
   const usados = new Set([...jogadores.values()].map((j) => j.slot));
@@ -285,7 +315,7 @@ function startIntro(roundN) {
   estado = 'intro';
   introStep = 0;
   estadoAte = now + 0.9;
-  limparArmas(); // arena limpa a cada round
+  limparArmas(); limparPowerups(); // arena limpa a cada round
   msg = 'ROUND ' + roundN;
 }
 function comecarPartida() {
@@ -372,7 +402,7 @@ setInterval(() => {
     if (r.lastEsquivaAt > (r._evEsq ?? -1)) { r._evEsq = r.lastEsquivaAt; ev('esquiva'); }
   }
   world.step(filaEventos, hooks); // hook = filtro de contato por dono (sem auto-colisão)
-  if (estado === 'luta') tickArmas(); // drop/uso/dano de armas e bomba
+  if (estado === 'luta') { tickArmas(); tickPowerups(); } // armas + power-ups
   // bolada
   const bv = bola.linvel();
   if (Math.hypot(bv.x, bv.y, bv.z) > 3) {
@@ -419,6 +449,7 @@ setInterval(() => {
         const tr = a.body.translation(), ro = a.body.rotation();
         return { id: a.id, ti: ARMA_TIPOS.indexOf(a.tipo), q: a.quente ? 1 : 0, p: [q(tr.x), q(tr.y), q(tr.z), q(ro.x), q(ro.y), q(ro.z), q(ro.w)] };
       }),
+      pu: powerups.map((p) => ({ id: p.id, ti: POWER_TIPOS.indexOf(p.tipo), p: [q(p.x), q(p.y), q(p.z)] })),
     };
     const dados = JSON.stringify(snap);
     for (const j of jogadores.values()) {
