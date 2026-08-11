@@ -262,6 +262,18 @@ const ARMAS_DEF = {
       return g;
     },
   },
+  martelo: {
+    icone: '🔨',
+    y0: 0.6, massa: 4.6, alcance: 0.82, forca: 22, // pesadão: swing lento mas manda longe (ring-out fácil)
+    collider: () => RAPIER.ColliderDesc.capsule(0.3, 0.09),
+    mesh: () => {
+      const g = new THREE.Group();
+      const cabo = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.062, 0.82, 12), toonMat(THREE, 0x7a4b28));
+      const cabeca = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.17, 0.17), new THREE.MeshStandardMaterial({ color: 0x555b66, metalness: 0.7, roughness: 0.4 }));
+      cabeca.position.y = 0.4; g.add(cabo, cabeca);
+      return g;
+    },
+  },
   // Arma de TIRO: segurar + apertar soco dispara um laser na direção que olha.
   laser: {
     icone: '🔫',
@@ -2708,7 +2720,7 @@ function frame(t) {
     if (simNow > proxArmaEm && (mapa.armas ? mapa.armas.length : 0) < capArmas) {
       const ax = (Math.random() * 2 - 1) * 2.4; // perto do centro (serve p/ arenas de vários tamanhos)
       const az = (Math.random() * 2 - 1) * 1.8;
-      const tipos = ['bastao', 'cano', 'laser', 'bastao', 'cano'];
+      const tipos = ['bastao', 'cano', 'laser', 'martelo', 'bastao', 'cano', 'martelo'];
       const b = soltarArma(mapa, ax, az, tipos[(Math.random() * tipos.length) | 0]);
       b.setTranslation({ x: ax, y: 4.2, z: az }, true);
       puffFx({ x: ax, y: 4.2, z: az });
