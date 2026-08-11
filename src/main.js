@@ -2516,6 +2516,7 @@ function iniciarOnline() {
   $('selecao').style.display = 'none';
   showMsg('CONECTANDO…');
   const ws = new WebSocket(`ws://${location.host}`);
+  ws.binaryType = 'arraybuffer'; // snapshots vêm em binário (poses Int16)
   online = { ws, slot: null, visuais: new Map(), armasVis: new Map(), powerVis: new Map(), buf: [], msgAtual: null, jaeger: false };
   online.marcador = new THREE.Sprite(new THREE.SpriteMaterial({ map: voceTex, transparent: true, depthWrite: false, fog: false }));
   online.marcador.scale.setScalar(0.55); online.marcador.visible = false; scene.add(online.marcador);
@@ -2542,11 +2543,33 @@ function iniciarOnline() {
     if (touchAtivo() && $('online-acoes')) $('online-acoes').style.display = 'none';
   });
   ws.addEventListener('message', (e) => {
-    let m;
-    try { m = JSON.parse(e.data); } catch { return; }
-    if (m.t === 'oi') online.slot = m.slot;
-    else if (m.t === 'cheio') showMsg('SALA CHEIA 😔');
-    else if (m.t === 's') receberSnap(m);
+    if (typeof e.data === 'string') { // oi / cheio (JSON)
+      let m; try { m = JSON.parse(e.data); } catch { return; }
+      if (m.t === 'oi') online.slot = m.slot;
+      else if (m.t === 'cheio') showMsg('SALA CHEIA 😔');
+      return;
+    }
+    // Snapshot binário: cabeçalho JSON + poses Int16 (6 por parte)
+    const dv = new DataView(e.data);
+    const jsonLen = dv.getUint32(0, true);
+    let meta;
+    try { meta = JSON.parse(new TextDecoder().decode(new Uint8Array(e.data, 4, jsonLen))); } catch { return; }
+    let off = 4 + jsonLen;
+    const NP = PARTS.length;
+    for (const pm of meta.pl) {
+      const p = new Array(NP * 6);
+      for (let k = 0; k < NP; k++) {
+        const o = k * 6;
+        p[o] = dv.getInt16(off, true) / 256; off += 2;
+        p[o + 1] = dv.getInt16(off, true) / 256; off += 2;
+        p[o + 2] = dv.getInt16(off, true) / 256; off += 2;
+        p[o + 3] = dv.getInt16(off, true) / 32767; off += 2;
+        p[o + 4] = dv.getInt16(off, true) / 32767; off += 2;
+        p[o + 5] = dv.getInt16(off, true) / 32767; off += 2;
+      }
+      pm.p = p;
+    }
+    receberSnap(meta);
   });
   $('placar').style.flexWrap = 'wrap';
   $('placar').style.gap = '2px 12px';

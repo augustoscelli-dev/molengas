@@ -380,7 +380,6 @@ function rounds() {
 // ---------- Loop de física + snapshots ----------
 let tick = 0;
 const q = (v) => Math.round(v * 1000) / 1000;
-const q2 = (v) => Math.round(v * 100) / 100; // posições em cm (economiza banda)
 
 setInterval(() => {
   now += DT;
@@ -432,37 +431,35 @@ setInterval(() => {
   // snapshot a 20Hz
   const passo = jogadores.size > 10 ? 4 : 3; // 15Hz em salas grandes, 20Hz no resto
   if (tick % passo === 0) {
-    const snap = {
-      t: 's',
-      st: estado,
-      msg,
-      mo: MODOS_SALA[salaModo].nome, cap: capSala(), na: jogadores.size, pt: PONTOS[pontoIdx].n, jg: salaJaeger ? 1 : 0, // pra tela de lobby
+    const js = [...jogadores.values()];
+    // Metadados (leves) em JSON; as poses dos jogadores vão em Int16 binário depois.
+    const meta = {
+      t: 's', st: estado, msg,
+      mo: MODOS_SALA[salaModo].nome, cap: capSala(), na: jogadores.size, pt: PONTOS[pontoIdx].n, jg: salaJaeger ? 1 : 0,
       ev: eventos.splice(0),
-      pl: [...jogadores.values()].map((j) => {
-        const p = [];
-        for (const spec of PARTS) {
-          const b = j.rag.parts[spec.name];
-          const tr = b.translation();
-          const ro = b.rotation();
-          p.push(q2(tr.x), q2(tr.y), q2(tr.z), q(ro.x), q(ro.y), q(ro.z)); // 6 por parte: w é reconstruído no cliente
-        }
-        return { s: j.slot, sk: j.skin, v: j.vivo ? 1 : 0, at: j.rag.isStunned(now) ? 1 : 0, sc: j.score, p };
-      }),
-      pr: props.map((b) => {
-        const tr = b.translation();
-        const ro = b.rotation();
-        return [q(tr.x), q(tr.y), q(tr.z), q(ro.x), q(ro.y), q(ro.z), q(ro.w)];
-      }),
-      wp: armas.map((a) => {
-        const tr = a.body.translation(), ro = a.body.rotation();
-        return { id: a.id, ti: ARMA_TIPOS.indexOf(a.tipo), q: a.quente ? 1 : 0, p: [q(tr.x), q(tr.y), q(tr.z), q(ro.x), q(ro.y), q(ro.z), q(ro.w)] };
-      }),
+      pl: js.map((j) => ({ s: j.slot, sk: j.skin, v: j.vivo ? 1 : 0, at: j.rag.isStunned(now) ? 1 : 0, sc: j.score })),
+      pr: props.map((b) => { const tr = b.translation(), ro = b.rotation(); return [q(tr.x), q(tr.y), q(tr.z), q(ro.x), q(ro.y), q(ro.z), q(ro.w)]; }),
+      wp: armas.map((a) => { const tr = a.body.translation(), ro = a.body.rotation(); return { id: a.id, ti: ARMA_TIPOS.indexOf(a.tipo), q: a.quente ? 1 : 0, p: [q(tr.x), q(tr.y), q(tr.z), q(ro.x), q(ro.y), q(ro.z), q(ro.w)] }; }),
       pu: powerups.map((p) => ({ id: p.id, ti: POWER_TIPOS.indexOf(p.tipo), p: [q(p.x), q(p.y), q(p.z)] })),
     };
-    const dados = JSON.stringify(snap);
-    for (const j of jogadores.values()) {
-      if (j.ws.readyState === 1) j.ws.send(dados);
+    const metaBuf = Buffer.from(JSON.stringify(meta), 'utf8');
+    const buf = Buffer.allocUnsafe(4 + metaBuf.length + js.length * PARTS.length * 6 * 2);
+    buf.writeUInt32LE(metaBuf.length, 0);
+    metaBuf.copy(buf, 4);
+    let off = 4 + metaBuf.length;
+    const i16 = (v) => Math.max(-32768, Math.min(32767, Math.round(v)));
+    for (const j of js) {
+      for (const spec of PARTS) {
+        const tr = j.rag.parts[spec.name].translation(), ro = j.rag.parts[spec.name].rotation();
+        buf.writeInt16LE(i16(tr.x * 256), off); off += 2;   // posição: ±128m, ~4mm
+        buf.writeInt16LE(i16(tr.y * 256), off); off += 2;
+        buf.writeInt16LE(i16(tr.z * 256), off); off += 2;
+        buf.writeInt16LE(i16(ro.x * 32767), off); off += 2; // quaternion xyz (w reconstruído)
+        buf.writeInt16LE(i16(ro.y * 32767), off); off += 2;
+        buf.writeInt16LE(i16(ro.z * 32767), off); off += 2;
+      }
     }
+    for (const j of jogadores.values()) if (j.ws.readyState === 1) j.ws.send(buf);
   }
 }, 1000 / 60);
 
