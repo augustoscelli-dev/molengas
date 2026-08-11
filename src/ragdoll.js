@@ -89,6 +89,8 @@ export class Ragdoll {
     this.controle = 1; // 0..1 — mapas de gelo reduzem a tração
     this.forcaSoco = 1; // multiplicador de força do soco (Kaiju bate mais forte)
     this.resistencia = 1; // aguenta mais tranco: reduz knockback e acúmulo de dano
+    this.buffVel = 1; this.buffVelAte = 0;     // power-up de velocidade (temporário)
+    this.buffForca = 1; this.buffForcaAte = 0; // power-up de força (temporário)
     this.dano = 0; // nocaute acumulativo: apanhar seguido atordoa mais
     this.folego = 1; // cansaço: spam de soco esgota
     this.dashReadyAt = 0;
@@ -254,6 +256,9 @@ export class Ragdoll {
   update(dt, now, input) {
     this._now = now;
     const stunned = this.isStunned(now);
+    // Buffs de power-up expiram
+    if (now > this.buffVelAte) this.buffVel = 1;
+    if (now > this.buffForcaAte) this.buffForca = 1;
     // Fim do nocaute: zera o dano pra não cair de novo na hora e levanta
     if (this.downUntil && now >= this.downUntil) { this.downUntil = 0; this.dano = 0.5; this.hoverBlockUntil = now; }
     // recuperação gradual: dano de combo esvai, fôlego volta (não some no nocaute)
@@ -324,7 +329,7 @@ export class Ragdoll {
         const nx = mx / mlen, nz = mz / mlen;
         const speedAlong = pv.x * nx + pv.z * nz;
         if (speedAlong < 3.6) {
-          const tr = 220 * this.controle;
+          const tr = 220 * this.controle * (this.buffVel || 1);
           pelvis.applyImpulse({ x: nx * tr * dt, y: 0, z: nz * tr * dt }, true);
           this.parts.torso.applyImpulse({ x: nx * tr * 0.4 * dt, y: 0, z: nz * tr * 0.4 * dt }, true);
         }
@@ -492,7 +497,7 @@ export class Ragdoll {
               if (d < alc) {
                 const strong = pname === 'head';
                 // forcaSoco = quão forte ESTE lutador bate; resistencia = quanto o RIVAL aguenta
-                const kb = (this.forcaSoco || 1) / (rival.resistencia || 1);
+                const kb = (this.forcaSoco || 1) * (this.buffForca || 1) / (rival.resistencia || 1);
                 const fator = (this._voadora ? 1.35 : 1) * (this._socoFraco ? 0.55 : 1) * (this._chute ? 1.3 : 1) * kb;
                 tb.applyImpulse({
                   x: dir[0] * (strong ? 6.5 : 5) * fator,

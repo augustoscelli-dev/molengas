@@ -1999,6 +1999,56 @@ function updateEfeitos(dt) {
   }
 }
 
+// ---------- Power-ups (pickups flutuantes que aplicam efeito por proximidade) ----------
+function texPower(emoji, cor) {
+  return texturaCanvas(128, (g) => {
+    const c = '#' + cor.toString(16).padStart(6, '0');
+    const grad = g.createRadialGradient(64, 64, 6, 64, 64, 62);
+    grad.addColorStop(0, '#ffffff'); grad.addColorStop(0.45, c); grad.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = grad; g.beginPath(); g.arc(64, 64, 62, 0, Math.PI * 2); g.fill();
+    g.font = '62px "Segoe UI Emoji", "Segoe UI", sans-serif';
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(emoji, 64, 70);
+  });
+}
+const POWERDEF = {
+  cura:  { emoji: '❤️', cor: 0xff5a6a, aplica: (rag) => { rag.dano = 0; rag.folego = 1; } },
+  vel:   { emoji: '⚡', cor: 0xffe04a, aplica: (rag, now) => { rag.buffVel = 1.6; rag.buffVelAte = now + 6; } },
+  forca: { emoji: '💪', cor: 0xff9a3c, aplica: (rag, now) => { rag.buffForca = 1.8; rag.buffForcaAte = now + 6; } },
+};
+for (const k in POWERDEF) POWERDEF[k].tex = texPower(POWERDEF[k].emoji, POWERDEF[k].cor);
+const powerups = [];
+let proxPowerEm = 0;
+function spawnPower(tipo, x, z) {
+  const def = POWERDEF[tipo];
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: def.tex, transparent: true, depthWrite: false }));
+  s.scale.setScalar(0.62); s.position.set(x, 1.4, z); scene.add(s);
+  powerups.push({ s, tipo, x, z, vida: 16, base: 1.4 });
+}
+function limparPowerups() {
+  for (const p of powerups) { scene.remove(p.s); p.s.material.dispose(); }
+  powerups.length = 0;
+}
+function updatePowerups(dt, now) {
+  for (let i = powerups.length - 1; i >= 0; i--) {
+    const p = powerups[i];
+    p.vida -= dt;
+    p.s.position.y = p.base + Math.sin(now * 3) * 0.12;                 // flutua
+    p.s.material.opacity = p.vida < 3 ? (Math.sin(now * 20) * 0.4 + 0.6) : 1; // pisca no fim
+    let coletou = false;
+    for (const l of lutadores) {
+      if (!l.vivo) continue;
+      const t = l.rag.parts.torso.translation();
+      if (Math.hypot(t.x - p.x, t.y - p.s.position.y, t.z - p.z) < 0.78) {
+        POWERDEF[p.tipo].aplica(l.rag, now);
+        powFx({ x: p.x, y: p.s.position.y, z: p.z }); burstEstrelas(t); som.ponto?.();
+        coletou = true; break;
+      }
+    }
+    if (coletou || p.vida <= 0) { scene.remove(p.s); p.s.material.dispose(); powerups.splice(i, 1); }
+  }
+}
+
 function makeDeckTexture() {
   const c = document.createElement('canvas');
   c.width = 1024; c.height = 768;
@@ -2121,6 +2171,8 @@ function startIntro(roundN) {
   introStep = 0;
   stateUntil = simNow + 0.9;
   replayBuf.length = 0;
+  limparPowerups();
+  proxPowerEm = 0;
   showMsg('ROUND ' + roundN);
 }
 function iniciarLuta() {
@@ -2662,6 +2714,15 @@ function frame(t) {
       puffFx({ x: ax, y: 4.2, z: az });
       proxArmaEm = simNow + atrasoArma + Math.random() * (MODO_CAOS ? 2 : 5);
     }
+    // Drop de power-up (cura ❤️ / velocidade ⚡ / força 💪), no máx. 2 na arena
+    if (proxPowerEm === 0) proxPowerEm = simNow + (MODO_CAOS ? 5 : 8);
+    if (simNow > proxPowerEm && powerups.length < 2) {
+      const tipos = Object.keys(POWERDEF);
+      const px = (Math.random() * 2 - 1) * 2.2, pz = (Math.random() * 2 - 1) * 1.6;
+      spawnPower(tipos[(Math.random() * tipos.length) | 0], px, pz);
+      puffFx({ x: px, y: 1.4, z: pz });
+      proxPowerEm = simNow + (MODO_CAOS ? 7 : 12) + Math.random() * 6;
+    }
   }
   // Resfria as armas de tiro (superaquecimento: trava até esfriar de novo)
   for (const arma of (mapa.armas || [])) {
@@ -2764,6 +2825,7 @@ function frame(t) {
     }
   }
   updateEfeitos(fdt);
+  updatePowerups(fdt, simNow);
   mirarHolofotes(simNow);
   cairConfetes(fdt, simNow);
 
