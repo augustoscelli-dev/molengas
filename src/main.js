@@ -1425,10 +1425,11 @@ function buildVisual(skin, fase = 0, slot = 0) {
     if (bruto && bruto !== 'jaeger-low') {
       nomeGLB = bruto; // usuário escolheu explicitamente (?glb=jaeger-rigado,kaiju-rigado)
     } else {
-      // Padrão automático: P1 = Jaeger, P2+ = Kaiju. Se o kaiju-rigado ainda não
-      // existe, cai de volta pro Jaeger (some assim que o arquivo for adicionado).
-      nomeGLB = slot === 0 ? 'jaeger-rigado' : 'kaiju-rigado';
-      if (slot !== 0) fallbackGLB = 'jaeger-rigado';
+      // Padrão automático por paridade: slot par = Jaeger, ímpar = Kaiju (times
+      // robôs x monstros). Se o kaiju-rigado ainda não existe, cai pro Jaeger.
+      const ehKaiju = slot % 2 === 1;
+      nomeGLB = ehKaiju ? 'kaiju-rigado' : 'jaeger-rigado';
+      if (ehKaiju) fallbackGLB = 'jaeger-rigado';
     }
     meshes._modeloJ = nomeGLB;
     const tinta = new THREE.Color(skin.cores.torso);
@@ -1750,13 +1751,11 @@ function syncVisual(rag, meshes, now) {
 const _rgWorld = new THREE.Matrix4(), _rgDesired = new THREE.Matrix4(), _rgInvP = new THREE.Matrix4(), _rgOne = new THREE.Vector3(1, 1, 1);
 const _rgPos = new THREE.Vector3(), _rgQuat = new THREE.Quaternion(), _rgScl = new THREE.Vector3();
 const _rgBody = {};
-function atualizarSkins() {
-  for (const l of lutadores) {
-    const mm = l.meshes;
-    if (!mm) continue;
-    if (mm._skel) { mm._rootBones.updateMatrixWorld(true); mm._skel.update(); }
-    if (mm._jrig) {
-      // corpos da física (trackers preenchidos por syncVisual) -> matrizes world
+function atualizarSkinMesh(mm) {
+  if (!mm) return;
+  if (mm._skel) { mm._rootBones.updateMatrixWorld(true); mm._skel.update(); }
+  if (mm._jrig) {
+      // corpos da física (trackers preenchidos por syncVisual/interpolação) -> matrizes world
       for (const spec of PARTS) { const t = mm[spec.name]; _rgBody[spec.name] = (_rgBody[spec.name] || new THREE.Matrix4()).compose(t.position, t.quaternion, _rgOne); }
       // Cada osso ROTACIONA com seu corpo, mas mantém o COMPRIMENTO (posição de bind):
       // só o quadril (raiz) translada. Assim os membros dobram sem esticar.
@@ -1770,9 +1769,9 @@ function atualizarSkins() {
         d.bone.updateWorldMatrix(false, false);
       }
       mm._jrig.skeleton.update();
-    }
   }
 }
+function atualizarSkins() { for (const l of lutadores) atualizarSkinMesh(l.meshes); }
 
 // ---------- Lutadores (2 a 4, humanos e bots) ----------
 // tipos de controle: 'kb1' (WASD+gp0) | 'kb2' (setas+gp1) | 'gp' | 'cpu'
@@ -2507,7 +2506,7 @@ function iniciarOnline() {
   $('selecao').style.display = 'none';
   showMsg('CONECTANDO…');
   const ws = new WebSocket(`ws://${location.host}`);
-  online = { ws, slot: null, visuais: new Map(), armasVis: new Map(), powerVis: new Map(), buf: [], msgAtual: null };
+  online = { ws, slot: null, visuais: new Map(), armasVis: new Map(), powerVis: new Map(), buf: [], msgAtual: null, jaeger: false };
   ws.addEventListener('open', () => {
     ws.send(JSON.stringify({ t: 'entrar', skin: selCfg[0].skin }));
     showMsg('NA SALA! 🌐', 'quando todos entrarem, o host (1º jogador) aperta F');
@@ -2535,12 +2534,20 @@ function iniciarOnline() {
     if (e.code === 'KeyF') online.ws.send(JSON.stringify({ t: 'comecar' }));  // host começa
     if (e.code === 'KeyM') online.ws.send(JSON.stringify({ t: 'modo' }));     // host troca modo (8/20)
     if (e.code === 'KeyN') online.ws.send(JSON.stringify({ t: 'pontos' }));   // host troca pontuação
+    if (e.code === 'KeyJ') online.ws.send(JSON.stringify({ t: 'jaeger' }));   // host liga robôs x monstros
   });
 }
 
 function receberSnap(m) {
   online.buf.push({ rx: performance.now() / 1000, m });
   if (online.buf.length > 30) online.buf.shift();
+  // Toggle Jaeger×Kaiju: troca o estilo e reconstrói os bonecos
+  if (m.jg !== undefined && !!m.jg !== online.jaeger) {
+    online.jaeger = !!m.jg;
+    ESTILO = online.jaeger ? 'j' : ESTILO_BASE;
+    for (const [, v] of online.visuais) destroyVisual(v.meshes);
+    online.visuais.clear();
+  }
   for (const pl of m.pl) {
     let v = online.visuais.get(pl.s);
     if (!v || v.skin !== pl.sk) {
@@ -2596,7 +2603,7 @@ function receberSnap(m) {
   }).join('');
   // Lobby: mostra modo + quantos na sala + o que o host aperta
   if (m.st === 'lobby') {
-    showMsg('SALA ONLINE 🌐', `${m.mo || ''} — <b>${m.na || 0}/${m.cap || 0}</b> na sala &nbsp;·&nbsp; ${m.pt || ''}<br>host (jogador 1): <b>F</b> começa &nbsp;·&nbsp; <b>M</b> modo &nbsp;·&nbsp; <b>N</b> pontuação`);
+    showMsg('SALA ONLINE 🌐', `${m.mo || ''} — <b>${m.na || 0}/${m.cap || 0}</b> na sala &nbsp;·&nbsp; ${m.pt || ''} &nbsp;·&nbsp; 🤖×🦖 ${m.jg ? 'SIM' : 'não'}<br>host (jogador 1): <b>F</b> começa &nbsp;·&nbsp; <b>M</b> modo &nbsp;·&nbsp; <b>N</b> pontuação &nbsp;·&nbsp; <b>J</b> robôs×monstros`);
     online.msgAtual = '__lobby__';
   } else if (m.msg !== online.msgAtual) {
     online.msgAtual = m.msg;
@@ -2654,9 +2661,12 @@ function aplicarSnapOnline(m1, m2, f) {
       ).normalize();
       o += 7;
     }
-    const piscando = ((agora + pl2.s * 1.9) % 3.4) < 0.13;
-    v.meshes._face.material.map = getFaceTexture(THREE, v.meshes._skin.face, pl2.at ? 'x' : (piscando ? 'blink' : 'ok'));
-    v.meshes.torso.scale.y = v.meshes.torso._baseY * (1 + 0.028 * Math.sin(agora * 2.6 + pl2.s * 1.9));
+    // Carinha + respiração só existem no estilo gominha; no Jaeger ('j') o esqueleto cuida
+    if (v.meshes._face) {
+      const piscando = ((agora + pl2.s * 1.9) % 3.4) < 0.13;
+      v.meshes._face.material.map = getFaceTexture(THREE, v.meshes._skin.face, pl2.at ? 'x' : (piscando ? 'blink' : 'ok'));
+      if (v.meshes.torso._baseY) v.meshes.torso.scale.y = v.meshes.torso._baseY * (1 + 0.028 * Math.sin(agora * 2.6 + pl2.s * 1.9));
+    }
   }
   // props: aplica nos corpos locais (parados) e deixa o sync normal desenhar
   m2.pr.forEach((b2, idx) => {
@@ -2692,6 +2702,7 @@ function frameOnline(t, fdt) {
     aplicarSnapOnline(b1.m, b2.m, f);
   }
   for (const e of online.powerVis.values()) e.s.position.y = e.baseY + Math.sin(t * 0.003) * 0.12; // bob dos power-ups
+  for (const v of online.visuais.values()) atualizarSkinMesh(v.meshes); // esqueleto Jaeger/Kaiju online
   for (const [body, mesh] of mapa.syncPairs) {
     const tp = body.translation();
     const rp = body.rotation();

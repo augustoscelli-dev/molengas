@@ -32,6 +32,7 @@ const MODOS_SALA = {
 const ORDEM_MODOS = ['normal', 'loucura'];
 let salaModo = process.argv.includes('--loucura') ? 'loucura' : 'normal';
 const capSala = () => MODOS_SALA[salaModo].max;
+let salaJaeger = false; // modo robôs (par) x monstros (ímpar), com força assimétrica
 
 // Colisão: todos os players compartilham UM bit; o filtro de contato por "dono"
 // evita a auto-colisão (partes do mesmo boneco não colidem). Escala pra N jogadores
@@ -327,6 +328,9 @@ function comecarPartida() {
     const [sx, sz] = spawnFor(j.slot, tot);
     j.rag.spawn = { x: sx, z: sz };
     j.rag.heading0 = Math.atan2(-sx, -sz);
+    // Modo Jaeger: par = robô (normal), ímpar = Kaiju (bate mais forte, aguenta mais)
+    if (salaJaeger && j.slot % 2 === 1) { j.rag.forcaSoco = 1.3; j.rag.resistencia = 1.45; }
+    else { j.rag.forcaSoco = 1; j.rag.resistencia = 1; }
     j.score = 0; j.vivo = true; j.rag.reset();
   }
   resetProps();
@@ -430,7 +434,7 @@ setInterval(() => {
       t: 's',
       st: estado,
       msg,
-      mo: MODOS_SALA[salaModo].nome, cap: capSala(), na: jogadores.size, pt: PONTOS[pontoIdx].n, // pra tela de lobby
+      mo: MODOS_SALA[salaModo].nome, cap: capSala(), na: jogadores.size, pt: PONTOS[pontoIdx].n, jg: salaJaeger ? 1 : 0, // pra tela de lobby
       ev: eventos.splice(0),
       pl: [...jogadores.values()].map((j) => {
         const p = [];
@@ -511,6 +515,9 @@ wss.on('connection', (ws) => {
     } else if (m.t === 'pontos') {
       const j = jogadores.get(ws);
       if (j && j === host() && (estado === 'lobby' || estado === 'fim')) pontoIdx = (pontoIdx + 1) % PONTOS.length;
+    } else if (m.t === 'jaeger') {
+      const j = jogadores.get(ws);
+      if (j && j === host() && (estado === 'lobby' || estado === 'fim')) salaJaeger = !salaJaeger;
     }
   });
   ws.on('close', () => {
