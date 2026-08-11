@@ -56,9 +56,10 @@ const qrot = (q, v) => {
 };
 
 export class Ragdoll {
-  constructor(R, world, { x = 0, z = 0, heading = 0, memberships, filter }) {
+  constructor(R, world, { x = 0, z = 0, heading = 0, memberships, filter, owner = null, onCollider = null }) {
     this.R = R;
     this.world = world;
+    this.owner = owner; // id do dono (pra filtro de contato: partes do mesmo dono não colidem)
     this.spawn = { x, z };
     this.heading0 = heading;
     this.heading = heading;
@@ -114,7 +115,9 @@ export class Ragdoll {
         .setFriction(0.7)
         .setRestitution(0.15)
         .setCollisionGroups(groups);
-      world.createCollider(cd, body);
+      if (owner != null) cd.setActiveHooks(R.ActiveHooks.FILTER_CONTACT_PAIRS);
+      const col = world.createCollider(cd, body);
+      if (onCollider) onCollider(col, spec);
       this.parts[spec.name] = body;
     }
     for (const [a, b, aa, ab] of JOINTS) {

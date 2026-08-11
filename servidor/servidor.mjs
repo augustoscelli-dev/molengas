@@ -21,74 +21,108 @@ const AUTO = process.argv.includes('--auto');
 const WIN_SCORE = 5;
 const DT = 1 / 60;
 const IDLE = { move: { x: 0, z: 0 }, punch: false, grab: false, jump: false, emote: false, esquiva: false };
-const SPAWNS = [[-2.2, 0], [2.2, 0], [0, -2.6], [0, 2.6]];
-const PLAYER_BITS = [0x0002, 0x0004, 0x0020, 0x0040];
-const TODOS_PLAYERS = 0x0066;
 
-// ---------- Física: mapa ESTÁDIO (espelha o build do cliente) ----------
+// Modos de sala: quantos jogadores cabem e o tamanho da arena.
+const MODOS_SALA = {
+  normal:  { max: 8,  arena: 1.2, nome: 'Normal (até 8)' },
+  loucura: { max: 20, arena: 1.9, nome: 'LOUCURA — até 20! 🤪' },
+};
+const ORDEM_MODOS = ['normal', 'loucura'];
+let salaModo = process.argv.includes('--loucura') ? 'loucura' : 'normal';
+const capSala = () => MODOS_SALA[salaModo].max;
+
+// Colisão: todos os players compartilham UM bit; o filtro de contato por "dono"
+// evita a auto-colisão (partes do mesmo boneco não colidem). Escala pra N jogadores
+// sem estourar o orçamento de 16 bits de grupos.
+const ENV_BIT = 0x0001, PROP_BIT = 0x0008, PLAYER_BIT = 0x0002;
+const PLAYER_MEMB = PLAYER_BIT, PLAYER_FILT = ENV_BIT | PROP_BIT | PLAYER_BIT;
+const GROUND_GROUPS = (ENV_BIT << 16) | 0xffff;
+const PROP_GROUPS = (PROP_BIT << 16) | (ENV_BIT | PROP_BIT | PLAYER_BIT);
+const ownerByHandle = new Map(); // handle do collider -> id do dono (pro filtro)
+
+// ---------- Física ----------
 const world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
 world.timestep = DT;
-const GROUND_GROUPS = (0x0001 << 16) | 0xffff;
-const PROP_GROUPS = (0x0008 << 16) | (0x0001 | 0x0008 | TODOS_PLAYERS);
+const filaEventos = new RAPIER.EventQueue(true);
+const hooks = {
+  filterContactPair: (c1, c2) => {
+    const o1 = ownerByHandle.get(c1), o2 = ownerByHandle.get(c2);
+    if (o1 != null && o1 === o2) return null; // mesmo dono => sem colisão (nem explosão)
+    return RAPIER.SolverFlags.COMPUTE_IMPULSE;
+  },
+};
 
-const chao = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, -0.3, 0));
-world.createCollider(
-  RAPIER.ColliderDesc.cuboid(ARENA.halfX, 0.3, ARENA.halfZ).setFriction(0.8).setCollisionGroups(GROUND_GROUPS),
-  chao,
-);
-const ancora = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, 6.2, 0));
-const bola = world.createRigidBody(
-  RAPIER.RigidBodyDesc.dynamic().setTranslation(0, 1.8, 0).setCcdEnabled(true).setLinearDamping(0.05).setAngularDamping(0.3),
-);
-world.createCollider(
-  RAPIER.ColliderDesc.ball(0.55).setMass(45).setFriction(0.4).setRestitution(0.3).setCollisionGroups(PROP_GROUPS),
-  bola,
-);
-world.createImpulseJoint(RAPIER.JointData.spherical({ x: 0, y: 0, z: 0 }, { x: 0, y: 4.4, z: 0 }), ancora, bola, true);
-bola.setLinvel({ x: 2.6, y: 0, z: 1.1 }, true);
-const CAIXOTES_SPAWN = [[-3.4, 2.3], [3.2, -2.4], [0.6, 3.0], [-1.2, -2.9]];
-const caixotes = CAIXOTES_SPAWN.map(([cx, cz]) => {
-  const b = world.createRigidBody(
-    RAPIER.RigidBodyDesc.dynamic().setTranslation(cx, 0.4, cz).setLinearDamping(0.25).setAngularDamping(0.5),
-  );
-  world.createCollider(
-    RAPIER.ColliderDesc.cuboid(0.19, 0.19, 0.19).setMass(4).setFriction(0.6).setCollisionGroups(PROP_GROUPS),
-    b,
-  );
-  return b;
-});
-const props = [bola, ...caixotes];
+const jogadores = new Map(); // ws -> jogador
+
+// Posição de nascimento em anel, espaçada pra caber todo mundo.
+let arenaHX = ARENA.halfX, arenaHZ = ARENA.halfZ;
+function spawnFor(slot, total) {
+  const n = Math.max(2, total);
+  const a = (slot / n) * Math.PI * 2;
+  const r = Math.min(arenaHX, arenaHZ) * 0.62;
+  return [Math.cos(a) * r, Math.sin(a) * r];
+}
+
+// Arena reconstruível: a escala muda por modo (loucura = arena maior).
+let chao = null, ancora = null, bola = null, caixotes = [], props = [];
+function montarArena(scale) {
+  for (const b of [chao, ancora, bola, ...caixotes]) if (b) world.removeRigidBody(b);
+  caixotes = [];
+  arenaHX = ARENA.halfX * scale; arenaHZ = ARENA.halfZ * scale;
+  chao = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, -0.3, 0));
+  world.createCollider(RAPIER.ColliderDesc.cuboid(arenaHX, 0.3, arenaHZ).setFriction(0.8).setCollisionGroups(GROUND_GROUPS), chao);
+  ancora = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, 6.2, 0));
+  bola = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(0, 1.8, 0).setCcdEnabled(true).setLinearDamping(0.05).setAngularDamping(0.3));
+  world.createCollider(RAPIER.ColliderDesc.ball(0.55).setMass(45).setFriction(0.4).setRestitution(0.3).setCollisionGroups(PROP_GROUPS), bola);
+  world.createImpulseJoint(RAPIER.JointData.spherical({ x: 0, y: 0, z: 0 }, { x: 0, y: 4.4, z: 0 }), ancora, bola, true);
+  bola.setLinvel({ x: 2.6, y: 0, z: 1.1 }, true);
+  const n = Math.round(4 * scale);
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2 + 0.4, r = Math.min(arenaHX, arenaHZ) * 0.5;
+    const cx = Math.cos(a) * r, cz = Math.sin(a) * r;
+    const b = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(cx, 0.4, cz).setLinearDamping(0.25).setAngularDamping(0.5));
+    world.createCollider(RAPIER.ColliderDesc.cuboid(0.19, 0.19, 0.19).setMass(4).setFriction(0.6).setCollisionGroups(PROP_GROUPS), b);
+    caixotes.push(b);
+  }
+  props = [bola, ...caixotes];
+  for (const j of jogadores.values()) j.rag.props = props;
+}
 function resetProps() {
   bola.setTranslation({ x: 0, y: 1.8, z: 0 }, true);
   bola.setLinvel({ x: 2.6, y: 0, z: 1.1 }, true);
   bola.setAngvel({ x: 0, y: 0, z: 0 }, true);
+  const n = Math.max(1, caixotes.length);
   caixotes.forEach((b, i) => {
-    b.setTranslation({ x: CAIXOTES_SPAWN[i][0], y: 0.4, z: CAIXOTES_SPAWN[i][1] }, true);
+    const a = (i / n) * Math.PI * 2 + 0.4, r = Math.min(arenaHX, arenaHZ) * 0.5;
+    b.setTranslation({ x: Math.cos(a) * r, y: 0.4, z: Math.sin(a) * r }, true);
     b.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true);
     b.setLinvel({ x: 0, y: 0, z: 0 }, true);
     b.setAngvel({ x: 0, y: 0, z: 0 }, true);
   });
 }
+montarArena(MODOS_SALA[salaModo].arena);
 
 // ---------- Jogadores ----------
-const jogadores = new Map(); // ws -> jogador
-
 function slotsLivres() {
   const usados = new Set([...jogadores.values()].map((j) => j.slot));
-  return [0, 1, 2, 3].filter((s) => !usados.has(s));
+  const livres = [];
+  for (let s = 0; s < capSala(); s++) if (!usados.has(s)) livres.push(s);
+  return livres;
 }
 function criarJogador(ws, skin) {
   const livres = slotsLivres();
   if (!livres.length) return null;
   const slot = livres[0];
-  const [sx, sz] = SPAWNS[slot];
+  const owner = slot;
+  const [sx, sz] = spawnFor(slot, capSala());
+  const handles = [];
   const rag = new Ragdoll(RAPIER, world, {
     x: sx, z: sz, heading: Math.atan2(-sx, -sz),
-    memberships: PLAYER_BITS[slot],
-    filter: 0x0001 | 0x0008 | (TODOS_PLAYERS & ~PLAYER_BITS[slot]),
+    memberships: PLAYER_MEMB, filter: PLAYER_FILT,
+    owner, onCollider: (col) => { ownerByHandle.set(col.handle, owner); handles.push(col.handle); },
   });
   rag.props = props;
-  const j = { ws, slot, skin: skin | 0, rag, input: { ...IDLE }, vivo: estado === 'lobby', score: 0 };
+  const j = { ws, slot, skin: skin | 0, rag, input: { ...IDLE }, vivo: estado === 'lobby', score: 0, handles };
   jogadores.set(ws, j);
   refazerRivais();
   return j;
@@ -96,6 +130,7 @@ function criarJogador(ws, skin) {
 function removerJogador(ws) {
   const j = jogadores.get(ws);
   if (!j) return;
+  for (const h of (j.handles || [])) ownerByHandle.delete(h); // limpa o filtro de contato
   j.rag.destroy();
   jogadores.delete(ws);
   refazerRivais();
@@ -122,7 +157,14 @@ function startIntro(roundN) {
   msg = 'ROUND ' + roundN;
 }
 function comecarPartida() {
-  for (const j of jogadores.values()) { j.score = 0; j.vivo = true; j.rag.reset(); }
+  montarArena(MODOS_SALA[salaModo].arena); // arena do modo escolhido
+  const tot = capSala();
+  for (const j of jogadores.values()) {
+    const [sx, sz] = spawnFor(j.slot, tot);
+    j.rag.spawn = { x: sx, z: sz };
+    j.rag.heading0 = Math.atan2(-sx, -sz);
+    j.score = 0; j.vivo = true; j.rag.reset();
+  }
   resetProps();
   refazerRivais();
   startIntro(1);
@@ -197,7 +239,7 @@ setInterval(() => {
     if (r.lastDashAt > (r._evDash ?? -1)) { r._evDash = r.lastDashAt; ev('dash'); }
     if (r.lastEsquivaAt > (r._evEsq ?? -1)) { r._evEsq = r.lastEsquivaAt; ev('esquiva'); }
   }
-  world.step();
+  world.step(filaEventos, hooks); // hook = filtro de contato por dono (sem auto-colisão)
   // bolada
   const bv = bola.linvel();
   if (Math.hypot(bv.x, bv.y, bv.z) > 3) {
@@ -223,6 +265,7 @@ setInterval(() => {
       t: 's',
       st: estado,
       msg,
+      mo: MODOS_SALA[salaModo].nome, cap: capSala(), na: jogadores.size, // pra tela de lobby
       ev: eventos.splice(0),
       pl: [...jogadores.values()].map((j) => {
         const p = [];
@@ -289,6 +332,12 @@ wss.on('connection', (ws) => {
     } else if (m.t === 'comecar') {
       const j = jogadores.get(ws);
       if (j && j === host() && (estado === 'lobby' || estado === 'fim') && jogadores.size >= 2) comecarPartida();
+    } else if (m.t === 'modo') {
+      const j = jogadores.get(ws);
+      if (j && j === host() && (estado === 'lobby' || estado === 'fim')) {
+        salaModo = ORDEM_MODOS[(ORDEM_MODOS.indexOf(salaModo) + 1) % ORDEM_MODOS.length];
+        console.log('modo da sala ->', salaModo);
+      }
     }
   });
   ws.on('close', () => {
@@ -303,5 +352,7 @@ http.listen(PORTA, () => {
   console.log('Abram no navegador de cada jogador:');
   for (const ip of ips) console.log(`  http://${ip}:${PORTA}/?servidor=1`);
   console.log(`  (neste PC: http://localhost:${PORTA}/?servidor=1)`);
+  console.log(`Modos: Normal (até 8) e LOUCURA (até 20). Host aperta M pra trocar, F pra começar.`);
+  console.log(`Modo inicial: ${MODOS_SALA[salaModo].nome}`);
   if (AUTO) console.log('modo --auto: a luta começa sozinha com 2 jogadores');
 });
