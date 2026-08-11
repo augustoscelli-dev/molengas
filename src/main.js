@@ -1349,8 +1349,16 @@ function buildVisual(skin, fase = 0, slot = 0) {
     meshes.torso._baseS = [1, 1, 1];
     meshes._jrig = null;
     const nomesGLB = MODELO_GLB.split(',');
-    let nomeGLB = (nomesGLB[slot] || nomesGLB[0] || '').trim();
-    if (!nomeGLB || nomeGLB === 'jaeger-low') nomeGLB = 'jaeger-rigado'; // 'j' precisa de um GLB rigado
+    const bruto = (nomesGLB[slot] || nomesGLB[0] || '').trim();
+    let nomeGLB, fallbackGLB = null;
+    if (bruto && bruto !== 'jaeger-low') {
+      nomeGLB = bruto; // usuário escolheu explicitamente (?glb=jaeger-rigado,kaiju-rigado)
+    } else {
+      // Padrão automático: P1 = Jaeger, P2+ = Kaiju. Se o kaiju-rigado ainda não
+      // existe, cai de volta pro Jaeger (some assim que o arquivo for adicionado).
+      nomeGLB = slot === 0 ? 'jaeger-rigado' : 'kaiju-rigado';
+      if (slot !== 0) fallbackGLB = 'jaeger-rigado';
+    }
     const tinta = new THREE.Color(skin.cores.torso);
     // De qual corpo da física cada osso do esqueleto Meshy segue:
     const BONE2BODY = {
@@ -1361,7 +1369,7 @@ function buildVisual(skin, fase = 0, slot = 0) {
       LeftUpLeg: 'thighL', LeftLeg: 'calfL', LeftFoot: 'calfL', LeftToeBase: 'calfL',
       RightUpLeg: 'thighR', RightLeg: 'calfR', RightFoot: 'calfR', RightToeBase: 'calfR',
     };
-    new GLTFLoader().load(ASSET('assets/modelos/' + nomeGLB + '.glb'), (gltf) => {
+    const montarJ = (gltf) => {
       const armature = gltf.scene; let skinned = null, skeleton = null;
       armature.traverse((o) => {
         if (o.isSkinnedMesh) { skinned = o; skeleton = o.skeleton; }
@@ -1400,7 +1408,12 @@ function buildVisual(skin, fase = 0, slot = 0) {
       meshes._armature = armature;
       meshes._jrig = { armature, skinned, skeleton, driven };
       meshes._flashExtra = [skinned]; registrarFlashMats(meshes);
-    });
+    };
+    const carregarJ = (nome, onErr) =>
+      new GLTFLoader().load(ASSET('assets/modelos/' + nome + '.glb'), montarJ, undefined, onErr);
+    carregarJ(nomeGLB, fallbackGLB
+      ? () => { console.log(`estilo j: ${nomeGLB}.glb não achado, usando ${fallbackGLB}`); carregarJ(fallbackGLB); }
+      : undefined);
     return meshes;
   }
 
