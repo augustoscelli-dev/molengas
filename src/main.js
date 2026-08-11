@@ -2517,8 +2517,12 @@ function iniciarOnline() {
     else if (m.t === 'cheio') showMsg('SALA CHEIA 😔');
     else if (m.t === 's') receberSnap(m);
   });
+  $('placar').style.flexWrap = 'wrap';
+  $('placar').style.gap = '2px 12px';
   addEventListener('keydown', (e) => {
-    if (e.code === 'KeyF' && online.ws.readyState === 1) online.ws.send(JSON.stringify({ t: 'comecar' }));
+    if (online.ws.readyState !== 1) return;
+    if (e.code === 'KeyF') online.ws.send(JSON.stringify({ t: 'comecar' }));  // host começa
+    if (e.code === 'KeyM') online.ws.send(JSON.stringify({ t: 'modo' }));     // host troca modo
   });
 }
 
@@ -2539,12 +2543,21 @@ function receberSnap(m) {
       online.visuais.delete(s);
     }
   }
-  $('placar').innerHTML = m.pl.map((pl) =>
-    `<img class="retrato" src="${ASSET(`assets/retratos/${SKINS[pl.sk % SKINS.length].id}.jpg`)}" onerror="this.style.display='none'"> <span>${pl.sc}</span>`,
-  ).join(' &nbsp;·&nbsp; ');
-  if (m.msg !== online.msgAtual) {
+  // Placar compacto (encolhe quando tem muita gente — até 20)
+  const tam = m.pl.length > 6 ? 24 : 40;
+  $('placar').innerHTML = m.pl.map((pl) => {
+    const nm = SKINS[pl.sk % SKINS.length];
+    const mortoOp = pl.v ? '' : 'opacity:.35;';
+    return `<span style="display:inline-flex;align-items:center;gap:3px;${mortoOp}">` +
+      `<img class="retrato" style="width:${tam}px;height:${tam}px;margin:0 2px" src="${ASSET(`assets/retratos/${nm.id}.jpg`)}" onerror="this.style.display='none'"><b>${pl.sc}</b></span>`;
+  }).join('');
+  // Lobby: mostra modo + quantos na sala + o que o host aperta
+  if (m.st === 'lobby') {
+    showMsg('SALA ONLINE 🌐', `${m.mo || ''} — <b>${m.na || 0}/${m.cap || 0}</b> na sala<br>host (jogador 1): <b>F</b> começa &nbsp;·&nbsp; <b>M</b> troca modo`);
+    online.msgAtual = '__lobby__';
+  } else if (m.msg !== online.msgAtual) {
     online.msgAtual = m.msg;
-    if (m.st !== 'lobby') showMsg(m.msg);
+    showMsg(m.msg);
   }
   for (const evn of m.ev) {
     const [tipo, x, y, z] = evn;
