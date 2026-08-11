@@ -2009,6 +2009,16 @@ const emoteTex = texturaCanvas(128, (g) => {
   g.fillText('👋', 64, 70);
 });
 
+// Marcador "VOCÊ" (online): seta amarela sobre o seu boneco no meio da bagunça
+const voceTex = texturaCanvas(128, (g) => {
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.font = 'bold 32px "Segoe UI", system-ui, sans-serif';
+  g.lineJoin = 'round'; g.strokeStyle = '#241640'; g.lineWidth = 6;
+  g.strokeText('VOCÊ', 64, 36); g.fillStyle = '#ffe04a'; g.fillText('VOCÊ', 64, 36);
+  g.beginPath(); g.moveTo(42, 64); g.lineTo(86, 64); g.lineTo(64, 98); g.closePath();
+  g.fillStyle = '#ffe04a'; g.fill(); g.stroke();
+});
+
 const efeitos = [];
 function spawnFx(tex, pos, opts) {
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
@@ -2507,6 +2517,8 @@ function iniciarOnline() {
   showMsg('CONECTANDO…');
   const ws = new WebSocket(`ws://${location.host}`);
   online = { ws, slot: null, visuais: new Map(), armasVis: new Map(), powerVis: new Map(), buf: [], msgAtual: null, jaeger: false };
+  online.marcador = new THREE.Sprite(new THREE.SpriteMaterial({ map: voceTex, transparent: true, depthWrite: false, fog: false }));
+  online.marcador.scale.setScalar(0.55); online.marcador.visible = false; scene.add(online.marcador);
   ws.addEventListener('open', () => {
     ws.send(JSON.stringify({ t: 'entrar', skin: selCfg[0].skin }));
     showMsg('NA SALA! 🌐', 'quando todos entrarem, o host (1º jogador) aperta F');
@@ -2707,6 +2719,15 @@ function frameOnline(t, fdt) {
   }
   for (const e of online.powerVis.values()) e.s.position.y = e.baseY + Math.sin(t * 0.003) * 0.12; // bob dos power-ups
   for (const v of online.visuais.values()) atualizarSkinMesh(v.meshes); // esqueleto Jaeger/Kaiju online
+  // marcador "VOCÊ" flutua sobre o seu boneco
+  if (online.marcador) {
+    const meu = online.slot != null ? online.visuais.get(online.slot) : null;
+    if (meu && meu.meshes.head) {
+      const h = meu.meshes.head.position;
+      online.marcador.position.set(h.x, h.y + 0.7 + Math.sin(t * 0.005) * 0.05, h.z);
+      online.marcador.visible = true;
+    } else online.marcador.visible = false;
+  }
   for (const [body, mesh] of mapa.syncPairs) {
     const tp = body.translation();
     const rp = body.rotation();
