@@ -2594,7 +2594,9 @@ let online = null;
 function iniciarOnline() {
   $('selecao').style.display = 'none';
   showMsg('CONECTANDO…');
-  const ws = new WebSocket(`ws://${location.host}`);
+  // ws:// em rede local; wss:// quando a página vem por https (túnel/nuvem) — senão o navegador bloqueia
+  const proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
+  const ws = new WebSocket(`${proto}${location.host}`);
   ws.binaryType = 'arraybuffer'; // snapshots vêm em binário (poses Int16)
   online = { ws, slot: null, visuais: new Map(), armasVis: new Map(), powerVis: new Map(), buf: [], msgAtual: null, jaeger: false, forcarGominha: false, melhorPend: null, faseFinal: null };
   online.marcador = new THREE.Sprite(new THREE.SpriteMaterial({ map: voceTex, transparent: true, depthWrite: false, fog: false }));
