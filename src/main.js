@@ -2873,7 +2873,13 @@ function frame(t) {
     d.style.display = 'block';
     d.textContent = `t=${simNow.toFixed(1)}s estado=${state} vivos=${vivos().length} yaw0=${yawQ(q)}`;
   }
-  if (PARAMS.has('zoom')) {
+  if (state === 'selecao') {
+    // Preview 3D: a câmera orbita devagar em torno dos lutadores de enfeite
+    const ang = t * 0.00020;
+    const cx = midX * 0.6;
+    camera.position.set(cx + Math.sin(ang) * 4.6, 2.05, Math.cos(ang) * 4.6 + 0.3);
+    camera.lookAt(cx, 1.2, 0);
+  } else if (PARAMS.has('zoom')) {
     camPos.set(midX * 0.6, 1.9, 3.6);
     camera.position.copy(camPos);
     camera.lookAt(midX * 0.6, 1.05, 0);
