@@ -281,6 +281,22 @@ const ARMAS_DEF = {
       return g;
     },
   },
+  bomba: {
+    icone: '💣',
+    y0: 0.4, massa: 2.0, alcance: 0.5, forca: 4,
+    bomba: true, fuse: 3.2, raio: 2.5, forcaExpl: 18, // acende ao pegar; joga no rival antes de estourar
+    collider: () => RAPIER.ColliderDesc.ball(0.17),
+    mesh: () => {
+      const g = new THREE.Group();
+      const corpo = new THREE.Mesh(new THREE.SphereGeometry(0.17, 16, 12), new THREE.MeshStandardMaterial({ color: 0x1a1a20, metalness: 0.5, roughness: 0.5 }));
+      const pavio = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.013, 0.13, 6), new THREE.MeshStandardMaterial({ color: 0x8a6a3a }));
+      pavio.position.set(0, 0.22, 0); pavio.rotation.z = 0.35;
+      const faisca = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffcc33 }));
+      faisca.position.set(0.04, 0.29, 0); faisca.name = 'faisca';
+      g.add(corpo, pavio, faisca);
+      return g;
+    },
+  },
   // Arma de TIRO: segurar + apertar soco dispara um laser na direção que olha.
   laser: {
     icone: '🔫',
@@ -334,6 +350,7 @@ function soltarArma(m, x, z, tipo = 'bastao') {
     tiro: !!def.tiro, alcanceTiro: def.alcanceTiro || 0, cadencia: def.cadencia || 0.5,
     danoTiro: def.danoTiro || 1, cor: def.cor || 0x37e5ff,
     calor: 0, calorMax: def.calorMax || 6, calorPorTiro: def.calorPorTiro || 1, resfria: def.resfria || 2.2, quente: false,
+    bomba: !!def.bomba, fuse: def.fuse || 3.2, raio: def.raio || 2.4, forcaExpl: def.forcaExpl || 17, explodeEm: null,
   });
   return b;
 }
@@ -442,6 +459,28 @@ function removerArma(m, arma) {
   const pi = m.props.indexOf(arma.body); if (pi >= 0) m.props.splice(pi, 1);
   const si = m.syncPairs.findIndex((s) => s[0] === arma.body); if (si >= 0) m.syncPairs.splice(si, 1);
   const bi = m.bodies.indexOf(arma.body); if (bi >= 0) m.bodies.splice(bi, 1);
+}
+// Explosão da bomba: empurrão radial + dano em todo mundo por perto + FX.
+function explodirBomba(m, arma) {
+  const p = arma.body.translation();
+  for (const l of lutadores) if (l.rag.grabJoints.some((g) => g && g.body === arma.body)) l.rag.releaseGrabs();
+  for (const l of lutadores) {
+    if (!l.vivo) continue;
+    const tp = l.rag.parts.torso.translation();
+    const dx = tp.x - p.x, dy = tp.y - p.y, dz = tp.z - p.z;
+    const d = Math.hypot(dx, dy, dz);
+    if (d > arma.raio) continue;
+    const f = arma.forcaExpl * (1 - d / arma.raio), nl = d || 1;
+    for (const pn of ['torso', 'pelvis', 'head']) l.rag.parts[pn].applyImpulse({ x: (dx / nl) * f, y: 3 + f * 0.25, z: (dz / nl) * f }, true);
+    l.rag.dano = Math.min(4, l.rag.dano + 2);
+    l.rag.stun(simNow + 1.4);
+    if (l.rag.dano >= 4 && !l.rag.isDowned(simNow)) l.rag.knockdown(simNow);
+    l.rag.lastHitLandedAt = simNow;
+  }
+  powFx(p); burstEstrelas(p); puffFx(p);
+  for (let i = 0; i < 10; i++) { const a = (i / 10) * Math.PI * 2; spawnFx(puffTex, p, { escala: 0.5, vida: 0.5, cresce: 2, cor: i % 2 ? 0xff8a3c : 0xffd24a, vx: Math.cos(a) * 3, vz: Math.sin(a) * 3, vy: 1.5 }); }
+  som.bolada?.(); trauma = 1; hitStop = Math.max(hitStop, 0.1);
+  removerArma(m, arma);
 }
 function chaoFixo(m, hx, hz, mat, atrito = 0.8) {
   const g = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, -0.3, 0));
@@ -2701,6 +2740,17 @@ function frame(t) {
   for (const arma of (mapa.armas || []).slice()) {
     const ap = arma.body.translation();
     if (ap.y < -6) { removerArma(mapa, arma); continue; }
+    // Bomba 💣: acende o pavio ao ser pega; explode quando o tempo acaba (batata quente)
+    if (arma.bomba) {
+      const segurada = lutadores.some((l) => l.rag.grabJoints.some((g) => g && g.body === arma.body));
+      if (arma.explodeEm === null && segurada) { arma.explodeEm = simNow + arma.fuse; som.selecionar?.(); }
+      if (arma.explodeEm !== null) {
+        const rest = arma.explodeEm - simNow;
+        const fa = arma.mesh.getObjectByName && arma.mesh.getObjectByName('faisca');
+        if (fa) fa.scale.setScalar(0.6 + Math.abs(Math.sin(simNow * (12 - rest * 2))) * 1.1); // faísca acelera
+        if (rest <= 0) { explodirBomba(mapa, arma); continue; }
+      }
+    }
     const av = arma.body.linvel();
     const sp = Math.hypot(av.x, av.y, av.z);
     if (sp < 3.4) continue; // parada/carregada devagar não machuca
@@ -2730,7 +2780,7 @@ function frame(t) {
     if (simNow > proxArmaEm && (mapa.armas ? mapa.armas.length : 0) < capArmas) {
       const ax = (Math.random() * 2 - 1) * 2.4; // perto do centro (serve p/ arenas de vários tamanhos)
       const az = (Math.random() * 2 - 1) * 1.8;
-      const tipos = ['bastao', 'cano', 'laser', 'martelo', 'bastao', 'cano', 'martelo'];
+      const tipos = ['bastao', 'cano', 'laser', 'martelo', 'bomba', 'bastao', 'cano', 'martelo', 'bomba'];
       const b = soltarArma(mapa, ax, az, tipos[(Math.random() * tipos.length) | 0]);
       b.setTranslation({ x: ax, y: 4.2, z: az }, true);
       puffFx({ x: ax, y: 4.2, z: az });
