@@ -422,6 +422,7 @@ function dispararLaser(l, arma) {
   if (alvo) {
     alvo.rag.dano = Math.min(4, alvo.rag.dano + arma.danoTiro);
     alvo.rag.stun(simNow + 0.85);
+    alvo.rag._agr = l.rag; alvo.rag._agrAt = simNow; // autor do tiro
     if (alvo.rag.dano >= 4 && !alvo.rag.isDowned(simNow)) alvo.rag.knockdown(simNow);
     for (const pn of ['torso', 'pelvis']) alvo.rag.parts[pn].applyImpulse({ x: dx * 7, y: 1.6, z: dz * 7 }, true);
     alvo.rag.lastHitLandedAt = simNow;
@@ -2262,6 +2263,7 @@ function iniciarLuta() {
   const configs = selCfg.filter((c) => c.ativo).map((c) => ({ ...c }));
   montarLutadores(configs);
   mapa.reset?.(true);
+  melhorClip = null; finalWinner = null; // zera a melhor jogada da partida
   updateScore();
   som.confirmar();
   som.musica('luta');
@@ -2434,6 +2436,80 @@ function aplicarReplay(idx) {
   }
 }
 
+// ---------- Melhor jogada (Play of the Game) ----------
+// Heurística: pontua momentos (nocaute/ring-out, golpe decisivo, autor) e guarda
+// o clipe de maior nota da partida inteira, pra tocar no final.
+let melhorClip = null;   // { frames, score, tipo, autorNome, autorSkin }
+let finalWinner = null;  // vencedor da partida (pra cutscene)
+let cutT = 0;            // tempo da cutscene
+function considerarHighlight(vitima, tipo, decisiva) {
+  if (replayBuf.length < 15) return;
+  const autorRag = (simNow - (vitima.rag._agrAt ?? -10) < 3.5) ? vitima.rag._agr : null;
+  const autorL = autorRag ? lutadores.find((l) => l.rag === autorRag) : null;
+  let score = tipo === 'ringout' ? 100 : 55; // ring-out vale mais que nocaute
+  if (decisiva) score += 60;                 // o golpe que decidiu a partida
+  if (autorL) score += 20;                   // tem autor claro
+  score += Math.random() * 6;                // desempate
+  if (!melhorClip || score > melhorClip.score) {
+    melhorClip = {
+      frames: replayBuf.map((f) => f.slice()),
+      score, tipo,
+      autorNome: autorL ? SKINS[autorL.cfg.skin].nome : SKINS[vitima.cfg.skin].nome,
+      autorSkin: autorL ? autorL.cfg.skin : vitima.cfg.skin,
+      semAutor: !autorL,
+    };
+  }
+}
+function aplicarClipe(frames, idx) {
+  const snap = frames[idx];
+  if (!snap) return;
+  let o = 0;
+  for (const [, m] of corposDoReplay()) {
+    m.position.set(snap[o], snap[o + 1], snap[o + 2]);
+    m.quaternion.set(snap[o + 3], snap[o + 4], snap[o + 5], snap[o + 6]);
+    o += 7;
+  }
+}
+
+// Sequência de final: MELHOR JOGADA (replay em câmera lenta) -> cutscene do vencedor -> vitória
+function iniciarSequenciaFinal(winner) {
+  finalWinner = winner;
+  som.vitoria();
+  som.vozYay(VOZES[winner.slot]);
+  if (melhorClip && melhorClip.frames.length > 15) {
+    state = 'melhor'; replayT = 0;
+    const quem = melhorClip.semAutor ? '' : `de ${melhorClip.autorNome}`;
+    showMsg('🏆 MELHOR JOGADA', quem);
+    som.lutem?.();
+  } else {
+    iniciarCutscene();
+  }
+}
+function iniciarCutscene() {
+  state = 'cutscene'; cutT = 0;
+  showMsg('');
+  if (finalWinner) finalWinner.rag.emote?.(simNow); // vencedor comemora
+  confete();
+}
+// Câmera cinematográfica: fecha no meio da ação (usada na MELHOR JOGADA)
+function camMeioAcao(altura, dist, lento) {
+  let midX = 0, midZ = 0, n = 0;
+  for (const l of lutadores) { const p = l.meshes.pelvis.position; midX += p.x; midZ += p.z; n++; }
+  if (n) { midX /= n; midZ /= n; }
+  const alvo = new THREE.Vector3(midX, altura, dist);
+  camPos.lerp(alvo, lento);
+  camera.position.copy(camPos);
+  camera.lookAt(midX, 1.0, 0);
+}
+// Câmera orbitando o vencedor (cutscene)
+function camVencedor(t) {
+  if (!finalWinner) return;
+  const p = finalWinner.meshes.pelvis.position;
+  const ang = t * 0.0006;
+  camera.position.set(p.x + Math.sin(ang) * 3.2, p.y + 1.5, p.z + Math.cos(ang) * 3.2);
+  camera.lookAt(p.x, p.y + 0.6, p.z);
+}
+
 // ---------- Rounds ----------
 function vivos() { return lutadores.filter((l) => l.vivo); }
 
@@ -2453,6 +2529,7 @@ function handleRounds(now) {
     return;
   }
   if (state === 'luta') {
+    const cairam = [];
     for (const l of lutadores) {
       if (l.vivo && l.rag.parts.pelvis.translation().y < -8) {
         l.vivo = false;
@@ -2461,10 +2538,16 @@ function handleRounds(now) {
         som.vozChoro(VOZES[l.slot]);
         trauma = 1; hitStop = Math.max(hitStop, 0.11); // baque forte no nocaute/ring-out
         l.rag.rivals = [];
+        cairam.push(l);
         for (const o of lutadores) o.rag.rivals = lutadores.filter((x) => x !== o && x.vivo).map((x) => x.rag);
       }
     }
     const v = vivos();
+    // Guarda os ring-outs como candidatos a "melhor jogada" (decisivo = fecha a partida)
+    if (cairam.length) {
+      const decisiva = v.length <= 1 && v[0] && (v[0].score + 1) >= WIN_SCORE;
+      for (const l of cairam) considerarHighlight(l, 'ringout', decisiva);
+    }
     if (v.length <= 1) {
       const winner = v[0] ?? null;
       if (winner) winner.score++;
@@ -2494,11 +2577,7 @@ function fecharRound() {
   const winner = pendente;
   pendente = null;
   if (winner && winner.score >= WIN_SCORE) {
-    state = 'fim';
-    som.vitoria();
-    som.vozYay(VOZES[winner.slot]);
-    mostrarVitoria(winner);
-    confete();
+    iniciarSequenciaFinal(winner); // melhor jogada -> cutscene -> vitória
   } else {
     som.ponto();
     state = 'ponto';
@@ -2891,6 +2970,33 @@ function frame(t) {
     return;
   }
 
+  // MELHOR JOGADA: toca o clipe de maior nota da partida, em câmera lenta e cinematográfica
+  if (state === 'melhor') {
+    replayT += fdt * 0.35;
+    const idx = Math.floor(replayT * 60);
+    if (idx >= melhorClip.frames.length) { iniciarCutscene(); }
+    else { aplicarClipe(melhorClip.frames, idx); }
+    camMeioAcao(2.2, 4.4, 0.06);
+    updateEfeitos(fdt); mirarHolofotes(simNow); cairConfetes(fdt, simNow); atualizarSkins(); renderCena();
+    return;
+  }
+
+  // Cutscene do vencedor: física leve pra ele ficar em pé, câmera orbitando + confete
+  if (state === 'cutscene') {
+    cutT += fdt;
+    acc += fdt;
+    while (acc >= FIXED_DT) {
+      acc -= FIXED_DT; simNow += FIXED_DT;
+      for (const l of lutadores) l.rag.update(FIXED_DT, simNow, IDLE_IN);
+      world.step();
+    }
+    for (const l of lutadores) syncVisual(l.rag, l.meshes, simNow);
+    camVencedor(t);
+    updateEfeitos(fdt); mirarHolofotes(simNow); cairConfetes(fdt, simNow); atualizarSkins(); renderCena();
+    if (cutT > 3.6) { state = 'fim'; mostrarVitoria(finalWinner); confete(); }
+    return;
+  }
+
   acc += fdt;
   if (hitStop > 0) { hitStop -= fdt; acc = 0; } // congela a simulação (freeze-frame), sem acumular catch-up
   while (acc >= FIXED_DT) {
@@ -2970,6 +3076,8 @@ function frame(t) {
         const forte = sp > 7.5;
         l.rag.dano = Math.min(4, l.rag.dano + (forte ? 2 : 1));
         l.rag.stun(simNow + (forte ? 1.5 : 1.0));
+        const dono = lutadores.find((x) => x.rag.grabJoints.some((g) => g && g.body === arma.body));
+        if (dono) { l.rag._agr = dono.rag; l.rag._agrAt = simNow; } // autor da arma branca
         if (l.rag.dano >= 4 && !l.rag.isDowned(simNow)) l.rag.knockdown(simNow);
         const dl = Math.hypot(av.x, av.z) || 1;
         for (const pn of ['torso', 'pelvis']) {
@@ -3064,6 +3172,7 @@ function frame(t) {
       const hp = p.parts.head.translation();
       burstEstrelas(hp); powFx(hp); som.bolada(); som.vozChoro(VOZES[l.slot]);
       trauma = 1; hitStop = Math.max(hitStop, 0.1);
+      if (state === 'luta') considerarHighlight(l, 'ko', false); // candidato a melhor jogada
     }
     if (p.lastPunchStartAt > (p._sSoco ?? -1)) { p._sSoco = p.lastPunchStartAt; som.soco(); som.vozSoco(VOZES[l.slot]); }
     if (p.lastCabecadaAt > (p._sCab ?? -1)) { p._sCab = p.lastCabecadaAt; som.soco(); som.vozSoco(VOZES[l.slot]); trauma = Math.min(1, trauma + 0.4); hitStop = Math.max(hitStop, 0.06); }
@@ -3177,6 +3286,7 @@ if (PARAMS.has('servidor')) {
   if (PARAMS.has('cpu')) { configs[0].tipo = 'cpu'; configs[1].tipo = 'cpu'; }
   for (let i = 0; i < nBots; i++) configs.push({ tipo: 'cpu', skin: (4 + i * 3) % SKINS.length });
   montarLutadores(configs.slice(0, 4));
+  if (PARAMS.get('win')) WIN_SCORE = Math.max(1, parseInt(PARAMS.get('win'), 10) || 5); // dev: encurta a partida
   updateScore();
   state = 'luta';
 } else {

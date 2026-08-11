@@ -94,6 +94,7 @@ export class Ragdoll {
     this.buffForca = 1; this.buffForcaAte = 0; // power-up de força (temporário)
     this.dano = 0; // nocaute acumulativo: apanhar seguido atordoa mais
     this.folego = 1; // cansaço: spam de soco esgota
+    this._agr = null; this._agrAt = -10; // último agressor (pra "melhor jogada")
     this.dashReadyAt = 0;
     this.esquivaReadyAt = 0;   // cooldown da esquiva
     this.esquivaUntil = 0;     // janela de invencibilidade (i-frames)
@@ -511,6 +512,7 @@ export class Ragdoll {
                 rival.dano = Math.min(4, rival.dano + (this.forcaSoco || 1) / (rival.resistencia || 1));
                 const dur = Math.min(2.6, (strong ? 1.35 : 0.4) * (1 + rival.dano * 0.35) * fator);
                 rival.stun(now + dur);
+                rival._agr = this; rival._agrAt = now; // quem bateu por último (pra "melhor jogada")
                 // Encheu o dano => NOCAUTE: desaba mole (dá pra agarrar e arrastar)
                 if (rival.dano >= 4 && !rival.isDowned(now)) rival.knockdown(now);
                 rival.lastHitLandedAt = now;
