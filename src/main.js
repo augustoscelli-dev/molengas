@@ -2529,6 +2529,12 @@ function iniciarOnline() {
   });
   $('placar').style.flexWrap = 'wrap';
   $('placar').style.gap = '2px 12px';
+  // Celular: botões de toque pro lobby (começar/trocar modo/pontos/jaeger)
+  if (touchAtivo() && $('online-acoes')) {
+    for (const btn of $('online-acoes').querySelectorAll('[data-act]')) {
+      btn.addEventListener('click', () => { if (online.ws.readyState === 1) online.ws.send(JSON.stringify({ t: btn.dataset.act })); });
+    }
+  }
   addEventListener('keydown', (e) => {
     if (online.ws.readyState !== 1) return;
     if (e.code === 'KeyF') online.ws.send(JSON.stringify({ t: 'comecar' }));  // host começa
@@ -2602,6 +2608,7 @@ function receberSnap(m) {
       `<img class="retrato" style="width:${tam}px;height:${tam}px;margin:0 2px" src="${ASSET(`assets/retratos/${nm.id}.jpg`)}" onerror="this.style.display='none'"><b>${pl.sc}</b></span>`;
   }).join('');
   // Lobby: mostra modo + quantos na sala + o que o host aperta
+  if (touchAtivo() && $('online-acoes')) $('online-acoes').style.display = (m.st === 'lobby' || m.st === 'fim') ? 'flex' : 'none';
   if (m.st === 'lobby') {
     showMsg('SALA ONLINE 🌐', `${m.mo || ''} — <b>${m.na || 0}/${m.cap || 0}</b> na sala &nbsp;·&nbsp; ${m.pt || ''} &nbsp;·&nbsp; 🤖×🦖 ${m.jg ? 'SIM' : 'não'}<br>host (jogador 1): <b>F</b> começa &nbsp;·&nbsp; <b>M</b> modo &nbsp;·&nbsp; <b>N</b> pontuação &nbsp;·&nbsp; <b>J</b> robôs×monstros`);
     online.msgAtual = '__lobby__';
