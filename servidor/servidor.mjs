@@ -177,6 +177,7 @@ function dispararLaserS(j, arma) {
   ev('laser', q(mp.x), q(mp.y), q(mp.z), q(ex), q(mp.y), q(ez));
   if (alvo) {
     alvo.rag.dano = Math.min(4, alvo.rag.dano + arma.danoTiro); alvo.rag.stun(now + 0.85);
+    alvo.rag._agr = j.rag; alvo.rag._agrAt = now; // autor do tiro
     if (alvo.rag.dano >= 4 && !alvo.rag.isDowned(now)) alvo.rag.knockdown(now);
     for (const pn of ['torso', 'pelvis']) alvo.rag.parts[pn].applyImpulse({ x: dx * 7, y: 1.6, z: dz * 7 }, true);
     alvo.rag.lastHitLandedAt = now;
@@ -214,6 +215,8 @@ function tickArmas() {
           j._armaCd = now + 0.7;
           const forte = sp > 7.5;
           j.rag.dano = Math.min(4, j.rag.dano + (forte ? 2 : 1)); j.rag.stun(now + (forte ? 1.5 : 1.0));
+          const dono = [...jogadores.values()].find((x) => x.rag.grabJoints.some((g) => g && g.body === arma.body));
+          if (dono) { j.rag._agr = dono.rag; j.rag._agrAt = now; } // autor da arma branca
           if (j.rag.dano >= 4 && !j.rag.isDowned(now)) j.rag.knockdown(now);
           const dl = Math.hypot(av.x, av.z) || 1;
           for (const pn of ['torso', 'pelvis']) j.rag.parts[pn].applyImpulse({ x: (av.x / dl) * arma.forca, y: 2, z: (av.z / dl) * arma.forca }, true);
@@ -335,6 +338,7 @@ function comecarPartida() {
   }
   resetProps();
   refazerRivais();
+  limparMelhor(); // zera a melhor jogada da partida
   startIntro(1);
 }
 function rounds() {
@@ -346,15 +350,21 @@ function rounds() {
     return;
   }
   if (estado === 'luta') {
+    const cairam = [];
     for (const j of jogadores.values()) {
       if (j.vivo && j.rag.parts.pelvis.translation().y < -8) {
         j.vivo = false;
         j.rag.stats.quedas++;
         ev('queda');
+        cairam.push(j);
         refazerRivais();
       }
     }
     const vivos = [...jogadores.values()].filter((j) => j.vivo);
+    if (cairam.length) {
+      const decisiva = vivos.length <= 1 && vivos[0] && (vivos[0].score + 1) >= winScore();
+      for (const j of cairam) considerarHighlightS(j, 'ringout', decisiva);
+    }
     if (vivos.length <= 1 && jogadores.size >= 2) {
       const winner = vivos[0] ?? null;
       if (winner) winner.score++;
@@ -362,6 +372,7 @@ function rounds() {
         estado = 'fim';
         msg = '🏆 JOGADOR ' + (winner.slot + 1) + ' VENCEU! (host: F reinicia)';
         ev('vitoria');
+        enviarMelhor(); // manda a melhor jogada da partida pra todos
       } else {
         estado = 'ponto';
         estadoAte = now + 1.4;
@@ -380,6 +391,30 @@ function rounds() {
 // ---------- Loop de física + snapshots ----------
 let tick = 0;
 const q = (v) => Math.round(v * 1000) / 1000;
+const q2 = (v) => Math.round(v * 100) / 100;
+
+// ---------- Melhor jogada (Play of the Game) — grava clipes e escolhe o melhor ----------
+const REPLAY_FRAMES_S = 50; // ~2.5s na taxa de snapshot
+let replayBufS = [];
+let melhorClipS = null;
+function limparMelhor() { replayBufS = []; melhorClipS = null; }
+function considerarHighlightS(vitima, tipo, decisiva) {
+  if (replayBufS.length < 12) return;
+  const autorRag = (now - (vitima.rag._agrAt ?? -10) < 3.5) ? vitima.rag._agr : null;
+  const autorJ = autorRag ? [...jogadores.values()].find((j) => j.rag === autorRag) : null;
+  let score = tipo === 'ringout' ? 100 : 55;
+  if (decisiva) score += 60;
+  if (autorJ) score += 20;
+  score += (tipo.length % 5); // desempate estável (sem random pra manter resume)
+  if (!melhorClipS || score > melhorClipS.score) {
+    melhorClipS = { score, tipo, autorSk: autorJ ? autorJ.skin : vitima.skin, sem: !autorJ, frames: replayBufS.slice() };
+  }
+}
+function enviarMelhor() {
+  if (!melhorClipS) return;
+  const pkt = JSON.stringify({ t: 'melhor', autorSk: melhorClipS.autorSk, sem: melhorClipS.sem, frames: melhorClipS.frames });
+  for (const j of jogadores.values()) if (j.ws.readyState === 1) j.ws.send(pkt);
+}
 
 setInterval(() => {
   now += DT;
@@ -406,6 +441,7 @@ setInterval(() => {
     if (r.lastJumpAt > (r._evPulo ?? -1)) { r._evPulo = r.lastJumpAt; ev('pulo'); }
     if (r.lastDashAt > (r._evDash ?? -1)) { r._evDash = r.lastDashAt; ev('dash'); }
     if (r.lastEsquivaAt > (r._evEsq ?? -1)) { r._evEsq = r.lastEsquivaAt; ev('esquiva'); }
+    if (r.lastKnockdownAt > (r._evKO ?? -1)) { r._evKO = r.lastKnockdownAt; if (estado === 'luta') considerarHighlightS(j, 'ko', false); }
   }
   world.step(filaEventos, hooks); // hook = filtro de contato por dono (sem auto-colisão)
   if (estado === 'luta') { tickArmas(); tickPowerups(); } // armas + power-ups
@@ -448,7 +484,9 @@ setInterval(() => {
     metaBuf.copy(buf, 4);
     let off = 4 + metaBuf.length;
     const i16 = (v) => Math.max(-32768, Math.min(32767, Math.round(v)));
+    const frame = []; // grava a pose (leve) pra "melhor jogada"
     for (const j of js) {
+      const pose = [];
       for (const spec of PARTS) {
         const tr = j.rag.parts[spec.name].translation(), ro = j.rag.parts[spec.name].rotation();
         buf.writeInt16LE(i16(tr.x * 256), off); off += 2;   // posição: ±128m, ~4mm
@@ -457,8 +495,11 @@ setInterval(() => {
         buf.writeInt16LE(i16(ro.x * 32767), off); off += 2; // quaternion xyz (w reconstruído)
         buf.writeInt16LE(i16(ro.y * 32767), off); off += 2;
         buf.writeInt16LE(i16(ro.z * 32767), off); off += 2;
+        pose.push(q2(tr.x), q2(tr.y), q2(tr.z), q(ro.x), q(ro.y), q(ro.z));
       }
+      frame.push({ s: j.slot, p: pose });
     }
+    if (estado === 'luta') { replayBufS.push(frame); if (replayBufS.length > REPLAY_FRAMES_S) replayBufS.shift(); }
     for (const j of jogadores.values()) if (j.ws.readyState === 1) j.ws.send(buf);
   }
 }, 1000 / 60);

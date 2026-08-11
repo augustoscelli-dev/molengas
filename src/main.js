@@ -2596,7 +2596,7 @@ function iniciarOnline() {
   showMsg('CONECTANDO…');
   const ws = new WebSocket(`ws://${location.host}`);
   ws.binaryType = 'arraybuffer'; // snapshots vêm em binário (poses Int16)
-  online = { ws, slot: null, visuais: new Map(), armasVis: new Map(), powerVis: new Map(), buf: [], msgAtual: null, jaeger: false, forcarGominha: false };
+  online = { ws, slot: null, visuais: new Map(), armasVis: new Map(), powerVis: new Map(), buf: [], msgAtual: null, jaeger: false, forcarGominha: false, melhorPend: null, faseFinal: null };
   online.marcador = new THREE.Sprite(new THREE.SpriteMaterial({ map: voceTex, transparent: true, depthWrite: false, fog: false }));
   online.marcador.scale.setScalar(0.55); online.marcador.visible = false; scene.add(online.marcador);
   ws.addEventListener('open', () => {
@@ -2622,10 +2622,11 @@ function iniciarOnline() {
     if (touchAtivo() && $('online-acoes')) $('online-acoes').style.display = 'none';
   });
   ws.addEventListener('message', (e) => {
-    if (typeof e.data === 'string') { // oi / cheio (JSON)
+    if (typeof e.data === 'string') { // oi / cheio / melhor (JSON)
       let m; try { m = JSON.parse(e.data); } catch { return; }
       if (m.t === 'oi') online.slot = m.slot;
       else if (m.t === 'cheio') showMsg('SALA CHEIA 😔');
+      else if (m.t === 'melhor') online.melhorPend = m; // clipe da melhor jogada
       return;
     }
     // Snapshot binário: cabeçalho JSON + poses Int16 (6 por parte)
@@ -2707,6 +2708,36 @@ function mostrarVitoriaOnline(m) {
   confete();
 }
 
+// Aplica um frame do clipe da melhor jogada nos bonecos online (6 valores/parte, w reconstruído)
+function aplicarClipeOnline(frame) {
+  for (const pl of frame) {
+    const v = online.visuais.get(pl.s); if (!v) continue;
+    const p = pl.p; let o = 0;
+    for (const spec of PARTS) {
+      const msh = v.meshes[spec.name]; if (!msh) { o += 6; continue; }
+      msh.position.set(p[o], p[o + 1], p[o + 2]);
+      const x = p[o + 3], y = p[o + 4], z = p[o + 5], w = Math.sqrt(Math.max(0, 1 - x * x - y * y - z * z));
+      msh.quaternion.set(x, y, z, w).normalize();
+      o += 6;
+    }
+  }
+}
+function camMeioAcaoOnline() {
+  let mx = 0, mz = 0, n = 0;
+  for (const v of online.visuais.values()) { const p = v.meshes.pelvis.position; mx += p.x; mz += p.z; n++; }
+  if (n) { mx /= n; mz /= n; }
+  camPos.lerp(new THREE.Vector3(mx, 2.2, 4.6), 0.06);
+  camera.position.copy(camPos); camera.lookAt(mx, 1.0, 0);
+}
+function camVencedorOnline(t) {
+  const w = online.finalSnap ? [...online.finalSnap.pl].sort((a, b) => b.sc - a.sc)[0] : null;
+  const v = w ? online.visuais.get(w.s) : null;
+  if (!v) return;
+  const p = v.meshes.pelvis.position, ang = t * 0.0006;
+  camera.position.set(p.x + Math.sin(ang) * 3.2, p.y + 1.5, p.z + Math.cos(ang) * 3.2);
+  camera.lookAt(p.x, p.y + 0.6, p.z);
+}
+
 function receberSnap(m) {
   online.buf.push({ rx: performance.now() / 1000, m });
   if (online.buf.length > 30) online.buf.shift();
@@ -2775,11 +2806,21 @@ function receberSnap(m) {
   if (touchAtivo() && $('online-acoes')) $('online-acoes').style.display = (m.st === 'lobby' || m.st === 'fim') ? 'flex' : 'none';
   if (m.st === 'lobby') {
     showMsg('SALA ONLINE 🌐', `${m.mo || ''} — <b>${m.na || 0}/${m.cap || 0}</b> na sala &nbsp;·&nbsp; ${m.pt || ''} &nbsp;·&nbsp; 🤖×🦖 ${m.jg ? 'SIM' : 'não'}<br>host (jogador 1): <b>F</b> começa &nbsp;·&nbsp; <b>M</b> modo &nbsp;·&nbsp; <b>N</b> pontuação &nbsp;·&nbsp; <b>J</b> robôs×monstros`);
-    online.msgAtual = '__lobby__'; online._fimMostrado = false;
+    online.msgAtual = '__lobby__'; online._fimMostrado = false; online.faseFinal = null; online.melhorPend = null;
   } else if (m.st === 'fim') {
-    if (!online._fimMostrado) { online._fimMostrado = true; online.msgAtual = m.msg; mostrarVitoriaOnline(m); }
+    if (!online._fimMostrado) {
+      online._fimMostrado = true; online.msgAtual = m.msg; online.finalSnap = m;
+      if (online.melhorPend && online.melhorPend.frames && online.melhorPend.frames.length > 8) {
+        // toca MELHOR JOGADA -> cutscene -> vitória
+        online.faseFinal = 'melhor'; online.melhorT = 0; online.melhorClip = online.melhorPend; online.melhorPend = null;
+        const nomeAutor = online.melhorClip.sem ? '' : `de ${SKINS[online.melhorClip.autorSk % SKINS.length].nome}`;
+        showMsg('🏆 MELHOR JOGADA', nomeAutor); som.lutem?.();
+      } else {
+        mostrarVitoriaOnline(m);
+      }
+    }
   } else {
-    online._fimMostrado = false;
+    online._fimMostrado = false; online.faseFinal = null; online.melhorPend = null; // novo round/partida
     if (m.msg !== online.msgAtual) { online.msgAtual = m.msg; showMsg(m.msg); }
   }
   for (const evn of m.ev) {
@@ -2860,6 +2901,26 @@ function aplicarSnapOnline(m1, m2, f) {
 }
 
 function frameOnline(t, fdt) {
+  // Sequência de final: MELHOR JOGADA (clipe) -> cutscene do vencedor -> vitória
+  if (online.faseFinal === 'melhor') {
+    online.melhorT += fdt;
+    const frames = online.melhorClip.frames;
+    const idx = Math.floor(online.melhorT * 7); // ~7 frames/s = câmera lenta
+    if (idx >= frames.length) { online.faseFinal = 'cutscene'; online.cutT = 0; }
+    else aplicarClipeOnline(frames[idx]);
+    camMeioAcaoOnline();
+    for (const v of online.visuais.values()) atualizarSkinMesh(v.meshes);
+    updateEfeitos(fdt); mirarHolofotes(t / 1000); cairConfetes(fdt, t / 1000); renderCena();
+    return;
+  }
+  if (online.faseFinal === 'cutscene') {
+    online.cutT += fdt;
+    camVencedorOnline(t);
+    for (const v of online.visuais.values()) atualizarSkinMesh(v.meshes);
+    updateEfeitos(fdt); mirarHolofotes(t / 1000); cairConfetes(fdt, t / 1000); renderCena();
+    if (online.cutT > 3.0) { online.faseFinal = null; if (online.finalSnap) mostrarVitoriaOnline(online.finalSnap); confete(); }
+    return;
+  }
   // Fallback de performance: se o FPS ficar baixo com muitos Jaeger, cai pra gominha
   if (online.jaeger && !online.forcarGominha && !PARAMS.has('semfallback')) {
     online._fN = (online._fN || 0) + 1;
