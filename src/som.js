@@ -88,10 +88,26 @@ function sopro(dur, { freq = 800, slideTo = null, vol = 0.4, type = 'bandpass', 
 let musTimer = null;
 let musModo = null;
 let musStep = 0;
+// Padrões de 16 semicolcheias: baixo, bumbo, caixa, chimbal e uma melodia (lead).
 const TRILHAS = {
-  // frequências do baixo por colcheia (0 = pausa)
-  menu: { bpm: 104, baixo: [65.4, 0, 82.4, 0, 65.4, 0, 98, 87.3], chimbal: [1, 0, 1, 0, 1, 0, 1, 1] },
-  luta: { bpm: 138, baixo: [55, 55, 65.4, 55, 73.4, 73.4, 65.4, 49], chimbal: [1, 1, 1, 1, 1, 1, 1, 1] },
+  menu: {
+    bpm: 104,
+    baixo: [65.4, 0, 0, 65.4, 82.4, 0, 0, 0, 65.4, 0, 0, 65.4, 98, 0, 87.3, 0],
+    kick:  [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0],
+    snare: [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
+    hat:   [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1],
+    lead:  [0, 0, 392, 0, 523, 0, 0, 494, 440, 0, 0, 392, 0, 0, 349, 0],
+    leadVol: 0.06, leadType: 'triangle',
+  },
+  luta: {
+    bpm: 140,
+    baixo: [55, 0, 55, 0, 65.4, 0, 55, 0, 73.4, 0, 73.4, 0, 65.4, 0, 49, 49],
+    kick:  [1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0],
+    snare: [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
+    hat:   [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    lead:  [880, 0, 784, 0, 659, 0, 784, 0, 880, 0, 988, 0, 784, 659, 587, 0],
+    leadVol: 0.05, leadType: 'square',
+  },
 };
 function musicaAplicar() {
   if (musTimer) { clearInterval(musTimer); musTimer = null; }
@@ -100,13 +116,14 @@ function musicaAplicar() {
   musStep = 0;
   musTimer = setInterval(() => {
     if (!ctx || ctx.state === 'suspended') return;
-    const i = musStep % 8;
-    const f = tr.baixo[i];
-    if (f) tom(f, 0.16, { type: 'triangle', vol: 0.14 });
-    if (tr.chimbal[i]) sopro(0.03, { freq: 6000, vol: 0.05, type: 'highpass' });
-    if (musModo === 'luta' && musStep % 16 === 14) tom(220, 0.1, { type: 'square', vol: 0.06, slideTo: 330 });
+    const i = musStep % 16;
+    if (tr.baixo[i]) tom(tr.baixo[i], 0.16, { type: 'triangle', vol: 0.13 });
+    if (tr.kick[i]) tom(130, 0.14, { type: 'sine', vol: 0.42, slideTo: 48 });          // bumbo
+    if (tr.snare[i]) { sopro(0.11, { freq: 1900, vol: 0.15, type: 'highpass' }); tom(190, 0.07, { type: 'triangle', vol: 0.09, slideTo: 120 }); } // caixa
+    if (tr.hat[i]) sopro(0.025, { freq: 7000, vol: 0.04, type: 'highpass' });           // chimbal
+    if (tr.lead[i]) tom(tr.lead[i], 0.14, { type: tr.leadType, vol: tr.leadVol });      // melodia
     musStep++;
-  }, 60000 / tr.bpm / 2);
+  }, 60000 / tr.bpm / 4);
 }
 function musica(modo) {
   if (modo === musModo) return;
