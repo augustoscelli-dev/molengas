@@ -5,6 +5,7 @@ import { MAPS, readInput, isDown } from './input.js';
 import { SKINS, getFaceTexture, toonMat, addOutline, vinilMat } from './skins.js';
 import { som, initSom } from './som.js';
 import { readGamepad, mergeInput } from './gamepad.js';
+import { initTouch, readTouch, touchAtivo } from './touch.js';
 import { GLTFLoader } from '../libs/jsm/loaders/GLTFLoader.js';
 import { EffectComposer } from '../libs/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from '../libs/jsm/postprocessing/RenderPass.js';
@@ -1743,7 +1744,7 @@ addEventListener('keydown', (e) => { if (e.code === 'KeyM') alternarModelo3D(); 
 
 function inputDoLutador(l) {
   if (l.cfg.tipo === 'cpu') return botInput(l);
-  if (l.cfg.tipo === 'kb1') return mergeInput(readInput(MAPS.p1), readGamepad(0));
+  if (l.cfg.tipo === 'kb1') return mergeInput(mergeInput(readInput(MAPS.p1), readGamepad(0)), readTouch());
   if (l.cfg.tipo === 'kb2') return mergeInput(readInput(MAPS.p2), readGamepad(1));
   return readGamepad(l.cfg.gp) ?? IDLE_IN;
 }
@@ -2373,7 +2374,7 @@ function iniciarOnline() {
     showMsg('NA SALA! 🌐', 'quando todos entrarem, o host (1º jogador) aperta F');
     setInterval(() => {
       if (ws.readyState !== 1) return;
-      const inp = mergeInput(readInput(MAPS.p1), readGamepad(0));
+      const inp = mergeInput(mergeInput(readInput(MAPS.p1), readGamepad(0)), readTouch());
       ws.send(JSON.stringify({
         t: 'input', m: [inp.move.x, inp.move.z],
         p: inp.punch, g: inp.grab, j: inp.jump, e: inp.emote, d: inp.esquiva,
@@ -2794,8 +2795,17 @@ function frame(t) {
 
 // ---------- Início ----------
 setMapa(parseInt(PARAMS.get('mapa'), 10) || 0);
+initTouch();
 if (PARAMS.has('servidor')) {
   iniciarOnline();
+} else if (touchAtivo() && !PARAMS.has('direto')) {
+  // Celular: pula o menu (que é por teclado) e já cai numa luta contra um bot.
+  $('selecao').style.display = 'none';
+  const configs = [{ ...selCfg[0], tipo: 'kb1' }, { tipo: 'cpu', skin: selCfg[1].skin }];
+  montarLutadores(configs);
+  mapa.reset?.(true);
+  updateScore();
+  startIntro(1);
 } else if (PARAMS.has('direto')) {
   // dev: pula a seleção; ?bots=N adiciona N bots
   $('selecao').style.display = 'none';

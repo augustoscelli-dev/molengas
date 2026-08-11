@@ -73,6 +73,28 @@
     border-radius: 2px; animation: cair linear forwards; }
   @keyframes cair { 0% { transform: translateY(0) rotate(0); opacity: 1; }
     100% { transform: translateY(102vh) rotate(720deg); opacity: .9; } }
+  /* Controles de toque (celular) */
+  #touch { position: fixed; inset: 0; z-index: 7; display: none; pointer-events: none;
+    font-family: "Segoe UI", system-ui, sans-serif; -webkit-user-select: none; user-select: none;
+    touch-action: none; }
+  #touch-base { position: absolute; left: 26px; bottom: 26px; width: 130px; height: 130px;
+    border-radius: 50%; background: rgba(255,255,255,.09); border: 2px solid rgba(255,255,255,.28);
+    pointer-events: none; }
+  #touch-knob { position: absolute; left: 50%; top: 50%; width: 60px; height: 60px; margin: -30px;
+    border-radius: 50%; background: rgba(255,255,255,.32); border: 2px solid rgba(255,255,255,.6); }
+  #touch-botoes { position: absolute; right: 20px; bottom: 22px; display: grid;
+    grid-template-columns: 76px 76px; grid-gap: 12px; pointer-events: none; }
+  .tbtn { width: 76px; height: 76px; border-radius: 50%; pointer-events: auto;
+    display: flex; align-items: center; justify-content: center; flex-direction: column;
+    font-weight: 800; font-size: 13px; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.6);
+    border: 2px solid rgba(255,255,255,.5); background: rgba(0,0,0,.34);
+    -webkit-tap-highlight-color: transparent; }
+  .tbtn .ic { font-size: 26px; line-height: 1; }
+  .tbtn:active { background: rgba(255,255,255,.28); transform: scale(.94); }
+  .tbtn.soco { background: rgba(255,80,80,.42); }
+  .tbtn.pulo { background: rgba(120,200,255,.40); }
+  .tbtn.agarra { background: rgba(126,217,87,.40); }
+  .tbtn.esquiva { background: rgba(102,224,255,.38); }
   #selecao {
     position: fixed; inset: 0; z-index: 5; display: flex; flex-direction: column;
     align-items: center; justify-content: center; gap: 26px;
@@ -137,6 +159,15 @@
   <div id="controles">
     <div class="p1">🔴 WASD anda &nbsp;·&nbsp; F soco &nbsp;·&nbsp; G agarra &nbsp;·&nbsp; ESPAÇO pula (2×) &nbsp;·&nbsp; SHIFT esquiva &nbsp;·&nbsp; 1 fantasia</div>
     <div class="p2">2 fantasia &nbsp;·&nbsp; SETAS anda &nbsp;·&nbsp; K soco &nbsp;·&nbsp; L agarra &nbsp;·&nbsp; ENTER pula (2×) &nbsp;·&nbsp; ⇧ esquiva 🔵</div>
+  </div>
+</div>
+<div id="touch">
+  <div id="touch-base"><div id="touch-knob"></div></div>
+  <div id="touch-botoes">
+    <div class="tbtn esquiva" data-btn="esquiva"><span class="ic">💨</span>ESQUIVA</div>
+    <div class="tbtn pulo" data-btn="jump"><span class="ic">⬆️</span>PULO</div>
+    <div class="tbtn agarra" data-btn="grab"><span class="ic">✊</span>AGARRA</div>
+    <div class="tbtn soco" data-btn="punch"><span class="ic">🥊</span>SOCO</div>
   </div>
 </div>
 <div id="carregando" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;font-family:sans-serif;font-size:28px;font-weight:700;">CARREGANDO…</div>
