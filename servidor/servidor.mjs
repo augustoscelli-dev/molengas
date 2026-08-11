@@ -18,7 +18,9 @@ await RAPIER.init();
 
 const PORTA = 8877;
 const AUTO = process.argv.includes('--auto');
-const WIN_SCORE = 5;
+const PONTOS = [{ n: 'Melhor de 5', v: 5 }, { n: 'Melhor de 3', v: 3 }, { n: 'Morte Súbita', v: 1 }];
+let pontoIdx = 0;
+const winScore = () => PONTOS[pontoIdx].v;
 const DT = 1 / 60;
 const IDLE = { move: { x: 0, z: 0 }, punch: false, grab: false, jump: false, emote: false, esquiva: false };
 
@@ -352,7 +354,7 @@ function rounds() {
     if (vivos.length <= 1 && jogadores.size >= 2) {
       const winner = vivos[0] ?? null;
       if (winner) winner.score++;
-      if (winner && winner.score >= WIN_SCORE) {
+      if (winner && winner.score >= winScore()) {
         estado = 'fim';
         msg = '🏆 JOGADOR ' + (winner.slot + 1) + ' VENCEU! (host: F reinicia)';
         ev('vitoria');
@@ -428,7 +430,7 @@ setInterval(() => {
       t: 's',
       st: estado,
       msg,
-      mo: MODOS_SALA[salaModo].nome, cap: capSala(), na: jogadores.size, // pra tela de lobby
+      mo: MODOS_SALA[salaModo].nome, cap: capSala(), na: jogadores.size, pt: PONTOS[pontoIdx].n, // pra tela de lobby
       ev: eventos.splice(0),
       pl: [...jogadores.values()].map((j) => {
         const p = [];
@@ -506,6 +508,9 @@ wss.on('connection', (ws) => {
         salaModo = ORDEM_MODOS[(ORDEM_MODOS.indexOf(salaModo) + 1) % ORDEM_MODOS.length];
         console.log('modo da sala ->', salaModo);
       }
+    } else if (m.t === 'pontos') {
+      const j = jogadores.get(ws);
+      if (j && j === host() && (estado === 'lobby' || estado === 'fim')) pontoIdx = (pontoIdx + 1) % PONTOS.length;
     }
   });
   ws.on('close', () => {

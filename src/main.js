@@ -2533,7 +2533,8 @@ function iniciarOnline() {
   addEventListener('keydown', (e) => {
     if (online.ws.readyState !== 1) return;
     if (e.code === 'KeyF') online.ws.send(JSON.stringify({ t: 'comecar' }));  // host começa
-    if (e.code === 'KeyM') online.ws.send(JSON.stringify({ t: 'modo' }));     // host troca modo
+    if (e.code === 'KeyM') online.ws.send(JSON.stringify({ t: 'modo' }));     // host troca modo (8/20)
+    if (e.code === 'KeyN') online.ws.send(JSON.stringify({ t: 'pontos' }));   // host troca pontuação
   });
 }
 
@@ -2595,7 +2596,7 @@ function receberSnap(m) {
   }).join('');
   // Lobby: mostra modo + quantos na sala + o que o host aperta
   if (m.st === 'lobby') {
-    showMsg('SALA ONLINE 🌐', `${m.mo || ''} — <b>${m.na || 0}/${m.cap || 0}</b> na sala<br>host (jogador 1): <b>F</b> começa &nbsp;·&nbsp; <b>M</b> troca modo`);
+    showMsg('SALA ONLINE 🌐', `${m.mo || ''} — <b>${m.na || 0}/${m.cap || 0}</b> na sala &nbsp;·&nbsp; ${m.pt || ''}<br>host (jogador 1): <b>F</b> começa &nbsp;·&nbsp; <b>M</b> modo &nbsp;·&nbsp; <b>N</b> pontuação`);
     online.msgAtual = '__lobby__';
   } else if (m.msg !== online.msgAtual) {
     online.msgAtual = m.msg;
