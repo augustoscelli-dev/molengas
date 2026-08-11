@@ -2149,6 +2149,39 @@ function showMsg(txt, sub = '') {
   $('msg').style.display = txt ? 'block' : 'none';
 }
 
+// Tela de vitória: retrato do campeão + placar de estatísticas (MVP destacado) + confete
+function mostrarVitoria(winner) {
+  const linhas = lutadores.map((l) => {
+    const s = l.rag.stats;
+    const prec = s.socos ? Math.round((s.acertos / s.socos) * 100) : 0;
+    const eu = l === winner;
+    return `<div class="vit-linha${eu ? ' mvp' : ''}"><span class="vl-nome">${eu ? '🏆 ' : ''}${SKINS[l.cfg.skin].nome}</span>` +
+      `<span>👊 ${s.acertos}/${s.socos} (${prec}%) · 🤸 ${s.arremessos} · ⏱️ ${s.pendurado.toFixed(0)}s</span></div>`;
+  }).join('');
+  const retrato = ASSET(`assets/retratos/${SKINS[winner.cfg.skin].id}.jpg`);
+  $('msg').innerHTML =
+    `<div class="vitoria"><img class="vit-retrato" src="${retrato}" alt="">` +
+    `<div class="vit-tit">🏆 ${SKINS[winner.cfg.skin].nome} VENCEU!</div>` +
+    `<div class="vit-stats">${linhas}</div>` +
+    `<div class="vit-dica">Aperte R pra voltar à seleção</div></div>`;
+  $('msg').style.display = 'block';
+}
+
+const CORES_CONFETE = ['#ff5a5a', '#ffd94a', '#7ed957', '#66e0ff', '#c77dff', '#ff9a3c'];
+function confete(qtd = 70) {
+  for (let i = 0; i < qtd; i++) {
+    const d = document.createElement('div');
+    d.className = 'confete';
+    d.style.left = (Math.random() * 100) + 'vw';
+    d.style.background = CORES_CONFETE[i % CORES_CONFETE.length];
+    d.style.animationDuration = (1.6 + Math.random() * 1.8) + 's';
+    d.style.animationDelay = (Math.random() * 0.7) + 's';
+    if (Math.random() < 0.5) d.style.borderRadius = '50%';
+    d.addEventListener('animationend', () => d.remove());
+    document.body.appendChild(d);
+  }
+}
+
 // Seleção por teclado
 addEventListener('keydown', (e) => {
   if (state !== 'selecao') return;
@@ -2300,11 +2333,8 @@ function fecharRound() {
     state = 'fim';
     som.vitoria();
     som.vozYay(VOZES[winner.slot]);
-    const stats = lutadores.map((l) =>
-      `${SKINS[l.cfg.skin].nome}: ${l.rag.stats.acertos}/${l.rag.stats.socos} socos · ` +
-      `${l.rag.stats.quedas} quedas · ${l.rag.stats.pendurado.toFixed(0)}s pendurado · ${l.rag.stats.arremessos} arremessos`,
-    ).join('<br>');
-    showMsg('🏆 ' + SKINS[winner.cfg.skin].nome + ' VENCEU!', stats + '<br><br>Aperte R pra voltar à seleção');
+    mostrarVitoria(winner);
+    confete();
   } else {
     som.ponto();
     state = 'ponto';
