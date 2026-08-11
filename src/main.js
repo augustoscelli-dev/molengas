@@ -1350,6 +1350,7 @@ function buildVisual(skin, fase = 0, slot = 0) {
     meshes.torso._baseS = [1, 1, 1];
     meshes._jrig = null;
     const nomesGLB = MODELO_GLB.split(',');
+    meshes._modeloJ = ''; // preenchido abaixo com o nome do modelo (pra classe Jaeger/Kaiju)
     const bruto = (nomesGLB[slot] || nomesGLB[0] || '').trim();
     let nomeGLB, fallbackGLB = null;
     if (bruto && bruto !== 'jaeger-low') {
@@ -1360,6 +1361,7 @@ function buildVisual(skin, fase = 0, slot = 0) {
       nomeGLB = slot === 0 ? 'jaeger-rigado' : 'kaiju-rigado';
       if (slot !== 0) fallbackGLB = 'jaeger-rigado';
     }
+    meshes._modeloJ = nomeGLB;
     const tinta = new THREE.Color(skin.cores.torso);
     // De qual corpo da física cada osso do esqueleto Meshy segue:
     const BONE2BODY = {
@@ -1708,6 +1710,17 @@ function atualizarSkins() {
 const VOZES = [0.9, 1.15, 0.75, 1.35]; // timbre por slot
 let lutadores = [];
 
+// Classe do lutador pelo modelo: Kaiju = brutamontes (bate forte, aguenta tranco,
+// menos ágil); Jaeger = ágil (um tiquinho mais rápido). Só vale no estilo 'j'.
+function aplicarClasse(rag, meshes) {
+  const nome = (meshes && meshes._modeloJ) || '';
+  rag.forcaSoco = 1; rag.resistencia = 1;
+  let mul = 1; // fator de tração (agilidade)
+  if (/kaiju/i.test(nome)) { rag.forcaSoco = 1.3; rag.resistencia = 1.45; mul = 0.9; }
+  else if (/jaeger/i.test(nome)) { mul = 1.08; }
+  rag.controle = (mapa.controle ?? 1) * mul; // recalcula do zero (sem acumular)
+}
+
 function montarLutadores(configs) {
   for (const l of lutadores) {
     destroyVisual(l.meshes);
@@ -1725,6 +1738,7 @@ function montarLutadores(configs) {
     rag.props = mapa.props;
     rag.controle = mapa.controle ?? 1;
     const meshes = buildVisual(SKINS[cfg.skin], i * 1.9, i);
+    aplicarClasse(rag, meshes);
     return { rag, meshes, cfg, slot: i, vivo: true, score: 0 };
   });
   for (const l of lutadores) l.rag.rivals = lutadores.filter((o) => o !== l).map((o) => o.rag);
@@ -1737,6 +1751,7 @@ function alternarModelo3D() {
   for (const l of lutadores) {
     destroyVisual(l.meshes);
     l.meshes = buildVisual(SKINS[l.cfg.skin], l.slot * 1.9, l.slot);
+    aplicarClasse(l.rag, l.meshes); // liga/desliga a classe Jaeger/Kaiju junto
   }
   som.selecionar?.();
 }

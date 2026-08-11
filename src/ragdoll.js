@@ -87,6 +87,8 @@ export class Ragdoll {
     this.grabJoints = [null, null];
     this._ray = new R.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: -1, z: 0 });
     this.controle = 1; // 0..1 — mapas de gelo reduzem a tração
+    this.forcaSoco = 1; // multiplicador de força do soco (Kaiju bate mais forte)
+    this.resistencia = 1; // aguenta mais tranco: reduz knockback e acúmulo de dano
     this.dano = 0; // nocaute acumulativo: apanhar seguido atordoa mais
     this.folego = 1; // cansaço: spam de soco esgota
     this.dashReadyAt = 0;
@@ -489,14 +491,16 @@ export class Ragdoll {
               const d = Math.hypot(tip[0] - tp.x, tip[1] - tp.y, tip[2] - tp.z);
               if (d < alc) {
                 const strong = pname === 'head';
-                const fator = (this._voadora ? 1.35 : 1) * (this._socoFraco ? 0.55 : 1) * (this._chute ? 1.3 : 1);
+                // forcaSoco = quão forte ESTE lutador bate; resistencia = quanto o RIVAL aguenta
+                const kb = (this.forcaSoco || 1) / (rival.resistencia || 1);
+                const fator = (this._voadora ? 1.35 : 1) * (this._socoFraco ? 0.55 : 1) * (this._chute ? 1.3 : 1) * kb;
                 tb.applyImpulse({
                   x: dir[0] * (strong ? 6.5 : 5) * fator,
                   y: (this._chute ? 1.0 : (strong ? 2.2 : 1.5)) * fator, // chute empurra mais reto (bom p/ ring-out)
                   z: dir[2] * (strong ? 6.5 : 5) * fator,
                 }, true);
-                // nocaute acumulativo: combo atordoa cada vez mais
-                rival.dano = Math.min(4, rival.dano + 1);
+                // nocaute acumulativo: combo atordoa cada vez mais (rival mais resistente sobe o dano mais devagar)
+                rival.dano = Math.min(4, rival.dano + (this.forcaSoco || 1) / (rival.resistencia || 1));
                 const dur = Math.min(2.6, (strong ? 1.35 : 0.4) * (1 + rival.dano * 0.35) * fator);
                 rival.stun(now + dur);
                 // Encheu o dano => NOCAUTE: desaba mole (dá pra agarrar e arrastar)
