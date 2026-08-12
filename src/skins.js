@@ -374,4 +374,15 @@ export const SKINS = [
       pelvis.add(cauda);
     },
   },
+  // Lutadores 3D de verdade (modelos Meshy): renderizam o GLB no lugar do boneco.
+  {
+    id: 'jaeger', nome: 'JAEGER', modelo: 'jaeger-rigado',
+    cores: { head: 0x9fb6d6, torso: 0x8fa8c8, pelvis: 0x6f86a6, arms: 0x8fa8c8, legs: 0x6f86a6 },
+    face: 'normal', extras() {},
+  },
+  {
+    id: 'kaiju', nome: 'KAIJU', modelo: 'kaiju-rigado',
+    cores: { head: 0x7bbf86, torso: 0x6fae7a, pelvis: 0x568a60, arms: 0x6fae7a, legs: 0x568a60 },
+    face: 'normal', extras() {},
+  },
 ];

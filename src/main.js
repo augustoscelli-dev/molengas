@@ -1415,7 +1415,7 @@ function buildVisual(skin, fase = 0, slot = 0) {
   // Estilo J (Jaeger rigado): usa um GLB JÁ RIGADO (esqueleto + skin do Meshy).
   // Cada osso do Meshy segue rigidamente o corpo da física correspondente; os
   // pesos de skin do próprio modelo suavizam as juntas → malha inteira, sem solto.
-  if (ESTILO === 'j') {
+  if (ESTILO === 'j' || skin.modelo) {
     for (const spec of PARTS) { const o = new THREE.Object3D(); scene.add(o); meshes[spec.name] = o; }
     meshes.torso._baseS = [1, 1, 1];
     meshes._jrig = null;
@@ -1423,7 +1423,11 @@ function buildVisual(skin, fase = 0, slot = 0) {
     meshes._modeloJ = ''; // preenchido abaixo com o nome do modelo (pra classe Jaeger/Kaiju)
     const bruto = (nomesGLB[slot] || nomesGLB[0] || '').trim();
     let nomeGLB, fallbackGLB = null;
-    if (bruto && bruto !== 'jaeger-low') {
+    if (skin.modelo) {
+      // a própria fantasia diz qual modelo é (Jaeger/Kaiju escolhidos no menu)
+      nomeGLB = skin.modelo;
+      if (/kaiju/i.test(nomeGLB)) fallbackGLB = 'jaeger-rigado';
+    } else if (bruto && bruto !== 'jaeger-low') {
       nomeGLB = bruto; // usuário escolheu explicitamente (?glb=jaeger-rigado,kaiju-rigado)
     } else {
       // Padrão automático por paridade: slot par = Jaeger, ímpar = Kaiju (times
@@ -2173,15 +2177,19 @@ addEventListener('pointerdown', ligarSom, { once: true });
 addEventListener('keydown', ligarSom, { once: true });
 
 // Configuração da seleção: 4 slots
+// Fantasias jogáveis no menu: só Jaeger e Kaiju (os modelos 3D de verdade).
+const IDX_JAEGER = SKINS.findIndex((s) => s.id === 'jaeger');
+const IDX_KAIJU = SKINS.findIndex((s) => s.id === 'kaiju');
+const MENU_SKINS = [IDX_JAEGER, IDX_KAIJU];
 const lerSkin = (k, padrao) => {
   const v = parseInt(store.get(k), 10);
-  return (Number.isFinite(v) ? v : padrao) % SKINS.length;
+  return MENU_SKINS.includes(v) ? v : padrao; // só aceita as fantasias jogáveis
 };
 const selCfg = [
-  { tipo: 'kb1', ativo: true, conf: false, skin: lerSkin('molengas_skin0', 2) },
-  { tipo: 'kb2', ativo: true, conf: false, skin: lerSkin('molengas_skin1', 6) },
-  { tipo: 'gp', gp: 2, ativo: false, conf: false, skin: 4 },
-  { tipo: 'gp', gp: 3, ativo: false, conf: false, skin: 7 },
+  { tipo: 'kb1', ativo: true, conf: false, skin: lerSkin('molengas_skin0', IDX_JAEGER) },
+  { tipo: 'kb2', ativo: true, conf: false, skin: lerSkin('molengas_skin1', IDX_KAIJU) },
+  { tipo: 'gp', gp: 2, ativo: false, conf: false, skin: IDX_JAEGER },
+  { tipo: 'gp', gp: 3, ativo: false, conf: false, skin: IDX_KAIJU },
 ];
 let selFase = 'skins'; // skins | mapa
 // ?skins=a,b força as fantasias (debug/screenshot)
@@ -2191,7 +2199,9 @@ if (PARAMS.get('skins')) {
 }
 
 function trocarSkin(i, dir) {
-  selCfg[i].skin = ((selCfg[i].skin + dir) % SKINS.length + SKINS.length) % SKINS.length;
+  const cur = MENU_SKINS.indexOf(selCfg[i].skin);
+  const base = cur < 0 ? 0 : cur;
+  selCfg[i].skin = MENU_SKINS[((base + dir) % MENU_SKINS.length + MENU_SKINS.length) % MENU_SKINS.length];
   store.set('molengas_skin' + i, selCfg[i].skin);
   som.selecionar();
   // lutador em cena? troca ao vivo
@@ -2231,7 +2241,7 @@ function addBot() {
   slot.ativo = true;
   slot.tipo = 'cpu';
   slot.conf = true;
-  slot.skin = Math.floor(Math.random() * SKINS.length);
+  slot.skin = MENU_SKINS[Math.floor(Math.random() * MENU_SKINS.length)];
   som.confirmar();
   atualizarSelecao();
 }
@@ -2785,7 +2795,10 @@ function receberSnap(m) {
     let v = online.visuais.get(pl.s);
     if (!v || v.skin !== pl.sk) {
       if (v) destroyVisual(v.meshes);
-      v = { skin: pl.sk, meshes: buildVisual(SKINS[pl.sk % SKINS.length], pl.s * 1.9, pl.s) };
+      // online tem seu próprio robô×monstro (tecla J) e o fallback de performance;
+      // ignora o campo .modelo da fantasia pra não forçar GLB e furar o fallback.
+      const skOn = { ...SKINS[pl.sk % SKINS.length], modelo: undefined };
+      v = { skin: pl.sk, meshes: buildVisual(skOn, pl.s * 1.9, pl.s) };
       online.visuais.set(pl.s, v);
     }
   }
