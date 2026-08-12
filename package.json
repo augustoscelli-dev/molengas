@@ -6,7 +6,8 @@
     "node": ">=18"
   },
   "scripts": {
-    "start": "node servidor/servidor.mjs"
+    "start": "node servidor/servidor.mjs",
+    "test": "node testes/rodar.mjs"
   },
   "dependencies": {
     "ws": "^8.18.0"
