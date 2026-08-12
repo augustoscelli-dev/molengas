@@ -2593,14 +2593,19 @@ let online = null;
 
 function iniciarOnline() {
   $('selecao').style.display = 'none';
-  showMsg('CONECTANDO…');
+  online = { ws: null, slot: null, visuais: new Map(), armasVis: new Map(), powerVis: new Map(), buf: [], msgAtual: null, jaeger: false, forcarGominha: false, melhorPend: null, faseFinal: null, desconectou: false, inputTimer: null, aguardando: false, reconTimer: null };
+  online.marcador = new THREE.Sprite(new THREE.SpriteMaterial({ map: voceTex, transparent: true, depthWrite: false, fog: false }));
+  online.marcador.scale.setScalar(0.55); online.marcador.visible = false; scene.add(online.marcador);
+  conectarWS(); // conecta (e reconecta sozinho enquanto espera vaga)
+
+  function conectarWS() {
+  if (online.reconTimer) { clearTimeout(online.reconTimer); online.reconTimer = null; }
+  showMsg(online.aguardando ? 'SALA CHEIA 😔' : 'CONECTANDO…', online.aguardando ? 'esperando abrir vaga — o host abre o modo até 20 no M' : '');
   // ws:// em rede local; wss:// quando a página vem por https (túnel/nuvem) — senão o navegador bloqueia
   const proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
   const ws = new WebSocket(`${proto}${location.host}`);
   ws.binaryType = 'arraybuffer'; // snapshots vêm em binário (poses Int16)
-  online = { ws, slot: null, visuais: new Map(), armasVis: new Map(), powerVis: new Map(), buf: [], msgAtual: null, jaeger: false, forcarGominha: false, melhorPend: null, faseFinal: null, desconectou: false, inputTimer: null };
-  online.marcador = new THREE.Sprite(new THREE.SpriteMaterial({ map: voceTex, transparent: true, depthWrite: false, fog: false }));
-  online.marcador.scale.setScalar(0.55); online.marcador.visible = false; scene.add(online.marcador);
+  online.ws = ws; online.desconectou = false;
   ws.addEventListener('open', () => {
     ws.send(JSON.stringify({ t: 'entrar', skin: selCfg[0].skin }));
     showMsg('NA SALA! 🌐', 'quando todos entrarem, o host (1º jogador) aperta F');
@@ -2615,7 +2620,15 @@ function iniciarOnline() {
   });
   ws.addEventListener('close', () => {
     // cancela qualquer sequência final em andamento pra não sobrepor uma vitória falsa
-    online.faseFinal = null; online.melhorPend = null; online.desconectou = true;
+    online.faseFinal = null; online.melhorPend = null;
+    if (online.inputTimer) { clearInterval(online.inputTimer); online.inputTimer = null; }
+    if (online.aguardando) {
+      // sala cheia: fica na sala de espera e tenta de novo em alguns segundos (entra assim que abrir vaga)
+      showMsg('SALA CHEIA 😔', 'esperando abrir vaga… tentando entrar de novo');
+      online.reconTimer = setTimeout(() => { if (online && online.aguardando) conectarWS(); }, 4000);
+      return;
+    }
+    online.desconectou = true;
     showMsg('DESCONECTOU 😵', 'o servidor fechou — recarrega a página');
     // limpa a cena pra não deixar bonecos/armas congelados
     for (const [, v] of online.visuais) destroyVisual(v.meshes);
@@ -2624,13 +2637,12 @@ function iniciarOnline() {
     online.visuais.clear(); online.armasVis.clear(); online.powerVis.clear();
     if (online.marcador) online.marcador.visible = false;
     if (touchAtivo() && $('online-acoes')) $('online-acoes').style.display = 'none';
-    if (online.inputTimer) { clearInterval(online.inputTimer); online.inputTimer = null; }
   });
   ws.addEventListener('message', (e) => {
     if (typeof e.data === 'string') { // oi / cheio / melhor (JSON)
       let m; try { m = JSON.parse(e.data); } catch { return; }
-      if (m.t === 'oi') online.slot = m.slot;
-      else if (m.t === 'cheio') showMsg('SALA CHEIA 😔');
+      if (m.t === 'oi') { online.slot = m.slot; online.aguardando = false; }
+      else if (m.t === 'cheio') { online.aguardando = true; showMsg('SALA CHEIA 😔', 'esperando abrir vaga…'); }
       else if (m.t === 'melhor') online.melhorPend = m; // clipe da melhor jogada
       return;
     }
@@ -2641,6 +2653,8 @@ function iniciarOnline() {
     try { meta = JSON.parse(new TextDecoder().decode(new Uint8Array(e.data, 4, jsonLen))); } catch { return; }
     let off = 4 + jsonLen;
     const NP = PARTS.length;
+    // defensivo: pacote curto/malformado é descartado em vez de estourar o handler
+    if (!Array.isArray(meta.pl) || off + meta.pl.length * NP * 6 * 2 > e.data.byteLength) return;
     for (const pm of meta.pl) {
       const p = new Array(NP * 6);
       for (let k = 0; k < NP; k++) {
@@ -2656,6 +2670,7 @@ function iniciarOnline() {
     }
     receberSnap(meta);
   });
+  } // fim de conectarWS
   $('placar').style.flexWrap = 'wrap';
   $('placar').style.gap = '2px 12px';
   // Celular: botões de toque pro lobby (começar/trocar modo/pontos/jaeger)
