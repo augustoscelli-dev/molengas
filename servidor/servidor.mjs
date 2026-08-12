@@ -595,7 +595,7 @@ process.on('uncaughtException', (e) => console.error('uncaughtException (ignorad
 process.on('unhandledRejection', (e) => console.error('unhandledRejection (ignorado):', e));
 
 http.listen(PORTA, () => {
-  console.log('MOLENGAS! servidor LAN no ar 🥊');
+  console.log('WOBBLERS! servidor no ar 🥊');
   const ips = Object.values(networkInterfaces()).flat().filter((i) => i && i.family === 'IPv4' && !i.internal).map((i) => i.address);
   console.log('Abram no navegador de cada jogador:');
   for (const ip of ips) console.log(`  http://${ip}:${PORTA}/?servidor=1`);

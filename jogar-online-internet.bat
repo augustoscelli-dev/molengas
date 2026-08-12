@@ -1,10 +1,10 @@
 @echo off
 chcp 65001 >nul
-title MOLENGAS - Online pela Internet
+title WOBBLERS - Online pela Internet
 setlocal
 
 REM ============================================================
-REM  MOLENGAS - jogar online com amigos PELA INTERNET (1 clique)
+REM  WOBBLERS - jogar online com amigos PELA INTERNET (1 clique)
 REM  Sobe o servidor no seu PC e cria um link publico via
 REM  Cloudflare Tunnel. Voce manda o link pros amigos e pronto.
 REM ============================================================
@@ -16,8 +16,8 @@ if not exist node_modules (
 )
 
 echo.
-echo Subindo o servidor do MOLENGAS na porta 8877...
-start "MOLENGAS servidor" cmd /c "node servidor.mjs & pause"
+echo Subindo o servidor do WOBBLERS na porta 8877...
+start "WOBBLERS servidor" cmd /c "node servidor.mjs & pause"
 
 cd /d "%~dp0"
 if not exist cloudflared.exe (

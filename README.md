@@ -1,4 +1,4 @@
-# MOLENGAS! 🥊
+# WOBBLERS! 🥊
 
 Briga de bonecos molengas no navegador — estilo Gang Beasts / Fall Guys. Física
 de ragdoll, socos, agarrões, arremessos, armas e caos. Roda direto no browser,
