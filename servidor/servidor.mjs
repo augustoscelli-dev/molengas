@@ -16,7 +16,7 @@ import { Ragdoll, PARTS, ARENA } from '../src/ragdoll.js';
 
 await RAPIER.init();
 
-const PORTA = 8877;
+const PORTA = process.env.PORT || 8877; // nuvem (Railway/Fly/Render) injeta PORT; LAN usa 8877
 const AUTO = process.argv.includes('--auto');
 const PONTOS = [{ n: 'Melhor de 5', v: 5 }, { n: 'Melhor de 3', v: 3 }, { n: 'Morte Súbita', v: 1 }];
 let pontoIdx = 0;
