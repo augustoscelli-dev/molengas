@@ -101,6 +101,10 @@ De tempos em tempos caem coisas na arena (mais rápido no modo **CAOS**):
    - No **celular** esses viram **botões na tela**.
 4. Uma **seta "VOCÊ"** fica sobre o seu boneco pra você se achar no meio da bagunça.
 
+> **Sala cheia?** Se você abrir o link e a sala estiver lotada (ex.: chegou
+> antes do host abrir o modo **até 20**), você fica numa **sala de espera** e
+> entra **sozinho** assim que abrir vaga — não precisa recarregar.
+
 > É rede local (LAN), não internet aberta. A física roda toda no servidor
 > (autoritativa), então todo mundo vê a mesma luta.
 
