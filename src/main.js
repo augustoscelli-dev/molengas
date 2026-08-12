@@ -2673,6 +2673,21 @@ function iniciarOnline() {
   } // fim de conectarWS
   $('placar').style.flexWrap = 'wrap';
   $('placar').style.gap = '2px 12px';
+  // "Copiar link" pra o host chamar a galera (o link já leva direto pro online)
+  if ($('cp-btn') && $('cp-link')) {
+    const linkOnline = `${location.origin}${location.pathname}?servidor=1`;
+    $('cp-link').textContent = linkOnline.replace(/^https?:\/\//, '');
+    $('cp-btn').addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(linkOnline); }
+      catch {
+        const ta = document.createElement('textarea'); ta.value = linkOnline;
+        ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta);
+        ta.select(); try { document.execCommand('copy'); } catch {} ta.remove();
+      }
+      const b = $('cp-btn'); b.textContent = 'copiado! ✓'; b.classList.add('ok');
+      clearTimeout(b._t); b._t = setTimeout(() => { b.textContent = 'copiar'; b.classList.remove('ok'); }, 1800);
+    });
+  }
   // Celular: botões de toque pro lobby (começar/trocar modo/pontos/jaeger)
   if (touchAtivo() && $('online-acoes')) {
     for (const btn of $('online-acoes').querySelectorAll('[data-act]')) {
@@ -2824,6 +2839,7 @@ function receberSnap(m) {
   }).join('');
   // Lobby: mostra modo + quantos na sala + o que o host aperta
   if (touchAtivo() && $('online-acoes')) $('online-acoes').style.display = (m.st === 'lobby' || m.st === 'fim') ? 'flex' : 'none';
+  if ($('compartilhar')) $('compartilhar').style.display = (m.st === 'lobby' || m.st === 'fim') ? 'flex' : 'none';
   if (m.st === 'lobby') {
     showMsg('SALA ONLINE 🌐', `${m.mo || ''} — <b>${m.na || 0}/${m.cap || 0}</b> na sala &nbsp;·&nbsp; ${m.pt || ''} &nbsp;·&nbsp; 🤖×🦖 ${m.jg ? 'SIM' : 'não'}<br>host (jogador 1): <b>F</b> começa &nbsp;·&nbsp; <b>M</b> modo &nbsp;·&nbsp; <b>N</b> pontuação &nbsp;·&nbsp; <b>J</b> robôs×monstros`);
     online.msgAtual = '__lobby__'; online._fimMostrado = false; online.faseFinal = null; online.melhorPend = null;

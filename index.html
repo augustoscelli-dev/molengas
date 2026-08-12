@@ -96,6 +96,22 @@
   .tbtn.agarra { background: rgba(126,217,87,.40); }
   .tbtn.esquiva { background: rgba(102,224,255,.38); }
   /* Botões de toque do lobby online (pra hospedar/começar no celular) */
+  #compartilhar { position: fixed; top: 60px; left: 50%; transform: translateX(-50%); z-index: 9;
+    pointer-events: auto; display: flex; align-items: center; gap: 8px; max-width: min(92vw, 560px);
+    padding: 7px 8px 7px 14px; border-radius: 999px; border: 1px solid rgba(255,255,255,.22);
+    background: rgba(18,14,34,.72); backdrop-filter: blur(6px); color: #fff;
+    font-family: "Segoe UI", system-ui, sans-serif; font-size: 14px; text-shadow: 0 1px 2px rgba(0,0,0,.5); }
+  #compartilhar .cp-ic { font-size: 15px; }
+  #compartilhar .cp-lbl { opacity: .82; white-space: nowrap; }
+  #compartilhar .cp-link { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    max-width: 46vw; color: #7ee0ff; }
+  #cp-btn { border: 0; border-radius: 999px; cursor: pointer; font-weight: 800; font-size: 13px;
+    padding: 7px 14px; background: #ff3d8b; color: #fff; -webkit-tap-highlight-color: transparent;
+    flex: none; transition: background .15s, transform .1s; }
+  #cp-btn:hover { background: #ff5c9f; }
+  #cp-btn:active { transform: scale(.94); }
+  #cp-btn.ok { background: #46d38a; color: #0d2a1a; }
+  @media (max-width: 560px) { #compartilhar .cp-lbl { display: none; } #compartilhar .cp-link { max-width: 52vw; } }
   #online-acoes { position: fixed; left: 0; right: 0; bottom: 120px; z-index: 8;
     display: none; justify-content: center; flex-wrap: wrap; gap: 10px; pointer-events: none;
     font-family: "Segoe UI", system-ui, sans-serif; }
@@ -161,6 +177,12 @@
 </div>
 <div id="hud">
   <div id="placar"></div>
+  <div id="compartilhar" style="display:none;">
+    <span class="cp-ic">🔗</span>
+    <span class="cp-lbl">chamar a galera:</span>
+    <span id="cp-link" class="cp-link"></span>
+    <button id="cp-btn" type="button">copiar</button>
+  </div>
   <div id="msg"></div>
   <div id="debug" style="position:absolute;top:70px;left:16px;font:13px monospace;color:#9f9;display:none;"></div>
   <div id="mapa" style="position:absolute;bottom:38px;left:0;right:0;text-align:center;font-size:13px;font-weight:600;opacity:.75;"></div>
