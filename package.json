@@ -1,5 +1,14 @@
 {
   "name": "molengas",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node servidor/servidor.mjs"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
 }

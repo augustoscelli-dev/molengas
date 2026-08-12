@@ -1,0 +1,22 @@
+# Fly.io — MOLENGAS servidor online
+# Deploy:  fly launch --now   (ou: fly deploy)
+# Fly injeta a env PORT; o servidor a respeita automaticamente.
+app = "molengas"
+primary_region = "gru"   # São Paulo — troque se preferir outra região
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8080"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
