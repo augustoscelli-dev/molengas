@@ -2598,13 +2598,13 @@ function iniciarOnline() {
   const proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
   const ws = new WebSocket(`${proto}${location.host}`);
   ws.binaryType = 'arraybuffer'; // snapshots vêm em binário (poses Int16)
-  online = { ws, slot: null, visuais: new Map(), armasVis: new Map(), powerVis: new Map(), buf: [], msgAtual: null, jaeger: false, forcarGominha: false, melhorPend: null, faseFinal: null };
+  online = { ws, slot: null, visuais: new Map(), armasVis: new Map(), powerVis: new Map(), buf: [], msgAtual: null, jaeger: false, forcarGominha: false, melhorPend: null, faseFinal: null, desconectou: false, inputTimer: null };
   online.marcador = new THREE.Sprite(new THREE.SpriteMaterial({ map: voceTex, transparent: true, depthWrite: false, fog: false }));
   online.marcador.scale.setScalar(0.55); online.marcador.visible = false; scene.add(online.marcador);
   ws.addEventListener('open', () => {
     ws.send(JSON.stringify({ t: 'entrar', skin: selCfg[0].skin }));
     showMsg('NA SALA! 🌐', 'quando todos entrarem, o host (1º jogador) aperta F');
-    setInterval(() => {
+    online.inputTimer = setInterval(() => {
       if (ws.readyState !== 1) return;
       const inp = mergeInput(mergeInput(readInput(MAPS.p1), readGamepad(0)), readTouch());
       ws.send(JSON.stringify({
@@ -2614,6 +2614,8 @@ function iniciarOnline() {
     }, 33);
   });
   ws.addEventListener('close', () => {
+    // cancela qualquer sequência final em andamento pra não sobrepor uma vitória falsa
+    online.faseFinal = null; online.melhorPend = null; online.desconectou = true;
     showMsg('DESCONECTOU 😵', 'o servidor fechou — recarrega a página');
     // limpa a cena pra não deixar bonecos/armas congelados
     for (const [, v] of online.visuais) destroyVisual(v.meshes);
@@ -2622,6 +2624,7 @@ function iniciarOnline() {
     online.visuais.clear(); online.armasVis.clear(); online.powerVis.clear();
     if (online.marcador) online.marcador.visible = false;
     if (touchAtivo() && $('online-acoes')) $('online-acoes').style.display = 'none';
+    if (online.inputTimer) { clearInterval(online.inputTimer); online.inputTimer = null; }
   });
   ws.addEventListener('message', (e) => {
     if (typeof e.data === 'string') { // oi / cheio / melhor (JSON)
@@ -2903,6 +2906,7 @@ function aplicarSnapOnline(m1, m2, f) {
 }
 
 function frameOnline(t, fdt) {
+  if (online.desconectou) { renderCena(); return; } // caiu a conexão: não roda sequência final
   // Sequência de final: MELHOR JOGADA (clipe) -> cutscene do vencedor -> vitória
   if (online.faseFinal === 'melhor') {
     online.melhorT += fdt;

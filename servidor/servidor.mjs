@@ -301,6 +301,15 @@ function removerJogador(ws) {
   j.rag.destroy();
   jogadores.delete(ws);
   refazerRivais();
+  // Se a partida ficou sem gente suficiente, encerra pro lobby (senão trava em 'luta' pra sempre).
+  if (jogadores.size < 2 && estado !== 'lobby' && estado !== 'fim') {
+    const resto = [...jogadores.values()][0];
+    if (resto) { resto.score = 0; resto.vivo = true; resto.rag.reset(); }
+    estado = 'lobby';
+    msg = '';
+    limparArmas(); limparPowerups(); limparMelhor();
+    console.log('sala esvaziou no meio — de volta ao lobby');
+  }
 }
 function refazerRivais() {
   const todos = [...jogadores.values()];
@@ -322,6 +331,7 @@ function startIntro(roundN) {
   introStep = 0;
   estadoAte = now + 0.9;
   limparArmas(); limparPowerups(); // arena limpa a cada round
+  replayBufS = []; // zera o buffer de replay entre rounds (evita clipe cruzando o reset)
   msg = 'ROUND ' + roundN;
 }
 function comecarPartida() {
@@ -412,7 +422,12 @@ function considerarHighlightS(vitima, tipo, decisiva) {
 }
 function enviarMelhor() {
   if (!melhorClipS) return;
-  const pkt = JSON.stringify({ t: 'melhor', autorSk: melhorClipS.autorSk, sem: melhorClipS.sem, frames: melhorClipS.frames });
+  let frames = melhorClipS.frames;
+  // Em salas grandes o clipe (frames × jogadores) fica pesado; reduz a resolução
+  // temporal pra não estourar o pacote enviado a todos de uma vez.
+  const nJ = frames[0] ? frames[0].length : 1;
+  while (frames.length > 12 && nJ * frames.length > 260) frames = frames.filter((_, i) => i % 2 === 0);
+  const pkt = JSON.stringify({ t: 'melhor', autorSk: melhorClipS.autorSk, sem: melhorClipS.sem, frames });
   for (const j of jogadores.values()) if (j.ws.readyState === 1) j.ws.send(pkt);
 }
 
@@ -444,20 +459,22 @@ setInterval(() => {
     if (r.lastKnockdownAt > (r._evKO ?? -1)) { r._evKO = r.lastKnockdownAt; if (estado === 'luta') considerarHighlightS(j, 'ko', false); }
   }
   world.step(filaEventos, hooks); // hook = filtro de contato por dono (sem auto-colisão)
-  if (estado === 'luta') { tickArmas(); tickPowerups(); } // armas + power-ups
-  // bolada
-  const bv = bola.linvel();
-  if (Math.hypot(bv.x, bv.y, bv.z) > 3) {
-    const bp = bola.translation();
-    for (const j of jogadores.values()) {
-      if (now < (j._bolaCd ?? 0)) continue;
-      const tp = j.rag.parts.torso.translation();
-      if (Math.hypot(bp.x - tp.x, bp.y - tp.y, bp.z - tp.z) < 0.95) {
-        j._bolaCd = now + 1.2;
-        j.rag.dano = Math.min(4, j.rag.dano + 1);
-        j.rag.stun(now + 1.1);
-        j.rag.lastHitLandedAt = now;
-        ev('bolada');
+  if (estado === 'luta') {
+    tickArmas(); tickPowerups(); // armas + power-ups
+    // bolada — só durante a luta e só em quem ainda está vivo
+    const bv = bola.linvel();
+    if (Math.hypot(bv.x, bv.y, bv.z) > 3) {
+      const bp = bola.translation();
+      for (const j of jogadores.values()) {
+        if (!j.vivo || now < (j._bolaCd ?? 0)) continue;
+        const tp = j.rag.parts.torso.translation();
+        if (Math.hypot(bp.x - tp.x, bp.y - tp.y, bp.z - tp.z) < 0.95) {
+          j._bolaCd = now + 1.2;
+          j.rag.dano = Math.min(4, j.rag.dano + 1);
+          j.rag.stun(now + 1.1);
+          j.rag.lastHitLandedAt = now;
+          ev('bolada');
+        }
       }
     }
   }
@@ -530,34 +547,41 @@ wss.on('connection', (ws) => {
   ws.on('message', (dados) => {
     let m;
     try { m = JSON.parse(dados); } catch { return; }
-    if (m.t === 'entrar' && !jogadores.has(ws)) {
-      const j = criarJogador(ws, m.skin);
-      if (!j) { ws.send(JSON.stringify({ t: 'cheio' })); ws.close(); return; }
-      ws.send(JSON.stringify({ t: 'oi', slot: j.slot }));
-      console.log(`+ jogador ${j.slot + 1} entrou (${jogadores.size} na sala)`);
-    } else if (m.t === 'input') {
-      const j = jogadores.get(ws);
-      if (j) {
-        j.input = {
-          move: { x: +m.m[0] || 0, z: +m.m[1] || 0 },
-          punch: !!m.p, grab: !!m.g, jump: !!m.j, emote: !!m.e, esquiva: !!m.d,
-        };
+    if (!m || typeof m !== 'object') return;
+    try {
+      if (m.t === 'entrar' && !jogadores.has(ws)) {
+        const j = criarJogador(ws, m.skin);
+        if (!j) { ws.send(JSON.stringify({ t: 'cheio' })); ws.close(); return; }
+        ws.send(JSON.stringify({ t: 'oi', slot: j.slot }));
+        console.log(`+ jogador ${j.slot + 1} entrou (${jogadores.size} na sala)`);
+      } else if (m.t === 'input') {
+        const j = jogadores.get(ws);
+        if (j) {
+          const mm = Array.isArray(m.m) ? m.m : [0, 0]; // tolera input malformado — não derruba o servidor
+          j.input = {
+            move: { x: +mm[0] || 0, z: +mm[1] || 0 },
+            punch: !!m.p, grab: !!m.g, jump: !!m.j, emote: !!m.e, esquiva: !!m.d,
+          };
+        }
+      } else if (m.t === 'comecar') {
+        const j = jogadores.get(ws);
+        if (j && j === host() && (estado === 'lobby' || estado === 'fim') && jogadores.size >= 2) comecarPartida();
+      } else if (m.t === 'modo') {
+        const j = jogadores.get(ws);
+        if (j && j === host() && (estado === 'lobby' || estado === 'fim')) {
+          const prox = ORDEM_MODOS[(ORDEM_MODOS.indexOf(salaModo) + 1) % ORDEM_MODOS.length];
+          // não deixa encolher a sala abaixo do nº de jogadores já conectados
+          if (jogadores.size <= MODOS_SALA[prox].max) { salaModo = prox; console.log('modo da sala ->', salaModo); }
+        }
+      } else if (m.t === 'pontos') {
+        const j = jogadores.get(ws);
+        if (j && j === host() && (estado === 'lobby' || estado === 'fim')) pontoIdx = (pontoIdx + 1) % PONTOS.length;
+      } else if (m.t === 'jaeger') {
+        const j = jogadores.get(ws);
+        if (j && j === host() && (estado === 'lobby' || estado === 'fim')) salaJaeger = !salaJaeger;
       }
-    } else if (m.t === 'comecar') {
-      const j = jogadores.get(ws);
-      if (j && j === host() && (estado === 'lobby' || estado === 'fim') && jogadores.size >= 2) comecarPartida();
-    } else if (m.t === 'modo') {
-      const j = jogadores.get(ws);
-      if (j && j === host() && (estado === 'lobby' || estado === 'fim')) {
-        salaModo = ORDEM_MODOS[(ORDEM_MODOS.indexOf(salaModo) + 1) % ORDEM_MODOS.length];
-        console.log('modo da sala ->', salaModo);
-      }
-    } else if (m.t === 'pontos') {
-      const j = jogadores.get(ws);
-      if (j && j === host() && (estado === 'lobby' || estado === 'fim')) pontoIdx = (pontoIdx + 1) % PONTOS.length;
-    } else if (m.t === 'jaeger') {
-      const j = jogadores.get(ws);
-      if (j && j === host() && (estado === 'lobby' || estado === 'fim')) salaJaeger = !salaJaeger;
+    } catch (e) {
+      console.error('erro ao tratar mensagem do cliente:', e && e.message);
     }
   });
   ws.on('close', () => {
@@ -565,6 +589,10 @@ wss.on('connection', (ws) => {
     console.log(`- jogador saiu (${jogadores.size} na sala)`);
   });
 });
+
+// Rede de segurança: um erro inesperado não deve derrubar o servidor pra todos.
+process.on('uncaughtException', (e) => console.error('uncaughtException (ignorado):', e && e.stack || e));
+process.on('unhandledRejection', (e) => console.error('unhandledRejection (ignorado):', e));
 
 http.listen(PORTA, () => {
   console.log('MOLENGAS! servidor LAN no ar 🥊');
