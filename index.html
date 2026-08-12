@@ -136,8 +136,8 @@
   .oa-btn.oa-go { background: rgba(126,217,87,.5); font-size: 17px; }
   #selecao {
     position: fixed; inset: 0; z-index: 5; display: flex; flex-direction: column;
-    align-items: center; justify-content: center; gap: clamp(16px, 3vh, 30px);
-    color: #fff; font-family: var(--f-ui);
+    align-items: center; justify-content: center; gap: clamp(12px, 2.4vh, 26px);
+    overflow-y: auto; padding: 20px 12px; color: #fff; font-family: var(--f-ui);
     /* fundo opaco (esconde o HUD do jogo atrás) com brilho radial magenta/ciano */
     background:
       radial-gradient(1200px 620px at 50% 24%, rgba(255,61,139,.34), transparent 62%),
@@ -181,6 +181,12 @@
     border: 1px solid rgba(255,255,255,.14); }
   #sel-mapa .sel-nome { font-size: clamp(17px, 2.4vw, 22px); }
   .sel-rodape { display: flex; flex-direction: column; align-items: center; gap: 7px; }
+  #btn-online { font-family: var(--f-disp); font-size: clamp(17px, 2.6vw, 22px); color: #08201c;
+    border: 0; cursor: pointer; padding: 12px 30px; border-radius: 999px;
+    background: linear-gradient(180deg, #55e6c6, #16b79b); box-shadow: 0 6px 0 #0c8a74, 0 10px 22px rgba(22,183,155,.4);
+    -webkit-tap-highlight-color: transparent; transition: transform .1s, box-shadow .1s; letter-spacing: .5px; }
+  #btn-online:hover { transform: translateY(-1px); }
+  #btn-online:active { transform: translateY(4px); box-shadow: 0 2px 0 #0c8a74, 0 5px 12px rgba(22,183,155,.4); }
 </style>
 </head>
 <body>
@@ -214,9 +220,10 @@
     <div class="sel-nome" style="font-size:18px">MODO: <span id="sel-modo-nome"></span> &nbsp;·&nbsp; JAEGER: <span id="sel-jaeger"></span> &nbsp;·&nbsp; BOTS: <span id="sel-nivel"></span></div>
     <div class="sel-dica">🔴 A · D mapa &nbsp;·&nbsp; N modo &nbsp;·&nbsp; V nível &nbsp;·&nbsp; J Jaeger &nbsp;·&nbsp; C bot 🤖 &nbsp;·&nbsp; F começa!</div>
   </div>
+  <button id="btn-online" type="button">🌐 JOGAR ONLINE</button>
   <div class="sel-rodape">
     <div class="sel-dica">🎮 controle: analógico anda · A pula/confirma · X soca · B agarra</div>
-    <div class="sel-dica">🌐 online: rode <b>servidor-online.bat</b> e cada um abre o endereço que aparecer</div>
+    <div class="sel-dica">🌐 no PC que hospeda, rode <b>servidor-online.bat</b> (ou o de internet)</div>
   </div>
 </div>
 <div id="hud">

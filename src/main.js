@@ -3365,6 +3365,8 @@ function frame(t) {
 // ---------- Início ----------
 setMapa(parseInt(PARAMS.get('mapa'), 10) || 0);
 initTouch();
+// Botão "JOGAR ONLINE" no menu — funciona com qualquer link (não precisa de ?servidor=1)
+$('btn-online')?.addEventListener('click', () => { if (!online) iniciarOnline(); });
 if (PARAMS.has('servidor')) {
   iniciarOnline();
 } else if (touchAtivo() && !PARAMS.has('direto')) {
