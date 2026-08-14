@@ -1451,6 +1451,8 @@ function buildVisual(skin, fase = 0, slot = 0) {
     };
     const montarJ = (gltf) => {
       const armature = gltf.scene; let skinned = null, skeleton = null;
+      // o visual foi trocado/destruído enquanto o GLB carregava: descarta e não deixa órfão na cena
+      if (meshes._dead) { disporArmature(armature); return; }
       armature.traverse((o) => {
         if (o.isSkinnedMesh) { skinned = o; skeleton = o.skeleton; }
         if (o.isMesh) {
@@ -1656,6 +1658,7 @@ function buildVisual(skin, fase = 0, slot = 0) {
 }
 
 function destroyVisual(meshes) {
+  meshes._dead = true; // cancela loads GLB em andamento (montarJ desiste se chegar depois)
   for (const spec of PARTS) {
     const obj = meshes[spec.name];
     if (obj.isBone) continue; // estilo 'r': ossos são limpos junto com a raiz abaixo
@@ -1672,8 +1675,16 @@ function destroyVisual(meshes) {
     if (sm.geometry) sm.geometry.dispose();
     if (sm.material && !sm.material.map) sm.material.dispose();
   }
-  // Estilo 'j' (Jaeger rigado): remove a armature carregada
-  if (meshes._armature) scene.remove(meshes._armature);
+  // Estilo 'j' (Jaeger/Kaiju rigado): remove a armature e descarta a memória GPU
+  if (meshes._armature) { scene.remove(meshes._armature); disporArmature(meshes._armature); meshes._armature = null; }
+}
+// Libera geometrias/materiais/texturas de uma armature GLB (evita vazar memória GPU nas trocas)
+function disporArmature(arm) {
+  arm.traverse((o) => {
+    if (o.geometry) o.geometry.dispose();
+    if (o.material) { const ms = Array.isArray(o.material) ? o.material : [o.material];
+      for (const m of ms) { if (m && m.map) m.map.dispose(); if (m) m.dispose(); } }
+  });
 }
 
 // Flash de dano: coleta os materiais do lutador que têm canal emissivo, guardando
@@ -2197,7 +2208,7 @@ let selFase = 'skins'; // skins | mapa
 // ?skins=a,b força as fantasias (debug/screenshot)
 if (PARAMS.get('skins')) {
   const ns = PARAMS.get('skins').split(',').map((n) => parseInt(n, 10));
-  ns.forEach((n, i) => { if (Number.isFinite(n) && selCfg[i]) selCfg[i].skin = n % SKINS.length; });
+  ns.forEach((n, i) => { if (Number.isFinite(n) && selCfg[i]) selCfg[i].skin = ((n % SKINS.length) + SKINS.length) % SKINS.length; });
 }
 
 function trocarSkin(i, dir) {
