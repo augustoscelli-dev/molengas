@@ -2719,7 +2719,8 @@ function iniciarOnline() {
 // não desligou. Reconstrói os bonecos só quando o estilo muda de fato.
 function aplicarEstiloOnline() {
   const querJ = online.jaeger && !online.forcarGominha;
-  const novo = querJ ? 'j' : ESTILO_BASE;
+  // se o estilo base já é 'j' (via ?estilo=j), o fallback precisa cair pra 'a' pra aliviar
+  const novo = querJ ? 'j' : (ESTILO_BASE === 'j' ? 'a' : ESTILO_BASE);
   if (novo === ESTILO) return;
   ESTILO = novo;
   for (const [, v] of online.visuais) destroyVisual(v.meshes);
