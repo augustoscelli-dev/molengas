@@ -32,7 +32,7 @@ const MODOS_SALA = {
 const ORDEM_MODOS = ['normal', 'loucura'];
 let salaModo = process.argv.includes('--loucura') ? 'loucura' : 'normal';
 const capSala = () => MODOS_SALA[salaModo].max;
-let salaJaeger = false; // modo robôs (par) x monstros (ímpar), com força assimétrica
+let salaJaeger = true; // robôs (par) x monstros (ímpar) LIGADO por padrão; host desliga no J. Fallback de performance protege salas grandes.
 
 // Colisão: todos os players compartilham UM bit; o filtro de contato por "dono"
 // evita a auto-colisão (partes do mesmo boneco não colidem). Escala pra N jogadores
@@ -275,7 +275,7 @@ function slotsLivres() {
   for (let s = 0; s < capSala(); s++) if (!usados.has(s)) livres.push(s);
   return livres;
 }
-function criarJogador(ws, skin) {
+function criarJogador(ws, skin, ehKaiju = false) {
   const livres = slotsLivres();
   if (!livres.length) return null;
   const slot = livres[0];
@@ -288,7 +288,7 @@ function criarJogador(ws, skin) {
     owner, onCollider: (col) => { ownerByHandle.set(col.handle, owner); handles.push(col.handle); },
   });
   rag.props = props;
-  const j = { ws, slot, skin: skin | 0, rag, input: { ...IDLE }, vivo: estado === 'lobby', score: 0, handles };
+  const j = { ws, slot, skin: skin | 0, ehKaiju: !!ehKaiju, rag, input: { ...IDLE }, vivo: estado === 'lobby', score: 0, handles };
   jogadores.set(ws, j);
   refazerRivais();
   atualizarPropsDosRags(); // inclui as armas já dropadas nos props agarráveis
@@ -341,8 +341,8 @@ function comecarPartida() {
     const [sx, sz] = spawnFor(j.slot, tot);
     j.rag.spawn = { x: sx, z: sz };
     j.rag.heading0 = Math.atan2(-sx, -sz);
-    // Modo Jaeger: par = robô (normal), ímpar = Kaiju (bate mais forte, aguenta mais)
-    if (salaJaeger && j.slot % 2 === 1) { j.rag.forcaSoco = 1.3; j.rag.resistencia = 1.45; }
+    // Kaiju (escolha do jogador) bate mais forte e aguenta mais; Jaeger é normal/ágil.
+    if (salaJaeger && j.ehKaiju) { j.rag.forcaSoco = 1.3; j.rag.resistencia = 1.45; }
     else { j.rag.forcaSoco = 1; j.rag.resistencia = 1; }
     j.score = 0; j.vivo = true; j.rag.reset();
   }
@@ -550,7 +550,7 @@ wss.on('connection', (ws) => {
     if (!m || typeof m !== 'object') return;
     try {
       if (m.t === 'entrar' && !jogadores.has(ws)) {
-        const j = criarJogador(ws, m.skin);
+        const j = criarJogador(ws, m.skin, m.kaiju);
         if (!j) { ws.send(JSON.stringify({ t: 'cheio' })); ws.close(); return; }
         ws.send(JSON.stringify({ t: 'oi', slot: j.slot }));
         console.log(`+ jogador ${j.slot + 1} entrou (${jogadores.size} na sala)`);

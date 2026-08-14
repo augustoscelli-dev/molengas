@@ -1423,9 +1423,11 @@ function buildVisual(skin, fase = 0, slot = 0) {
     meshes._modeloJ = ''; // preenchido abaixo com o nome do modelo (pra classe Jaeger/Kaiju)
     const bruto = (nomesGLB[slot] || nomesGLB[0] || '').trim();
     let nomeGLB, fallbackGLB = null;
-    if (skin.modelo) {
-      // a própria fantasia diz qual modelo é (Jaeger/Kaiju escolhidos no menu)
-      nomeGLB = skin.modelo;
+    if (skin.modelo || skin.modeloHint) {
+      // a própria fantasia diz qual modelo é (Jaeger/Kaiju escolhidos no menu).
+      // .modelo força o GLB (offline); .modeloHint só informa o modelo quando o
+      // estilo 'j' já está ligado (online), pra não furar o fallback de performance.
+      nomeGLB = skin.modelo || skin.modeloHint;
       if (/kaiju/i.test(nomeGLB)) fallbackGLB = 'jaeger-rigado';
     } else if (bruto && bruto !== 'jaeger-low') {
       nomeGLB = bruto; // usuário escolheu explicitamente (?glb=jaeger-rigado,kaiju-rigado)
@@ -2617,7 +2619,7 @@ function iniciarOnline() {
   ws.binaryType = 'arraybuffer'; // snapshots vêm em binário (poses Int16)
   online.ws = ws; online.desconectou = false;
   ws.addEventListener('open', () => {
-    ws.send(JSON.stringify({ t: 'entrar', skin: selCfg[0].skin }));
+    ws.send(JSON.stringify({ t: 'entrar', skin: selCfg[0].skin, kaiju: selCfg[0].skin === IDX_KAIJU }));
     showMsg('NA SALA! 🌐', 'quando todos entrarem, o host (1º jogador) aperta F');
     online.inputTimer = setInterval(() => {
       if (ws.readyState !== 1) return;
@@ -2795,9 +2797,10 @@ function receberSnap(m) {
     let v = online.visuais.get(pl.s);
     if (!v || v.skin !== pl.sk) {
       if (v) destroyVisual(v.meshes);
-      // online tem seu próprio robô×monstro (tecla J) e o fallback de performance;
-      // ignora o campo .modelo da fantasia pra não forçar GLB e furar o fallback.
-      const skOn = { ...SKINS[pl.sk % SKINS.length], modelo: undefined };
+      // online usa .modeloHint (não .modelo): o modelo segue a fantasia escolhida
+      // quando o estilo 'j' está ligado, mas o fallback de performance ainda manda.
+      const base = SKINS[pl.sk % SKINS.length];
+      const skOn = { ...base, modelo: undefined, modeloHint: base.modelo };
       v = { skin: pl.sk, meshes: buildVisual(skOn, pl.s * 1.9, pl.s) };
       online.visuais.set(pl.s, v);
     }
