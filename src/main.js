@@ -1878,7 +1878,32 @@ function detectarEsquiva(l, inp, now) {
 }
 
 // ---------- Bot ----------
+// Perfil do estilo humano (IA que aprende): amostrado a cada 0.5s durante a luta.
+// EMA lenta (~20s) — o bot "percebe" teu jeito: spam de soco, agarrão, viver na beirada.
+const perfilHumano = { spamSoco: 0, agarrador: 0, beirada: 0 };
+let perfilProxAt = 0;
+function atualizarPerfilHumano() {
+  if (simNow < perfilProxAt) return;
+  const dt = 0.5; perfilProxAt = simNow + dt;
+  let socoRate = 0, grabFrac = 0, edgeFrac = 0, n = 0;
+  for (const l of lutadores) {
+    if (l.cfg.tipo === 'cpu' || !l.vivo) continue;
+    n++;
+    const s = l.rag.stats.socos;
+    socoRate += (s - (l._pfSocos ?? s)) / dt; l._pfSocos = s;
+    grabFrac += l.rag.grabbedRival() ? 1 : 0;
+    const p = l.rag.parts.pelvis.translation();
+    edgeFrac += Math.hypot(p.x, p.z) > 2.8 ? 1 : 0;
+  }
+  if (!n) return;
+  const a = 0.12;
+  perfilHumano.spamSoco += a * (Math.min(1, (socoRate / n) / 1.2) - perfilHumano.spamSoco);
+  perfilHumano.agarrador += a * ((grabFrac / n) - perfilHumano.agarrador);
+  perfilHumano.beirada += a * ((edgeFrac / n) - perfilHumano.beirada);
+}
+
 function botInput(l) {
+  atualizarPerfilHumano(); // barato (amostra a cada 0.5s)
   const out = { move: { x: 0, z: 0 }, punch: false, grab: false, jump: false, esquiva: false };
   const me = l.rag.parts.pelvis.translation();
   const nv0 = NIVEIS[nivelIdx]; // dificuldade escolhida no menu
@@ -1893,12 +1918,14 @@ function botInput(l) {
   }
   const gap = temHumano ? Math.max(-3, Math.min(3, sH - sB)) : 0;
   const dda = 1 + gap * 0.06 * (AJUSTES.dda ?? 1); // >1 = bots mais afiados
+  const PH = perfilHumano; // estilo aprendido: spammer de soco leva mais esquiva, etc.
   const nv = {
     reacao: nv0.reacao / dda,
-    esquiva: Math.min(0.95, nv0.esquiva * dda * P.esquiva),
+    esquiva: Math.min(0.95, nv0.esquiva * dda * P.esquiva * (1 + PH.spamSoco * 0.6)),
     ataque: (nv0.ataque / dda) * P.ataque,
     mira: nv0.mira / dda,
   };
+  const bordaP = P.borda * (1 + PH.beirada * 0.8); // quem vive na beirada é caçado lá
   const alvos = lutadores.filter((o) => o !== l && o.vivo);
   if (!alvos.length) return out;
   // Escolha de alvo por utilidade: o mais perto, com bônus pra quem está na beirada
@@ -1908,7 +1935,7 @@ function botInput(l) {
     const q = a.rag.parts.pelvis.translation();
     const d = Math.hypot(q.x - me.x, q.z - me.z);
     const aR = Math.hypot(q.x, q.z);
-    const util = d - Math.max(0, aR - 2.4) * 0.6 * P.borda;
+    const util = d - Math.max(0, aR - 2.4) * 0.6 * bordaP;
     if (util < best) { best = util; alvo = a; dAlvo = d; }
   }
   const ap = alvo.rag.parts.pelvis.translation();
@@ -1919,7 +1946,7 @@ function botInput(l) {
   const alvoNaBorda = apR > 2.6;
   if (alvoNaBorda && dAlvo < 2.4) {
     // recuo pequeno (≤0.35m) pro lado de dentro: fica center-side MAS ainda fecha pra socar
-    const off = Math.min(0.35, 0.25 * P.borda);
+    const off = Math.min(0.35, 0.25 * bordaP);
     const rec = off / Math.max(0.001, apR);
     dx = ap.x * (1 - rec) - me.x;
     dz = ap.z * (1 - rec) - me.z;
@@ -1984,7 +2011,8 @@ function botInput(l) {
   }
   // decidir soco ou agarrão quando chega perto
   if (dAlvo < 0.95 && simNow > (l._botCd ?? 0)) {
-    if (Math.random() < (alvoNaBorda ? 0.85 : 0.55)) { // alvo na beirada: prioriza o soco que empurra pra fora
+    // alvo na beirada: prioriza o soco que empurra pra fora; contra agarrador, soco preventivo
+    if (Math.random() < (alvoNaBorda ? 0.85 : 0.55 + PH.agarrador * 0.3)) {
       out.punch = true;
       l._botCd = simNow + (0.9 + Math.random() * 0.7) * nv.ataque;
     } else {
@@ -3267,14 +3295,21 @@ function frame(t) {
       const b = soltarArma(mapa, ax, az, tipos[(Math.random() * tipos.length) | 0]);
       b.setTranslation({ x: ax, y: 4.2, z: az }, true);
       puffFx({ x: ax, y: 4.2, z: az });
-      proxArmaEm = simNow + atrasoArma + Math.random() * (MODO_CAOS ? 2 : 5);
+      // Diretor de ritmo: luta morna (ninguém acerta há um tempo) → próxima arma
+      // cai bem mais cedo pra apimentar; pancadaria comendo → segura um pouco.
+      const desdeAcao = simNow - Math.max(0, ...lutadores.map((l) => l.rag.lastHitLandedAt || 0));
+      const ritmo = desdeAcao > 7 ? 0.45 : desdeAcao < 2 ? 1.25 : 1;
+      proxArmaEm = simNow + (atrasoArma + Math.random() * (MODO_CAOS ? 2 : 5)) * ritmo;
     }
     // Drop de power-up (cura ❤️ / velocidade ⚡ / força 💪), no máx. 2 na arena
     if (proxPowerEm === 0) proxPowerEm = simNow + (MODO_CAOS ? 5 : 8);
     if (simNow > proxPowerEm && powerups.length < 2) {
       const tipos = Object.keys(POWERDEF);
+      // diretor: se alguém está muito machucado, o drop tende a ser cura (dá chance de virada)
+      const machucado = lutadores.some((l) => l.vivo && l.rag.dano > 2.5);
+      const tipoPw = machucado && Math.random() < 0.6 ? 'cura' : tipos[(Math.random() * tipos.length) | 0];
       const px = (Math.random() * 2 - 1) * 2.2, pz = (Math.random() * 2 - 1) * 1.6;
-      spawnPower(tipos[(Math.random() * tipos.length) | 0], px, pz);
+      spawnPower(tipoPw, px, pz);
       puffFx({ x: px, y: 1.4, z: pz });
       proxPowerEm = simNow + (MODO_CAOS ? 7 : 12) + Math.random() * 6;
     }
