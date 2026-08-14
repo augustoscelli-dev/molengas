@@ -51,6 +51,10 @@
   }
   #msg .sub { font-family: var(--f-ui); font-size: clamp(15px, 2.4vw, 20px); font-weight: 600;
     -webkit-text-stroke: 0; margin-top: 10px; opacity: .92; filter: none; }
+  /* Título "MELHOR JOGADA" com o mesmo degradê dourado da vitória */
+  #msg .mj-tit { background: linear-gradient(180deg, #ffe27a 0%, #ff9d3c 50%, #ff3d8b 100%);
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+    -webkit-text-stroke: 2px #2a1030; }
   #controles {
     position: absolute; bottom: 10px; left: 0; right: 0; pointer-events: none;
     display: flex; justify-content: space-between; align-items: flex-end; gap: 12px;

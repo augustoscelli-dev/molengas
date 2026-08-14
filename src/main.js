@@ -2491,7 +2491,7 @@ function iniciarSequenciaFinal(winner) {
   if (melhorClip && melhorClip.frames.length > 15) {
     state = 'melhor'; replayT = 0;
     const quem = melhorClip.semAutor ? '' : `de ${melhorClip.autorNome}`;
-    showMsg('🏆 MELHOR JOGADA', quem);
+    showMsg('<span class="mj-tit">🏆 MELHOR JOGADA</span>', quem);
     som.lutem?.();
   } else {
     iniciarCutscene();
@@ -2866,7 +2866,7 @@ function receberSnap(m) {
         // toca MELHOR JOGADA -> cutscene -> vitória
         online.faseFinal = 'melhor'; online.melhorT = 0; online.melhorClip = online.melhorPend; online.melhorPend = null;
         const nomeAutor = online.melhorClip.sem ? '' : `de ${SKINS[online.melhorClip.autorSk % SKINS.length].nome}`;
-        showMsg('🏆 MELHOR JOGADA', nomeAutor); som.lutem?.();
+        showMsg('<span class="mj-tit">🏆 MELHOR JOGADA</span>', nomeAutor); som.lutem?.();
       } else {
         mostrarVitoriaOnline(m);
       }
