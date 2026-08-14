@@ -38,6 +38,14 @@ const NIVEIS = [
   { nome: 'Difícil', reacao: 0.6, esquiva: 0.85, ataque: 0.7, mira: 0.28 },
 ];
 let nivelIdx = 1;
+// Personalidades dos bots (variedade no caos): pesos que enviesam a IA.
+//   ataque/esquiva multiplicam a cadência/defesa · borda = quanto busca ring-out · arma = fome de arma
+const PERSONAS = [
+  { nome: 'brigão',      ataque: 0.82, esquiva: 0.70, borda: 0.8, arma: 1.0 },
+  { nome: 'empurrador',  ataque: 0.95, esquiva: 0.90, borda: 1.7, arma: 0.8 },
+  { nome: 'oportunista', ataque: 1.00, esquiva: 1.00, borda: 1.2, arma: 1.4 },
+  { nome: 'cauteloso',   ataque: 1.18, esquiva: 1.35, borda: 0.9, arma: 1.0 },
+];
 const IDLE_IN = { move: { x: 0, z: 0 }, punch: false, grab: false, jump: false, esquiva: false };
 
 // Na versão publicada (arquivo único), os assets viram data-URIs injetados aqui.
@@ -1873,17 +1881,49 @@ function detectarEsquiva(l, inp, now) {
 function botInput(l) {
   const out = { move: { x: 0, z: 0 }, punch: false, grab: false, jump: false, esquiva: false };
   const me = l.rag.parts.pelvis.translation();
-  const nv = NIVEIS[nivelIdx]; // dificuldade escolhida no menu
+  const nv0 = NIVEIS[nivelIdx]; // dificuldade escolhida no menu
+  if (!l._persona) l._persona = PERSONAS[(l.slot ?? 0) % PERSONAS.length];
+  const P = l._persona;
+  // DDA (ajuste dinâmico): mantém a luta no "flow" — bots afiam se os humanos estão
+  // na frente e aliviam se estão atrás. Modulação suave, presa em ±18% no pico.
+  let sH = -1, sB = -1, temHumano = false;
+  for (const o of lutadores) {
+    if (o.cfg.tipo === 'cpu') sB = Math.max(sB, o.score);
+    else { temHumano = true; sH = Math.max(sH, o.score); }
+  }
+  const gap = temHumano ? Math.max(-3, Math.min(3, sH - sB)) : 0;
+  const dda = 1 + gap * 0.06 * (AJUSTES.dda ?? 1); // >1 = bots mais afiados
+  const nv = {
+    reacao: nv0.reacao / dda,
+    esquiva: Math.min(0.95, nv0.esquiva * dda * P.esquiva),
+    ataque: (nv0.ataque / dda) * P.ataque,
+    mira: nv0.mira / dda,
+  };
   const alvos = lutadores.filter((o) => o !== l && o.vivo);
   if (!alvos.length) return out;
-  let alvo = alvos[0], dAlvo = Infinity;
+  // Escolha de alvo por utilidade: o mais perto, com bônus pra quem está na beirada
+  // (ring-out fácil) — quanto a persona valoriza isso vem de P.borda.
+  let alvo = alvos[0], best = Infinity, dAlvo = Infinity;
   for (const a of alvos) {
-    const ap = a.rag.parts.pelvis.translation();
-    const d = Math.hypot(ap.x - me.x, ap.z - me.z);
-    if (d < dAlvo) { dAlvo = d; alvo = a; }
+    const q = a.rag.parts.pelvis.translation();
+    const d = Math.hypot(q.x - me.x, q.z - me.z);
+    const aR = Math.hypot(q.x, q.z);
+    const util = d - Math.max(0, aR - 2.4) * 0.6 * P.borda;
+    if (util < best) { best = util; alvo = a; dAlvo = d; }
   }
   const ap = alvo.rag.parts.pelvis.translation();
   let dx = ap.x - me.x, dz = ap.z - me.z;
+  // Ofensiva de ring-out: se o alvo está perto da beirada, o bot busca o lado de DENTRO
+  // dele (entre o alvo e o centro) pra que o soco jogue o alvo pra fora da arena.
+  const apR = Math.hypot(ap.x, ap.z);
+  const alvoNaBorda = apR > 2.6;
+  if (alvoNaBorda && dAlvo < 2.4) {
+    // recuo pequeno (≤0.35m) pro lado de dentro: fica center-side MAS ainda fecha pra socar
+    const off = Math.min(0.35, 0.25 * P.borda);
+    const rec = off / Math.max(0.001, apR);
+    dx = ap.x * (1 - rec) - me.x;
+    dz = ap.z * (1 - rec) - me.z;
+  }
   // fugir da bola de demolição em velocidade
   for (const b of mapa.bolas) {
     const bp = b.translation();
@@ -1924,7 +1964,7 @@ function botInput(l) {
     return out;
   }
   if (mapa.armas && mapa.armas.length && !l.rag.grabJoints.some((g) => g) && rC < 3.4) {
-    let aw = null, ad = 3.6; // raio de busca maior: os bots correm atrás da arma
+    let aw = null, ad = 3.6 * P.arma; // raio de busca (persona "fominha de arma" busca de mais longe)
     for (const a of mapa.armas) { const q = a.body.translation(); const d = Math.hypot(q.x - me.x, q.z - me.z); if (d < ad) { ad = d; aw = a; } }
     if (aw) { const q = aw.body.translation(); const wx = q.x - me.x, wz = q.z - me.z, wl = Math.hypot(wx, wz) || 1; out.move.x = wx / wl; out.move.z = wz / wl; if (ad < 0.85) out.grab = true; return out; }
   }
@@ -1944,7 +1984,7 @@ function botInput(l) {
   }
   // decidir soco ou agarrão quando chega perto
   if (dAlvo < 0.95 && simNow > (l._botCd ?? 0)) {
-    if (Math.random() < 0.55) {
+    if (Math.random() < (alvoNaBorda ? 0.85 : 0.55)) { // alvo na beirada: prioriza o soco que empurra pra fora
       out.punch = true;
       l._botCd = simNow + (0.9 + Math.random() * 0.7) * nv.ataque;
     } else {

@@ -86,6 +86,7 @@ export function initEditor(refs) {
   // ---- JOGO ----
   secao('Jogo');
   slider('forcaSoco', 'Força do soco', 0.2, 3, 0.05, () => AJUSTES.forcaSoco, (v) => AJUSTES.forcaSoco = v);
+  slider('dda', 'IA adaptativa (DDA)', 0, 2, 0.05, () => AJUSTES.dda, (v) => AJUSTES.dda = v);
 
   // guarda os padrões pra resetar
   const padroes = controles.map((c) => ({ c, v: c.ler() }));

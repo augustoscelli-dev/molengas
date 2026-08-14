@@ -3,4 +3,5 @@
 export const AJUSTES = {
   forcaSoco: 1,   // multiplicador global da pancada (além do Kaiju/Jaeger)
   shake: 1,       // intensidade do tremor de câmera
+  dda: 1,         // força do ajuste dinâmico de dificuldade dos bots (0 = desliga)
 };
