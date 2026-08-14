@@ -6,6 +6,8 @@ import { SKINS, getFaceTexture, toonMat, addOutline, vinilMat } from './skins.js
 import { som, initSom } from './som.js';
 import { readGamepad, mergeInput } from './gamepad.js';
 import { initTouch, readTouch, touchAtivo } from './touch.js';
+import { AJUSTES } from './ajustes.js';
+import { initEditor } from './editor.js';
 import { GLTFLoader } from '../libs/jsm/loaders/GLTFLoader.js';
 import { EffectComposer } from '../libs/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from '../libs/jsm/postprocessing/RenderPass.js';
@@ -3053,7 +3055,7 @@ function frameOnline(t, fdt) {
   camPos.lerp(target, 0.05);
   camera.position.copy(camPos);
   camera.lookAt(midX * 0.6, 0.8, midZ * 0.3);
-  const shake = trauma * trauma * 0.26;
+  const shake = trauma * trauma * 0.26 * (AJUSTES.shake || 1);
   camera.position.x += Math.sin(t * 0.061) * shake;
   camera.position.y += Math.cos(t * 0.047) * shake * 0.7;
   renderCena();
@@ -3381,7 +3383,7 @@ function frame(t) {
     camera.position.copy(camPos);
     camera.lookAt(midX * 0.6, 0.8, midZ * 0.3);
   }
-  const shake = trauma * trauma * 0.26;
+  const shake = trauma * trauma * 0.26 * (AJUSTES.shake || 1);
   camera.position.x += Math.sin(t * 0.061) * shake;
   camera.position.y += Math.cos(t * 0.047) * shake * 0.7;
 
@@ -3393,6 +3395,8 @@ function frame(t) {
 // ---------- Início ----------
 setMapa(parseInt(PARAMS.get('mapa'), 10) || 0);
 initTouch();
+// Editor ao vivo (tecla ` abre): ajusta câmera, luz, brilho e força em tempo real
+initEditor({ camera, r3, scene, sun, hemi, rim, bloomPass });
 // Botão "JOGAR ONLINE" no menu — funciona com qualquer link (não precisa de ?servidor=1)
 $('btn-online')?.addEventListener('click', () => { if (!online) iniciarOnline(); });
 if (PARAMS.has('servidor')) {

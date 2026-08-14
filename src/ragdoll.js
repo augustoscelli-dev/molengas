@@ -1,6 +1,7 @@
 // Ragdoll ativo (física pura, sem DOM/three) — recebe o módulo RAPIER e o world.
 // O boneco fica em pé por "molas de marionete": uma corda invisível puxa a cabeça
 // pra cima e o quadril flutua na altura certa. Nocaute = desligar as molas.
+import { AJUSTES } from './ajustes.js';
 
 export const PARTS = [
   { name: 'pelvis',    shape: 'capsule', hh: 0.06, r: 0.14,  off: [0, 0.95, 0],      mass: 6 },
@@ -501,7 +502,7 @@ export class Ragdoll {
               if (d < alc) {
                 const strong = pname === 'head';
                 // forcaSoco = quão forte ESTE lutador bate; resistencia = quanto o RIVAL aguenta
-                const kb = (this.forcaSoco || 1) * (this.buffForca || 1) / (rival.resistencia || 1);
+                const kb = (this.forcaSoco || 1) * (this.buffForca || 1) * (AJUSTES.forcaSoco || 1) / (rival.resistencia || 1);
                 const fator = (this._voadora ? 1.35 : 1) * (this._socoFraco ? 0.55 : 1) * (this._chute ? 1.3 : 1) * kb;
                 tb.applyImpulse({
                   x: dir[0] * (strong ? 6.5 : 5) * fator,
