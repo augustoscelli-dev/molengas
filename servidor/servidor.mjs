@@ -275,7 +275,20 @@ function slotsLivres() {
   for (let s = 0; s < capSala(); s++) if (!usados.has(s)) livres.push(s);
   return livres;
 }
-function criarJogador(ws, skin, ehKaiju = false) {
+// Índices das fantasias jogáveis no cliente (espelha src/skins.js: 14=Jaeger, 15=Kaiju)
+const SKIN_JAEGER = 14, SKIN_KAIJU = 15;
+// Apelido seguro: só letras/números/espaço e uns símbolos, máx 12 chars
+function limparNome(n) {
+  const s = String(n ?? '').replace(/[^\p{L}\p{N} _.\-!]/gu, '').trim().slice(0, 12).trim();
+  return s || null;
+}
+// Broadcast dos apelidos (JSON leve, só quando o elenco muda — fora do snapshot binário)
+function enviarNomes() {
+  const ns = [...jogadores.values()].map((j) => [j.slot, j.nome]);
+  const pkt = JSON.stringify({ t: 'nomes', ns });
+  for (const j of jogadores.values()) if (j.ws.readyState === 1) j.ws.send(pkt);
+}
+function criarJogador(ws, skin, ehKaiju = false, nome = null) {
   const livres = slotsLivres();
   if (!livres.length) return null;
   const slot = livres[0];
@@ -288,7 +301,7 @@ function criarJogador(ws, skin, ehKaiju = false) {
     owner, onCollider: (col) => { ownerByHandle.set(col.handle, owner); handles.push(col.handle); },
   });
   rag.props = props;
-  const j = { ws, slot, skin: skin | 0, ehKaiju: !!ehKaiju, rag, input: { ...IDLE }, vivo: estado === 'lobby', score: 0, handles };
+  const j = { ws, slot, skin: skin | 0, ehKaiju: !!ehKaiju, nome: limparNome(nome) || `JOGADOR ${slot + 1}`, rag, input: { ...IDLE }, vivo: estado === 'lobby', score: 0, handles };
   jogadores.set(ws, j);
   refazerRivais();
   atualizarPropsDosRags(); // inclui as armas já dropadas nos props agarráveis
@@ -550,10 +563,18 @@ wss.on('connection', (ws) => {
     if (!m || typeof m !== 'object') return;
     try {
       if (m.t === 'entrar' && !jogadores.has(ws)) {
-        const j = criarJogador(ws, m.skin, m.kaiju);
+        const j = criarJogador(ws, m.skin, m.kaiju, m.nome);
         if (!j) { ws.send(JSON.stringify({ t: 'cheio' })); ws.close(); return; }
         ws.send(JSON.stringify({ t: 'oi', slot: j.slot }));
-        console.log(`+ jogador ${j.slot + 1} entrou (${jogadores.size} na sala)`);
+        enviarNomes();
+        console.log(`+ ${j.nome} entrou (${jogadores.size} na sala)`);
+      } else if (m.t === 'lutador') {
+        // qualquer jogador troca o PRÓPRIO lutador (robô ↔ monstro) no lobby/fim
+        const j = jogadores.get(ws);
+        if (j && (estado === 'lobby' || estado === 'fim')) {
+          j.ehKaiju = !j.ehKaiju;
+          j.skin = j.ehKaiju ? SKIN_KAIJU : SKIN_JAEGER;
+        }
       } else if (m.t === 'input') {
         const j = jogadores.get(ws);
         if (j) {
@@ -586,6 +607,7 @@ wss.on('connection', (ws) => {
   });
   ws.on('close', () => {
     removerJogador(ws);
+    enviarNomes();
     console.log(`- jogador saiu (${jogadores.size} na sala)`);
   });
 });

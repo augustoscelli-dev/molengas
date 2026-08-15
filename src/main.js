@@ -2107,6 +2107,33 @@ const voceTex = texturaCanvas(128, (g) => {
   g.fillStyle = '#ffe04a'; g.fill(); g.stroke();
 });
 
+// Plaquinha com o apelido do jogador (online), presa na cabeça do boneco.
+// Sprite = sempre de frente pra câmera; vai embora junto com o visual (é filha da cabeça).
+function nomeTexCanvas(nome) {
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 64;
+  const g = c.getContext('2d');
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.font = '700 30px "Fredoka", "Segoe UI", system-ui, sans-serif';
+  g.lineJoin = 'round'; g.strokeStyle = 'rgba(20,12,40,.9)'; g.lineWidth = 7;
+  g.strokeText(nome, 128, 34); g.fillStyle = '#ffffff'; g.fillText(nome, 128, 34);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+function garantirNomeSprite(v, slot) {
+  const nome = (online.nomes && online.nomes.get(slot)) || '';
+  if (v._nomeTxt === nome) return;
+  v._nomeTxt = nome;
+  if (v._nomeSpr) { v._nomeSpr.parent?.remove(v._nomeSpr); v._nomeSpr.material.map?.dispose(); v._nomeSpr.material.dispose(); v._nomeSpr = null; }
+  if (!nome || !v.meshes?.head) return;
+  const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: nomeTexCanvas(nome), transparent: true, depthWrite: false, fog: false }));
+  spr.scale.set(0.95, 0.24, 1);
+  spr.position.set(0, 0.42, 0);
+  v.meshes.head.add(spr);
+  v._nomeSpr = spr;
+}
+
 const efeitos = [];
 function spawnFx(tex, pos, opts) {
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
@@ -2686,10 +2713,40 @@ let online = null;
 
 function iniciarOnline() {
   $('selecao').style.display = 'none';
-  online = { ws: null, slot: null, visuais: new Map(), armasVis: new Map(), powerVis: new Map(), buf: [], msgAtual: null, jaeger: false, forcarGominha: false, melhorPend: null, faseFinal: null, desconectou: false, inputTimer: null, aguardando: false, reconTimer: null };
+  online = { ws: null, slot: null, visuais: new Map(), armasVis: new Map(), powerVis: new Map(), buf: [], msgAtual: null, jaeger: false, forcarGominha: false, melhorPend: null, faseFinal: null, desconectou: false, inputTimer: null, aguardando: false, reconTimer: null, nomes: new Map(), nome: '' };
   online.marcador = new THREE.Sprite(new THREE.SpriteMaterial({ map: voceTex, transparent: true, depthWrite: false, fog: false }));
   online.marcador.scale.setScalar(0.55); online.marcador.visible = false; scene.add(online.marcador);
-  conectarWS(); // conecta (e reconecta sozinho enquanto espera vaga)
+  pedirApelido(); // pergunta o apelido (1x, fica salvo) e só então conecta
+
+  // Telinha de apelido: input + entrar. Salva em localStorage pra próxima vez.
+  function pedirApelido() {
+    if (PARAMS.has('nome')) { // ?nome=X pula a telinha (links diretos e testes)
+      online.nome = (PARAMS.get('nome') || '').slice(0, 12);
+      conectarWS();
+      return;
+    }
+    const salvo = (store.get('wobblers_nome') || '').slice(0, 12);
+    const ov = document.createElement('div');
+    ov.id = 'apelido-ov';
+    ov.style.cssText = `position:fixed;inset:0;z-index:40;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:rgba(11,8,26,.88);backdrop-filter:blur(4px);font-family:'Fredoka',system-ui,sans-serif;`;
+    ov.innerHTML = `
+      <div style="font-family:'Titan One','Fredoka',sans-serif;font-size:clamp(26px,6vw,40px);color:#ffd94a;text-shadow:0 3px 0 rgba(0,0,0,.4)">SEU APELIDO</div>
+      <input id="apelido-in" maxlength="12" placeholder="ex.: Guto" autocomplete="off" style="width:min(78vw,300px);padding:13px 18px;border-radius:14px;border:2px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:#fff;font:700 20px 'Fredoka',sans-serif;text-align:center;outline:none">
+      <button id="apelido-ok" type="button" style="border:0;border-radius:999px;cursor:pointer;padding:13px 40px;font:800 18px 'Titan One','Fredoka',sans-serif;color:#08201c;background:linear-gradient(180deg,#55e6c6,#16b79b);box-shadow:0 5px 0 #0c8a74">ENTRAR NA SALA</button>
+      <div style="font-size:13px;color:#b0a6c8">aparece sobre o seu boneco e no placar</div>`;
+    document.body.appendChild(ov);
+    const inp = ov.querySelector('#apelido-in');
+    inp.value = salvo; inp.focus();
+    const confirmar = () => {
+      const n = inp.value.trim().slice(0, 12);
+      online.nome = n;
+      if (n) store.set('wobblers_nome', n);
+      ov.remove();
+      conectarWS(); // conecta (e reconecta sozinho enquanto espera vaga)
+    };
+    ov.querySelector('#apelido-ok').addEventListener('click', confirmar);
+    inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') confirmar(); e.stopPropagation(); });
+  }
 
   function conectarWS() {
   if (online.reconTimer) { clearTimeout(online.reconTimer); online.reconTimer = null; }
@@ -2700,7 +2757,7 @@ function iniciarOnline() {
   ws.binaryType = 'arraybuffer'; // snapshots vêm em binário (poses Int16)
   online.ws = ws; online.desconectou = false;
   ws.addEventListener('open', () => {
-    ws.send(JSON.stringify({ t: 'entrar', skin: selCfg[0].skin, kaiju: selCfg[0].skin === IDX_KAIJU }));
+    ws.send(JSON.stringify({ t: 'entrar', skin: selCfg[0].skin, kaiju: selCfg[0].skin === IDX_KAIJU, nome: online.nome }));
     showMsg('NA SALA! 🌐', 'quando todos entrarem, o host (1º jogador) aperta F');
     online.inputTimer = setInterval(() => {
       if (ws.readyState !== 1) return;
@@ -2736,6 +2793,7 @@ function iniciarOnline() {
       let m; try { m = JSON.parse(e.data); } catch { return; }
       if (m.t === 'oi') { online.slot = m.slot; online.aguardando = false; }
       else if (m.t === 'cheio') { online.aguardando = true; showMsg('SALA CHEIA 😔', 'esperando abrir vaga…'); }
+      else if (m.t === 'nomes') online.nomes = new Map(m.ns); // apelidos por slot
       else if (m.t === 'melhor') online.melhorPend = m; // clipe da melhor jogada
       return;
     }
@@ -2788,11 +2846,12 @@ function iniciarOnline() {
     }
   }
   addEventListener('keydown', (e) => {
-    if (online.ws.readyState !== 1) return;
+    if (!online.ws || online.ws.readyState !== 1) return;
     if (e.code === 'KeyF') online.ws.send(JSON.stringify({ t: 'comecar' }));  // host começa
     if (e.code === 'KeyM') online.ws.send(JSON.stringify({ t: 'modo' }));     // host troca modo (8/20)
     if (e.code === 'KeyN') online.ws.send(JSON.stringify({ t: 'pontos' }));   // host troca pontuação
     if (e.code === 'KeyJ') online.ws.send(JSON.stringify({ t: 'jaeger' }));   // host liga robôs x monstros
+    if (e.code === 'KeyT') online.ws.send(JSON.stringify({ t: 'lutador' }));  // QUALQUER um troca robô↔monstro
   });
 }
 
@@ -2822,15 +2881,15 @@ function mostrarVitoriaOnline(m) {
   const campeao = ord[0];
   if (!campeao) { showMsg(m.msg); return; }
   const nm = SKINS[campeao.sk % SKINS.length];
+  const nomeDe = (pl) => online.nomes.get(pl.s) || SKINS[pl.sk % SKINS.length].nome;
   const top = ord.slice(0, 6).map((pl, i) => {
-    const n = SKINS[pl.sk % SKINS.length];
     const eu = pl.s === online.slot;
-    return `<div class="vit-linha${i === 0 ? ' mvp' : ''}"><span class="vl-nome">${i === 0 ? '🏆 ' : ''}${n.nome}${eu ? ' (você)' : ''}</span><span>${pl.sc} pts</span></div>`;
+    return `<div class="vit-linha${i === 0 ? ' mvp' : ''}"><span class="vl-nome">${i === 0 ? '🏆 ' : ''}${nomeDe(pl)}${eu ? ' (você)' : ''}</span><span>${pl.sc} pts</span></div>`;
   }).join('');
   const resto = ord.length > 6 ? `<div class="vit-linha"><span class="vl-nome">+ ${ord.length - 6} jogadores</span><span></span></div>` : '';
   $('msg').innerHTML =
     `<div class="vitoria"><img class="vit-retrato" src="${ASSET(`assets/retratos/${nm.id}.jpg`)}" alt="">` +
-    `<div class="vit-tit">🏆 ${nm.nome} VENCEU!</div>` +
+    `<div class="vit-tit">🏆 ${nomeDe(campeao)} VENCEU!</div>` +
     `<div class="vit-stats">${top}${resto}</div>` +
     `<div class="vit-dica">host aperta F pra reiniciar</div></div>`;
   $('msg').style.display = 'block';
@@ -2886,6 +2945,7 @@ function receberSnap(m) {
       v = { skin: pl.sk, meshes: buildVisual(skOn, pl.s * 1.9, pl.s) };
       online.visuais.set(pl.s, v);
     }
+    garantirNomeSprite(v, pl.s); // plaquinha com o apelido sobre a cabeça
   }
   for (const [s, v] of online.visuais) {
     if (!m.pl.some((p) => p.s === s)) {
@@ -2931,15 +2991,20 @@ function receberSnap(m) {
     const mortoOp = pl.v ? '' : 'opacity:.35;';
     const ko = Math.round(((pl.d || 0) / 4) * 100); // 0..100% até o nocaute
     const quase = (pl.d || 0) >= 3.5 ? 'box-shadow:0 0 6px rgba(255,60,50,.9);' : '';
+    const apelido = online.nomes.get(pl.s) || '';
     return `<span style="display:inline-flex;flex-direction:column;align-items:center;gap:2px;${mortoOp}">` +
       `<span style="display:inline-flex;align-items:center;gap:3px"><img class="retrato" style="width:${tam}px;height:${tam}px;margin:0 2px" src="${ASSET(`assets/retratos/${nm.id}.jpg`)}" onerror="this.style.display='none'"><b>${pl.sc}</b></span>` +
+      (apelido ? `<span style="font-size:11px;font-weight:700;opacity:.9;max-width:${tam + 26}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${apelido}</span>` : '') +
       `<span style="width:${tam + 12}px;height:4px;border-radius:3px;background:rgba(0,0,0,.45);overflow:hidden;${quase}"><span style="display:block;height:100%;width:${ko}%;background:linear-gradient(90deg,#ffd34a,#ff7a2f);transition:width .1s"></span></span></span>`;
   }).join('');
   // Lobby: mostra modo + quantos na sala + o que o host aperta
   if (touchAtivo() && $('online-acoes')) $('online-acoes').style.display = (m.st === 'lobby' || m.st === 'fim') ? 'flex' : 'none';
   if ($('compartilhar')) $('compartilhar').style.display = (m.st === 'lobby' || m.st === 'fim') ? 'flex' : 'none';
   if (m.st === 'lobby') {
-    showMsg('SALA ONLINE 🌐', `${m.mo || ''} — <b>${m.na || 0}/${m.cap || 0}</b> na sala &nbsp;·&nbsp; ${m.pt || ''} &nbsp;·&nbsp; 🤖×🦖 ${m.jg ? 'SIM' : 'não'}<br>host (jogador 1): <b>F</b> começa &nbsp;·&nbsp; <b>M</b> modo &nbsp;·&nbsp; <b>N</b> pontuação &nbsp;·&nbsp; <b>J</b> robôs×monstros`);
+    // lista de quem tá na sala (até 8 nomes; depois "+N")
+    const lista = [...online.nomes.values()];
+    const quem = lista.length ? `<br>na sala: <b>${lista.slice(0, 8).join('</b> · <b>')}</b>${lista.length > 8 ? ` +${lista.length - 8}` : ''}` : '';
+    showMsg('SALA ONLINE 🌐', `${m.mo || ''} — <b>${m.na || 0}/${m.cap || 0}</b> na sala &nbsp;·&nbsp; ${m.pt || ''}${quem}<br><b>T</b> troca 🤖↔🦖 &nbsp;·&nbsp; host: <b>F</b> começa &nbsp;·&nbsp; <b>M</b> modo &nbsp;·&nbsp; <b>N</b> pontuação`);
     online.msgAtual = '__lobby__'; online._fimMostrado = false; online.faseFinal = null; online.melhorPend = null;
   } else if (m.st === 'fim') {
     if (!online._fimMostrado) {
