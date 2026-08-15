@@ -163,6 +163,19 @@ function restaurarAmbiente() {
   scene.fog.color.setHex(A.fog); scene.fog.near = A.fogNear; scene.fog.far = A.fogFar;
   r3.toneMappingExposure = A.expo;
 }
+// Identidade visual por arena: sobrescreve só o que o mapa pedir (o resto fica padrão).
+// setMapa restaura o AMBIENTE_PADRAO antes de cada build, então não vaza entre mapas.
+function climaMapa(o) {
+  if (o.ceu != null) hemi.color.setHex(o.ceu);
+  if (o.chao != null) hemi.groundColor.setHex(o.chao);
+  if (o.hemiInt != null) hemi.intensity = o.hemiInt;
+  if (o.sol != null) sun.color.setHex(o.sol);
+  if (o.solInt != null) sun.intensity = o.solInt;
+  if (o.fog != null) scene.fog.color.setHex(o.fog);
+  if (o.fogNear != null) scene.fog.near = o.fogNear;
+  if (o.fogFar != null) scene.fog.far = o.fogFar;
+  if (o.expo != null) r3.toneMappingExposure = o.expo;
+}
 
 // Textura do tablado (usada pelos mapas)
 const deckTex = makeDeckTexture();
@@ -672,6 +685,7 @@ const MAPAS = [
   {
     nome: 'GANGORRA',
     build(m) {
+      climaMapa({ ceu: 0xffd8e8, chao: 0x4a2a3a, fog: 0x2a1435, sol: 0xffd0b0, solInt: 1.45 }); // entardecer rosa
       // Plataforma inteira apoiada num eixo central — o peso inclina
       const base = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, -0.3, 0));
       const plat = world.createRigidBody(
@@ -714,6 +728,7 @@ const MAPAS = [
   {
     nome: 'QUEIJO',
     build(m) {
+      climaMapa({ ceu: 0xfff3c0, chao: 0x5a4410, fog: 0x3a2c0e, sol: 0xffe28a, solInt: 1.5 }); // banho de queijo
       // Ilhas com buracos entre elas — cuidado onde pisa
       const matQ = new THREE.MeshStandardMaterial({ map: texQueijo, roughness: 0.8 });
       const pads = [
@@ -739,6 +754,7 @@ const MAPAS = [
   {
     nome: 'GELO',
     build(m) {
+      climaMapa({ ceu: 0xd8f0ff, chao: 0x1c3a4a, fog: 0x16283a, sol: 0xcfe8ff, solInt: 1.35, expo: 1.05 }); // frio azulado
       // Pista escorregadia: atrito quase zero + tração reduzida
       chaoFixo(m, 5.5, 4, new THREE.MeshStandardMaterial({ map: texGelo, roughness: 0.15 }), 0.03);
       m.controle = 0.35;
@@ -750,6 +766,7 @@ const MAPAS = [
   {
     nome: 'MORTE SÚBITA',
     build(m) {
+      climaMapa({ ceu: 0xffb0a0, chao: 0x401010, fog: 0x330d0d, sol: 0xff8a70, solInt: 1.4, expo: 1.08 }); // vermelho tenso
       // A plataforma encolhe a cada round
       const mat = new THREE.MeshStandardMaterial({ map: deckTex, roughness: 0.85 });
       let chao = null;
@@ -788,6 +805,7 @@ const MAPAS = [
   {
     nome: 'MARTELO',
     build(m) {
+      climaMapa({ ceu: 0xd0b8ff, chao: 0x2a1440, fog: 0x241040, sol: 0xe8d0ff, solInt: 1.45 }); // arcade roxo
       chaoFixo(m, 5.5, 4, new THREE.MeshStandardMaterial({ map: deckTex, roughness: 0.85 }));
       // Braço giratório varrendo a arena na altura da cintura
       const poste = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, 0, 0));
@@ -843,6 +861,7 @@ const MAPAS = [
     nome: 'SUMÔ',
     semSoco: true,
     build(m) {
+      climaMapa({ ceu: 0xffe2b0, chao: 0x3a2a10, fog: 0x2e2410, sol: 0xffd080, solInt: 1.5 }); // templo dourado
       // Ringue redondo que encolhe — sem soco: empurra, agarra e arremessa
       const mat = new THREE.MeshStandardMaterial({ map: texSumo, roughness: 0.8 });
       let chao = null;
@@ -878,6 +897,7 @@ const MAPAS = [
   {
     nome: 'BATATA QUENTE',
     build(m) {
+      climaMapa({ ceu: 0xffc9a0, chao: 0x3a1c08, fog: 0x2e1608, sol: 0xffa060, solInt: 1.4 }); // alerta laranja
       chaoFixo(m, 4.6, 3.5, new THREE.MeshStandardMaterial({ map: deckTex, roughness: 0.85 }));
       // A bomba passa de mão em mão — some longe dela quando piscar!
       const bomba = world.createRigidBody(
@@ -943,6 +963,7 @@ const MAPAS = [
     nome: 'CIDADE',
     fundo: 'assets/fundo-cidade.jpg',
     build(m) {
+      climaMapa({ ceu: 0x9fb0ff, chao: 0x101430, fog: 0x0d1230, sol: 0xaCC4ff, solInt: 1.2, expo: 1.02 }); // noite neon
       // Robôs gigantes na cidade: os prédios são pilhas de blocos com
       // física — desabam, voam com socos e viram armas
       const asfalto = (() => {
@@ -2376,6 +2397,21 @@ function spawnFx(tex, pos, opts) {
     grav: opts.grav ?? 0, giro: opts.giro ?? 0, cresce: opts.cresce ?? 0, teto: opts.teto ?? 9,
   });
 }
+// Fogos de artifício (ring-out): 3 explosões coloridas no alto da arena
+function fogosFx() {
+  const CORES = [0xff5c8a, 0x7ee0ff, 0xffd94a, 0x7ed957, 0xc490ff];
+  for (let b = 0; b < 3; b++) {
+    const cx = (Math.random() * 2 - 1) * 3, cz = (Math.random() * 2 - 1) * 2, cy = 3.1 + Math.random() * 1.3;
+    const cor = CORES[(Math.random() * CORES.length) | 0];
+    for (let i = 0; i < 14; i++) {
+      const a = (i / 14) * Math.PI * 2, v = 2.1 + Math.random() * 1.3;
+      spawnFx(starTex, { x: cx, y: cy, z: cz }, {
+        escala: 0.2, vida: 0.85 + Math.random() * 0.35, grav: 2.2, giro: 4, cor,
+        vx: Math.cos(a) * v, vy: Math.sin(a) * v * 0.8, vz: (Math.random() - 0.5) * 0.9,
+      });
+    }
+  }
+}
 function burstEstrelas(pos) {
   for (let i = 0; i < 6; i++) {
     const a = (i / 6) * Math.PI * 2 + 0.5;
@@ -2886,6 +2922,7 @@ function handleRounds(now) {
         l.rag.stats.quedas++;
         som.queda();
         som.vozChoro(VOZES[l.slot]);
+        fogosFx(); // a plateia celebra o ring-out 🎆
         trauma = 1; hitStop = Math.max(hitStop, 0.11); // baque forte no nocaute/ring-out
         l.rag.rivals = [];
         cairam.push(l);
