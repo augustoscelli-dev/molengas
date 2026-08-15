@@ -526,6 +526,7 @@ function chaoFixo(m, hx, hz, mat, atrito = 0.8) {
   deck.receiveShadow = true;
   scene.add(deck);
   m.meshes.push(deck);
+  m._deck = deck; // referência pro online (variantes de arena mudam o chão)
   return g;
 }
 
@@ -3119,6 +3120,7 @@ function iniciarOnline() {
     if (e.code === 'KeyN') online.ws.send(JSON.stringify({ t: 'pontos' }));   // host troca pontuação
     if (e.code === 'KeyJ') online.ws.send(JSON.stringify({ t: 'jaeger' }));   // host liga robôs x monstros
     if (e.code === 'KeyT') online.ws.send(JSON.stringify({ t: 'lutador' }));  // QUALQUER um troca robô↔monstro
+    if (e.code === 'KeyB') online.ws.send(JSON.stringify({ t: 'arena' }));    // host troca a variante de arena
   });
 }
 
@@ -3201,6 +3203,22 @@ function receberSnap(m) {
     online.jaeger = !!m.jg;
     aplicarEstiloOnline();
   }
+  // Variante de arena (an) + escala do chão que encolhe (as)
+  if (m.an && m.an !== online.arenaNome && mapa && mapa._deck) {
+    online.arenaNome = m.an;
+    if (!mapa._deckMatOrig) mapa._deckMatOrig = mapa._deck.material;
+    mapa._deck.material = /GELO/.test(m.an)
+      ? new THREE.MeshStandardMaterial({ map: texGelo, roughness: 0.15 })
+      : mapa._deckMatOrig;
+  }
+  if (m.as != null && mapa && mapa._deck) {
+    if (online.arenaEscala != null && m.as < online.arenaEscala - 0.01) {
+      avisoOnline('😱 A ARENA ENCOLHEU!'); som.selecionar?.(); trauma = Math.min(1, trauma + 0.2);
+    }
+    online.arenaEscala = m.as;
+    mapa._deck.scale.x += (m.as - mapa._deck.scale.x) * 0.2; // encolhe suave no visual
+    mapa._deck.scale.z += (m.as - mapa._deck.scale.z) * 0.2;
+  }
   for (const pl of m.pl) {
     let v = online.visuais.get(pl.s);
     if (!v || v.skin !== pl.sk) {
@@ -3271,7 +3289,7 @@ function receberSnap(m) {
     // lista de quem tá na sala (até 8 nomes; depois "+N")
     const lista = [...online.nomes.values()];
     const quem = lista.length ? `<br>na sala: <b>${lista.slice(0, 8).join('</b> · <b>')}</b>${lista.length > 8 ? ` +${lista.length - 8}` : ''}` : '';
-    showMsg('SALA ONLINE 🌐', `${m.mo || ''} — <b>${m.na || 0}/${m.cap || 0}</b> na sala &nbsp;·&nbsp; ${m.pt || ''}${quem}<br><b>T</b> troca 🤖↔🦖 &nbsp;·&nbsp; host: <b>F</b> começa &nbsp;·&nbsp; <b>M</b> modo &nbsp;·&nbsp; <b>N</b> pontuação`);
+    showMsg('SALA ONLINE 🌐', `${m.mo || ''} — <b>${m.na || 0}/${m.cap || 0}</b> na sala &nbsp;·&nbsp; ${m.pt || ''} &nbsp;·&nbsp; arena: <b>${m.an || 'CLÁSSICA'}</b>${quem}<br><b>T</b> troca 🤖↔🦖 &nbsp;·&nbsp; host: <b>F</b> começa &nbsp;·&nbsp; <b>M</b> modo &nbsp;·&nbsp; <b>N</b> pontuação &nbsp;·&nbsp; <b>B</b> arena`);
     online.msgAtual = '__lobby__'; online._fimMostrado = false; online.faseFinal = null; online.melhorPend = null;
   } else if (m.st === 'fim') {
     if (!online._fimMostrado) {

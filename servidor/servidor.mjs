@@ -68,12 +68,33 @@ function spawnFor(slot, total) {
 
 // Arena reconstruível: a escala muda por modo (loucura = arena maior).
 let chao = null, ancora = null, bola = null, caixotes = [], props = [];
+// Variantes de arena do online: o host troca no lobby (tecla B / botão)
+const ARENAS_ON = [
+  { id: 'classica', nome: 'CLÁSSICA' },
+  { id: 'gelo', nome: 'GELO 🧊' },      // chão escorregadio + tração reduzida
+  { id: 'encolhe', nome: 'ENCOLHE 😱' }, // o chão encolhe durante o round
+];
+let arenaIdx = 0;
+let escalaEncolhe = 1;
+let proxEncolheAt = 0;
+let chaoCol = null;
+function setChaoEscala(k) { // troca só o collider do chão (não mexe na bola/caixotes)
+  if (chaoCol) world.removeCollider(chaoCol, true);
+  const atrito = ARENAS_ON[arenaIdx].id === 'gelo' ? 0.03 : 0.8;
+  chaoCol = world.createCollider(RAPIER.ColliderDesc.cuboid(arenaHX * k, 0.3, arenaHZ * k).setFriction(atrito).setCollisionGroups(GROUND_GROUPS), chao);
+}
+function aplicarControleArena() { // tração por variante (gelo derrapa)
+  const c = ARENAS_ON[arenaIdx].id === 'gelo' ? 0.4 : 1;
+  for (const j of jogadores.values()) j.rag.controle = c;
+}
 function montarArena(scale) {
   for (const b of [chao, ancora, bola, ...caixotes]) if (b) world.removeRigidBody(b);
   caixotes = [];
+  chaoCol = null;
+  escalaEncolhe = 1;
   arenaHX = ARENA.halfX * scale; arenaHZ = ARENA.halfZ * scale;
   chao = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, -0.3, 0));
-  world.createCollider(RAPIER.ColliderDesc.cuboid(arenaHX, 0.3, arenaHZ).setFriction(0.8).setCollisionGroups(GROUND_GROUPS), chao);
+  setChaoEscala(1);
   ancora = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, 6.2, 0));
   bola = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(0, 1.8, 0).setCcdEnabled(true).setLinearDamping(0.05).setAngularDamping(0.3));
   world.createCollider(RAPIER.ColliderDesc.ball(0.55).setMass(45).setFriction(0.4).setRestitution(0.3).setCollisionGroups(PROP_GROUPS), bola);
@@ -89,6 +110,7 @@ function montarArena(scale) {
   }
   props = [bola, ...caixotes];
   for (const j of jogadores.values()) j.rag.props = props;
+  aplicarControleArena();
 }
 function resetProps() {
   bola.setTranslation({ x: 0, y: 1.8, z: 0 }, true);
@@ -305,6 +327,7 @@ function criarJogador(ws, skin, ehKaiju = false, nome = null) {
   jogadores.set(ws, j);
   refazerRivais();
   atualizarPropsDosRags(); // inclui as armas já dropadas nos props agarráveis
+  aplicarControleArena(); // tração da variante (gelo) vale pra quem entra também
   return j;
 }
 function removerJogador(ws) {
@@ -345,6 +368,8 @@ function startIntro(roundN) {
   estadoAte = now + 0.9;
   limparArmas(); limparPowerups(); // arena limpa a cada round
   replayBufS = []; // zera o buffer de replay entre rounds (evita clipe cruzando o reset)
+  if (escalaEncolhe !== 1) { escalaEncolhe = 1; setChaoEscala(1); } // chão volta inteiro a cada round
+  proxEncolheAt = 0;
   msg = 'ROUND ' + roundN;
 }
 function comecarPartida() {
@@ -474,6 +499,16 @@ setInterval(() => {
   world.step(filaEventos, hooks); // hook = filtro de contato por dono (sem auto-colisão)
   if (estado === 'luta') {
     tickArmas(); tickPowerups(); // armas + power-ups
+    // Variante ENCOLHE: o chão diminui em degraus durante o round
+    if (ARENAS_ON[arenaIdx].id === 'encolhe') {
+      if (!proxEncolheAt) proxEncolheAt = now + 9;
+      if (now > proxEncolheAt && escalaEncolhe > 0.45) {
+        escalaEncolhe = Math.max(0.45, escalaEncolhe * 0.82);
+        setChaoEscala(escalaEncolhe);
+        ev('encolhe');
+        proxEncolheAt = now + 9;
+      }
+    }
     // bolada — só durante a luta e só em quem ainda está vivo
     const bv = bola.linvel();
     if (Math.hypot(bv.x, bv.y, bv.z) > 3) {
@@ -502,6 +537,7 @@ setInterval(() => {
     const meta = {
       t: 's', st: estado, msg,
       mo: MODOS_SALA[salaModo].nome, cap: capSala(), na: jogadores.size, pt: PONTOS[pontoIdx].n, jg: salaJaeger ? 1 : 0,
+      an: ARENAS_ON[arenaIdx].nome, as: q2(escalaEncolhe),
       ev: eventos.splice(0),
       pl: js.map((j) => ({ s: j.slot, sk: j.skin, v: j.vivo ? 1 : 0, at: j.rag.isStunned(now) ? 1 : 0, sc: j.score, d: Math.round(j.rag.dano * 10) / 10 })),
       pr: props.map((b) => { const tr = b.translation(), ro = b.rotation(); return [q(tr.x), q(tr.y), q(tr.z), q(ro.x), q(ro.y), q(ro.z), q(ro.w)]; }),
@@ -600,6 +636,13 @@ wss.on('connection', (ws) => {
       } else if (m.t === 'jaeger') {
         const j = jogadores.get(ws);
         if (j && j === host() && (estado === 'lobby' || estado === 'fim')) salaJaeger = !salaJaeger;
+      } else if (m.t === 'arena') {
+        const j = jogadores.get(ws);
+        if (j && j === host() && (estado === 'lobby' || estado === 'fim')) {
+          arenaIdx = (arenaIdx + 1) % ARENAS_ON.length;
+          montarArena(MODOS_SALA[salaModo].arena); // reaplica atrito/escala da variante
+          console.log('arena ->', ARENAS_ON[arenaIdx].nome);
+        }
       }
     } catch (e) {
       console.error('erro ao tratar mensagem do cliente:', e && e.message);

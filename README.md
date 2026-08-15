@@ -57,7 +57,7 @@ PULO / ESQUIVA** na direita. Ao abrir, já cai numa luta rápida contra um bot.
 1. **Escolha a fantasia:** J1 com **A/D**, J2 com **←/→**. Confirme com **F** (J1)
    e **K** (J2). Aperte **C** pra adicionar um **bot 🤖**.
 2. **Tela de mapa** (depois de todos confirmarem):
-   - **A / D** — troca o **mapa** (são 10)
+   - **A / D** — troca o **mapa** (são 16!)
    - **N** — troca o **modo** (Melhor de 5 · Melhor de 3 · Morte Súbita · CAOS ⚔️)
    - **V** — **dificuldade** dos bots (Fácil · Médio · Difícil)
    - **J** — liga o **Jaeger × Kaiju** (robô × monstro, com força assimétrica)
@@ -93,13 +93,15 @@ De tempos em tempos caem coisas na arena (mais rápido no modo **CAOS**):
    as dependências sozinho).
 2. Ele mostra um endereço tipo `http://192.168.x.x:8877/?servidor=1`. Cada jogador
    abre esse endereço no navegador do seu aparelho (PC ou celular, na mesma rede).
-3. **Lobby** — o **host** (1º a entrar) escolhe e começa:
+3. Ao entrar você digita seu **apelido** (aparece sobre o boneco e no placar).
+4. **Lobby** — **qualquer um** aperta **T** pra trocar seu lutador (🤖 robô ↔ 🦖
+   monstro). O **host** (1º a entrar) escolhe e começa:
    - **F** — começa a partida
    - **M** — modo de sala: **Normal (até 8)** ou **LOUCURA (até 20)** 🤪
    - **N** — pontuação (Melhor de 5/3, Morte Súbita)
-   - **J** — **robôs × monstros** (par = Jaeger, ímpar = Kaiju)
+   - **B** — arena: **CLÁSSICA**, **GELO 🧊** (escorrega) ou **ENCOLHE 😱** (o chão diminui!)
    - No **celular** esses viram **botões na tela**.
-4. Uma **seta "VOCÊ"** fica sobre o seu boneco pra você se achar no meio da bagunça.
+5. Uma **seta "VOCÊ"** fica sobre o seu boneco pra você se achar no meio da bagunça.
 
 > **Sala cheia?** Se você abrir o link e a sala estiver lotada (ex.: chegou
 > antes do host abrir o modo **até 20**), você fica numa **sala de espera** e
