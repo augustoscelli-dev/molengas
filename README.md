@@ -57,8 +57,9 @@ PULO / ESQUIVA** na direita. Ao abrir, já cai numa luta rápida contra um bot.
 1. **Escolha a fantasia:** J1 com **A/D**, J2 com **←/→**. Confirme com **F** (J1)
    e **K** (J2). Aperte **C** pra adicionar um **bot 🤖**.
 2. **Tela de mapa** (depois de todos confirmarem):
-   - **A / D** — troca o **mapa** (são 16!)
-   - **N** — troca o **modo** (Melhor de 5 · Melhor de 3 · Morte Súbita · CAOS ⚔️)
+   - **A / D** — troca o **mapa** (são 16!) · **X** sorteia 🎲
+   - **N** — modo (Melhor de 5 · Melhor de 3 · Morte Súbita · CAOS ⚔️ · REI DO MORRO 👑)
+   - **G** — modificador de festa (LUA 🌙 · TURBO ⚡ · FORTÕES 💪)
    - **V** — **dificuldade** dos bots (Fácil · Médio · Difícil)
    - **J** — liga o **Jaeger × Kaiju** (robô × monstro, com força assimétrica)
    - **F** — **começa!**
@@ -100,6 +101,8 @@ De tempos em tempos caem coisas na arena (mais rápido no modo **CAOS**):
    - **M** — modo de sala: **Normal (até 8)** ou **LOUCURA (até 20)** 🤪
    - **N** — pontuação (Melhor de 5/3, Morte Súbita)
    - **B** — arena: **CLÁSSICA**, **GELO 🧊** (escorrega) ou **ENCOLHE 😱** (o chão diminui!)
+   - **H** — **REI DO MORRO 👑** (dominar o centro por 10s fecha o round)
+   - **1-4** — provocações 😂💀😱❤️ · **T** troca seu lutador
    - No **celular** esses viram **botões na tela**.
 5. Uma **seta "VOCÊ"** fica sobre o seu boneco pra você se achar no meio da bagunça.
 

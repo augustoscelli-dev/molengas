@@ -32,6 +32,9 @@ const MODOS_SALA = {
 const ORDEM_MODOS = ['normal', 'loucura'];
 let salaModo = process.argv.includes('--loucura') ? 'loucura' : 'normal';
 const capSala = () => MODOS_SALA[salaModo].max;
+let salaMorro = false; // rei do morro 👑: dominar o centro fecha o round (host: tecla H)
+const MORRO_ALVO_S = 10;
+let morroLider = null; // [slot, segundos] pro HUD dos clientes
 let salaJaeger = true; // robôs (par) x monstros (ímpar) LIGADO por padrão; host desliga no J. Fallback de performance protege salas grandes.
 
 // Colisão: todos os players compartilham UM bit; o filtro de contato por "dono"
@@ -374,6 +377,8 @@ function startIntro(roundN) {
   replayBufS = []; // zera o buffer de replay entre rounds (evita clipe cruzando o reset)
   if (escalaEncolhe !== 1) { escalaEncolhe = 1; setChaoEscala(1); } // chão volta inteiro a cada round
   proxEncolheAt = 0;
+  for (const j of jogadores.values()) j._morroT = 0; // coroa zera por round
+  morroLider = null;
   msg = 'ROUND ' + roundN;
 }
 function comecarPartida() {
@@ -433,7 +438,7 @@ function rounds() {
       } else {
         estado = 'ponto';
         estadoAte = now + 1.4;
-        msg = winner ? 'PONTO DO JOGADOR ' + (winner.slot + 1) + '!' : 'EMPATE!';
+        msg = winner ? 'PONTO DO ' + winner.nome + '!' : 'EMPATE!';
         ev('ponto');
       }
     }
@@ -508,6 +513,20 @@ setInterval(() => {
   world.step(filaEventos, hooks); // hook = filtro de contato por dono (sem auto-colisão)
   if (estado === 'luta') {
     tickArmas(); tickPowerups(); // armas + power-ups
+    // REI DO MORRO 👑: ficar na zona central acumula; 10s fecham o round
+    if (salaMorro) {
+      const raioM = 1.25 * MODOS_SALA[salaModo].arena;
+      let lider = null;
+      for (const j of jogadores.values()) {
+        if (!j.vivo) continue;
+        const pp = j.rag.parts.pelvis.translation();
+        if (Math.hypot(pp.x, pp.z) < raioM && pp.y > -1 && !j.rag.isDowned(now)) j._morroT = (j._morroT || 0) + DT;
+        if (!lider || (j._morroT || 0) > (lider._morroT || 0)) lider = j;
+      }
+      morroLider = lider && (lider._morroT || 0) > 0.05 ? [lider.slot, Math.round(lider._morroT * 10) / 10] : null;
+      const rei = [...jogadores.values()].find((j) => j.vivo && (j._morroT || 0) >= MORRO_ALVO_S);
+      if (rei) { for (const j of jogadores.values()) if (j !== rei) j.vivo = false; ev('vitoria'); }
+    }
     // Variante ENCOLHE: o chão diminui em degraus durante o round
     if (arenaAtiva === 'encolhe') {
       if (!proxEncolheAt) proxEncolheAt = now + 9;
@@ -547,6 +566,7 @@ setInterval(() => {
       t: 's', st: estado, msg,
       mo: MODOS_SALA[salaModo].nome, cap: capSala(), na: jogadores.size, pt: PONTOS[pontoIdx].n, jg: salaJaeger ? 1 : 0,
       an: (estado === 'lobby' || estado === 'fim') ? ARENAS_ON[arenaIdx].nome : NOME_ARENA[arenaAtiva], as: q2(escalaEncolhe),
+      mr: salaMorro ? 1 : 0, kg: (salaMorro && estado === 'luta' && morroLider) ? morroLider : undefined,
       rk: (estado === 'lobby' || estado === 'fim') && rankingNoite.size
         ? [...rankingNoite.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5) : undefined,
       ev: eventos.splice(0),
@@ -655,6 +675,9 @@ wss.on('connection', (ws) => {
           montarArena(MODOS_SALA[salaModo].arena); // reaplica atrito/escala da variante
           console.log('arena ->', ARENAS_ON[arenaIdx].nome);
         }
+      } else if (m.t === 'morro') {
+        const j = jogadores.get(ws);
+        if (j && j === host() && (estado === 'lobby' || estado === 'fim')) { salaMorro = !salaMorro; console.log('morro ->', salaMorro); }
       } else if (m.t === 'grito') {
         // provocação com emoji (balão sobre a cabeça, todo mundo vê); cooldown anti-spam
         const j = jogadores.get(ws);

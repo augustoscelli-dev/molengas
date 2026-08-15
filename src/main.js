@@ -3415,6 +3415,7 @@ function iniciarOnline() {
     if (e.code === 'KeyJ') online.ws.send(JSON.stringify({ t: 'jaeger' }));   // host liga robôs x monstros
     if (e.code === 'KeyT') online.ws.send(JSON.stringify({ t: 'lutador' }));  // QUALQUER um troca robô↔monstro
     if (e.code === 'KeyB') online.ws.send(JSON.stringify({ t: 'arena' }));    // host troca a variante de arena
+    if (e.code === 'KeyH') online.ws.send(JSON.stringify({ t: 'morro' }));    // host liga o rei do morro 👑
     // provocações 😂💀😱❤️ nas teclas 1-4 (valem a qualquer momento)
     if (e.code === 'Digit1') online.ws.send(JSON.stringify({ t: 'grito', g: 0 }));
     if (e.code === 'Digit2') online.ws.send(JSON.stringify({ t: 'grito', g: 1 }));
@@ -3510,6 +3511,27 @@ function receberSnap(m) {
       ? new THREE.MeshStandardMaterial({ map: texGelo, roughness: 0.15 })
       : mapa._deckMatOrig;
   }
+  // REI DO MORRO online: anel dourado no centro + HUD do líder
+  const morroAtivo = !!m.mr && (m.st === 'luta' || m.st === 'intro');
+  if (morroAtivo && !online.morroVis) {
+    const raioM = 1.25 * (m.cap > 8 ? 1.9 : 1.2);
+    online.morroVis = new THREE.Mesh(
+      new THREE.RingGeometry(raioM - 0.16, raioM, 48),
+      new THREE.MeshBasicMaterial({ color: 0xffd94a, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false }),
+    );
+    online.morroVis.rotation.x = -Math.PI / 2; online.morroVis.position.y = 0.03;
+    scene.add(online.morroVis);
+  } else if (!morroAtivo && online.morroVis) {
+    scene.remove(online.morroVis); online.morroVis = null;
+    if ($('mapa')) $('mapa').textContent = 'MAPA: ' + MAPAS[mapaIdx].nome;
+  }
+  if (morroAtivo && $('mapa')) {
+    if (m.kg) {
+      const nomeK = online.nomes.get(m.kg[0]) || `JOGADOR ${m.kg[0] + 1}`;
+      $('mapa').textContent = `👑 ${nomeK}: ${m.kg[1].toFixed(1)}s / 10s`;
+    } else $('mapa').textContent = '👑 dominem o centro!';
+  }
+  if (online.morroVis) online.morroVis.material.opacity = 0.35 + 0.2 * Math.sin(performance.now() / 200);
   if (m.as != null && mapa && mapa._deck) {
     if (online.arenaEscala != null && m.as < online.arenaEscala - 0.01) {
       avisoOnline('😱 A ARENA ENCOLHEU!'); som.selecionar?.(); trauma = Math.min(1, trauma + 0.2);
@@ -3589,7 +3611,7 @@ function receberSnap(m) {
     const lista = [...online.nomes.values()];
     let quem = lista.length ? `<br>na sala: <b>${lista.slice(0, 8).join('</b> · <b>')}</b>${lista.length > 8 ? ` +${lista.length - 8}` : ''}` : '';
     if (m.rk && m.rk.length) quem += `<br>🏆 placar da noite: ${m.rk.map(([n, v]) => `<b>${n}</b> ${v}`).join(' &nbsp;·&nbsp; ')}`;
-    showMsg('SALA ONLINE 🌐', `${m.mo || ''} — <b>${m.na || 0}/${m.cap || 0}</b> na sala &nbsp;·&nbsp; ${m.pt || ''} &nbsp;·&nbsp; arena: <b>${m.an || 'CLÁSSICA'}</b>${quem}<br><b>T</b> troca 🤖↔🦖 &nbsp;·&nbsp; <b>1-4</b> provocam 😂 &nbsp;·&nbsp; host: <b>F</b> começa &nbsp;·&nbsp; <b>M</b> modo &nbsp;·&nbsp; <b>N</b> pontuação &nbsp;·&nbsp; <b>B</b> arena`);
+    showMsg('SALA ONLINE 🌐', `${m.mo || ''} — <b>${m.na || 0}/${m.cap || 0}</b> na sala &nbsp;·&nbsp; ${m.pt || ''} &nbsp;·&nbsp; arena: <b>${m.an || 'CLÁSSICA'}</b>${m.mr ? ' &nbsp;·&nbsp; 👑 <b>REI DO MORRO</b>' : ''}${quem}<br><b>T</b> troca 🤖↔🦖 &nbsp;·&nbsp; <b>1-4</b> provocam 😂 &nbsp;·&nbsp; host: <b>F</b> começa &nbsp;·&nbsp; <b>M</b> modo &nbsp;·&nbsp; <b>N</b> pontuação &nbsp;·&nbsp; <b>B</b> arena &nbsp;·&nbsp; <b>H</b> 👑`);
     online.msgAtual = '__lobby__'; online._fimMostrado = false; online.faseFinal = null; online.melhorPend = null;
   } else if (m.st === 'fim') {
     if (!online._fimMostrado) {
