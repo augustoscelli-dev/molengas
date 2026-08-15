@@ -38,6 +38,20 @@ const NIVEIS = [
   { nome: 'Difícil', reacao: 0.6, esquiva: 0.85, ataque: 0.7, mira: 0.28 },
 ];
 let nivelIdx = 1;
+// Modificadores de festa (tecla G na tela de mapa): bagunçam a física da partida toda.
+const MODIFS = [
+  { id: 'nenhum', nome: 'nenhum' },
+  { id: 'lua', nome: 'LUA 🌙 gravidade fraca' },
+  { id: 'turbo', nome: 'TURBO ⚡ todo mundo rápido' },
+  { id: 'fortoes', nome: 'FORTÕES 💪 socos brutais' },
+];
+let modifIdx = 0;
+function aplicarModificador() {
+  const m = MODIFS[modifIdx].id;
+  world.gravity = { x: 0, y: m === 'lua' ? -4.2 : -9.81, z: 0 };
+  AJUSTES.forcaSoco = m === 'fortoes' ? 1.55 : 1;
+  AJUSTES.turbo = m === 'turbo' ? 1.45 : 1; // consumido em aplicarClasse (tração)
+}
 // Personalidades dos bots (variedade no caos): pesos que enviesam a IA.
 //   ataque/esquiva multiplicam a cadência/defesa · borda = quanto busca ring-out · arma = fome de arma
 const PERSONAS = [
@@ -2270,7 +2284,7 @@ function aplicarClasse(rag, meshes) {
   let mul = 1; // fator de tração (agilidade)
   if (/kaiju/i.test(nome)) { rag.forcaSoco = 1.3; rag.resistencia = 1.45; mul = 0.9; }
   else if (/jaeger/i.test(nome)) { mul = 1.08; }
-  rag.controle = (mapa.controle ?? 1) * mul; // recalcula do zero (sem acumular)
+  rag.controle = (mapa.controle ?? 1) * mul * (AJUSTES.turbo || 1); // recalcula do zero (sem acumular)
 }
 
 function montarLutadores(configs) {
@@ -2450,6 +2464,19 @@ function botInput(l) {
     let aw = null, ad = 3.6 * P.arma; // raio de busca (persona "fominha de arma" busca de mais longe)
     for (const a of mapa.armas) { const q = a.body.translation(); const d = Math.hypot(q.x - me.x, q.z - me.z); if (d < ad) { ad = d; aw = a; } }
     if (aw) { const q = aw.body.translation(); const wx = q.x - me.x, wz = q.z - me.z, wl = Math.hypot(wx, wz) || 1; out.move.x = wx / wl; out.move.z = wz / wl; if (ad < 0.85) out.grab = true; return out; }
+  }
+  // SOCÃO do bot: contra alvo atordoado/caído, segura o soco (carrega) e solta o pancadão.
+  if (simNow < (l._botCargaAte ?? 0)) {
+    out.punch = true; // segue segurando — quando parar, o release dispara o socão sozinho
+    out.move.x = fx * 0.5; out.move.z = fz * 0.5; // avança devagar mirando
+    return out;
+  }
+  if (nivelIdx >= 1 && dAlvo < 2.1 && dAlvo > 0.7 && simNow > (l._botCd ?? 0)
+      && (alvo.rag.isStunned(simNow) || alvo.rag.isDowned(simNow)) && Math.random() < 0.03) {
+    l._botCargaAte = simNow + 0.78; // ~carga cheia
+    l._botCd = simNow + 2.2 * nv.ataque;
+    out.punch = true;
+    return out;
   }
   // Esquiva reativa: se o alvo armou um golpe pertinho e está encarando, o bot desvia de lado
   if (dAlvo < 1.5 && simNow > (l._botEsq ?? 0) && !l.rag.grabbedRival()) {
@@ -2812,6 +2839,7 @@ function atualizarSelecao() {
   if ($('sel-modo-nome')) $('sel-modo-nome').textContent = MODOS[modoIdx].nome;
   if ($('sel-jaeger')) $('sel-jaeger').textContent = ESTILO === 'j' ? 'SIM 🤖' : 'não';
   if ($('sel-nivel')) $('sel-nivel').textContent = NIVEIS[nivelIdx].nome;
+  if ($('sel-modif')) $('sel-modif').textContent = MODIFS[modifIdx].nome;
 }
 function checarFaseMapa() {
   const ativos = selCfg.filter((c) => c.ativo);
@@ -2828,6 +2856,8 @@ function addBot() {
   atualizarSelecao();
 }
 function mostrarSelecao() {
+  world.gravity = { x: 0, y: -9.81, z: 0 }; // desfaz modificador de festa no menu
+  AJUSTES.forcaSoco = 1; AJUSTES.turbo = 1;
   selFase = 'skins';
   for (const c of selCfg) {
     c.conf = false;
@@ -2852,6 +2882,7 @@ function iniciarLuta() {
   $('selecao').style.display = 'none';
   WIN_SCORE = MODOS[modoIdx].vitorias;   // aplica o modo escolhido
   MODO_CAOS = MODOS[modoIdx].caos;
+  aplicarModificador(); // festa: lua/turbo/fortões (ou volta ao normal)
   const configs = selCfg.filter((c) => c.ativo).map((c) => ({ ...c }));
   montarLutadores(configs);
   mapa.reset?.(true);
@@ -2957,6 +2988,7 @@ addEventListener('keydown', (e) => {
     if (e.code === 'KeyC') addBot();
     if (e.code === 'KeyN') { modoIdx = (modoIdx + 1) % MODOS.length; som.selecionar(); } // modo de jogo
     if (e.code === 'KeyV') { nivelIdx = (nivelIdx + 1) % NIVEIS.length; som.selecionar(); } // dificuldade dos bots
+    if (e.code === 'KeyG') { modifIdx = (modifIdx + 1) % MODIFS.length; som.selecionar(); } // modificador de festa
     if (e.code === 'KeyJ') alternarModelo3D(); // liga/desliga o Jaeger (preview + partida)
     if (e.code === 'KeyF') { iniciarLuta(); return; }
   }
@@ -3298,6 +3330,15 @@ function iniciarOnline() {
   } // fim de conectarWS
   $('placar').style.flexWrap = 'wrap';
   $('placar').style.gap = '2px 12px';
+  // Provocações no celular: mostra a coluninha de emojis e liga os cliques
+  if (touchAtivo() && $('touch-gritos')) {
+    $('touch-gritos').style.display = 'flex';
+    for (const btn of $('touch-gritos').querySelectorAll('[data-grito]')) {
+      btn.addEventListener('click', () => {
+        if (online.ws && online.ws.readyState === 1) online.ws.send(JSON.stringify({ t: 'grito', g: +btn.dataset.grito }));
+      });
+    }
+  }
   // "Copiar link" pra o host chamar a galera (o link já leva direto pro online)
   if ($('cp-btn') && $('cp-link')) {
     const linkOnline = `${location.origin}${location.pathname}?servidor=1`;
@@ -3974,7 +4015,12 @@ function frame(t) {
       trauma = 1; hitStop = Math.max(hitStop, 0.1);
       if (state === 'luta') considerarHighlight(l, 'ko', false); // candidato a melhor jogada
     }
-    if (p.lastPunchStartAt > (p._sSoco ?? -1)) { p._sSoco = p.lastPunchStartAt; som.soco(); som.vozSoco(VOZES[l.slot]); }
+    if (p.lastPunchStartAt > (p._sSoco ?? -1)) {
+      p._sSoco = p.lastPunchStartAt;
+      if ((p._cargaGolpe || 0) > 0.5) { som.bolada(); trauma = Math.min(1, trauma + 0.35); } // SOCÃO: baque pesado
+      else som.soco();
+      som.vozSoco(VOZES[l.slot]);
+    }
     // SOCÃO carregando: faíscas douradas crescendo nos punhos
     if ((p._carga || 0) > 0.15 && simNow > (l._cargaFxAt ?? 0)) {
       l._cargaFxAt = simNow + 0.09;

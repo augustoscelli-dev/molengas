@@ -136,6 +136,13 @@
   #cp-btn:active { transform: scale(.94); }
   #cp-btn.ok { background: #46d38a; color: #0d2a1a; }
   @media (max-width: 560px) { #compartilhar .cp-lbl { display: none; } #compartilhar .cp-link { max-width: 52vw; } }
+  /* Provocações no celular (só online): coluninha de emojis à direita, acima dos botões */
+  #touch-gritos { position: absolute; right: 24px; top: 84px; display: none; flex-direction: column;
+    gap: 10px; pointer-events: none; }
+  .tgrito { width: 46px; height: 46px; border-radius: 50%; pointer-events: auto; font-size: 24px;
+    display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.35);
+    border: 2px solid rgba(255,255,255,.3); -webkit-tap-highlight-color: transparent; }
+  .tgrito:active { transform: scale(.9); background: rgba(255,255,255,.25); }
   #online-acoes { position: fixed; left: 0; right: 0; bottom: 120px; z-index: 8;
     display: none; justify-content: center; flex-wrap: wrap; gap: 10px; pointer-events: none;
     font-family: "Segoe UI", system-ui, sans-serif; }
@@ -228,8 +235,8 @@
   <div id="sel-mapa" style="display:none">
     <div class="sel-nome">MAPA: <span id="sel-mapa-nome"></span></div>
     <div class="sel-dica" id="sel-mapa-desc" style="margin-top:-2px"></div>
-    <div class="sel-nome" style="font-size:18px">MODO: <span id="sel-modo-nome"></span> &nbsp;·&nbsp; BOTS: <span id="sel-nivel"></span></div>
-    <div class="sel-dica">🔴 A · D mapa &nbsp;·&nbsp; X sorteia 🎲 &nbsp;·&nbsp; N modo &nbsp;·&nbsp; V nível &nbsp;·&nbsp; C bot 🤖 &nbsp;·&nbsp; F começa!</div>
+    <div class="sel-nome" style="font-size:18px">MODO: <span id="sel-modo-nome"></span> &nbsp;·&nbsp; BOTS: <span id="sel-nivel"></span> &nbsp;·&nbsp; EXTRA: <span id="sel-modif"></span></div>
+    <div class="sel-dica">🔴 A · D mapa &nbsp;·&nbsp; X sorteia 🎲 &nbsp;·&nbsp; N modo &nbsp;·&nbsp; V nível &nbsp;·&nbsp; G extra 🎉 &nbsp;·&nbsp; C bot 🤖 &nbsp;·&nbsp; F começa!</div>
   </div>
   <button id="btn-online" type="button">🌐 JOGAR ONLINE</button>
   <div class="sel-rodape">
@@ -262,6 +269,12 @@
   <div class="oa-btn" data-act="arena">Arena</div>
 </div>
 <div id="touch">
+  <div id="touch-gritos">
+    <div class="tgrito" data-grito="0">😂</div>
+    <div class="tgrito" data-grito="1">💀</div>
+    <div class="tgrito" data-grito="2">😱</div>
+    <div class="tgrito" data-grito="3">❤️</div>
+  </div>
   <div id="touch-base"><div id="touch-knob"></div></div>
   <div id="touch-botoes">
     <div class="tbtn esquiva" data-btn="esquiva"><span class="ic">💨</span>ESQUIVA</div>
