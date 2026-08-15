@@ -354,6 +354,7 @@ function refazerRivais() {
 function host() { return [...jogadores.values()].sort((a, b) => a.slot - b.slot)[0] ?? null; }
 
 // ---------- Rounds ----------
+const rankingNoite = new Map(); // nome -> vitórias na sessão (o "placar da noite")
 let estado = 'lobby'; // lobby | intro | luta | ponto | fim
 let estadoAte = 0;
 let introStep = 0;
@@ -418,8 +419,9 @@ function rounds() {
       if (winner) winner.score++;
       if (winner && winner.score >= winScore()) {
         estado = 'fim';
-        msg = '🏆 JOGADOR ' + (winner.slot + 1) + ' VENCEU! (host: F reinicia)';
+        msg = '🏆 ' + winner.nome + ' VENCEU! (host: F reinicia)';
         ev('vitoria');
+        rankingNoite.set(winner.nome, (rankingNoite.get(winner.nome) || 0) + 1); // placar da noite
         enviarMelhor(); // manda a melhor jogada da partida pra todos
       } else {
         estado = 'ponto';
@@ -538,6 +540,8 @@ setInterval(() => {
       t: 's', st: estado, msg,
       mo: MODOS_SALA[salaModo].nome, cap: capSala(), na: jogadores.size, pt: PONTOS[pontoIdx].n, jg: salaJaeger ? 1 : 0,
       an: ARENAS_ON[arenaIdx].nome, as: q2(escalaEncolhe),
+      rk: (estado === 'lobby' || estado === 'fim') && rankingNoite.size
+        ? [...rankingNoite.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5) : undefined,
       ev: eventos.splice(0),
       pl: js.map((j) => ({ s: j.slot, sk: j.skin, v: j.vivo ? 1 : 0, at: j.rag.isStunned(now) ? 1 : 0, sc: j.score, d: Math.round(j.rag.dano * 10) / 10 })),
       pr: props.map((b) => { const tr = b.translation(), ro = b.rotation(); return [q(tr.x), q(tr.y), q(tr.z), q(ro.x), q(ro.y), q(ro.z), q(ro.w)]; }),
@@ -642,6 +646,13 @@ wss.on('connection', (ws) => {
           arenaIdx = (arenaIdx + 1) % ARENAS_ON.length;
           montarArena(MODOS_SALA[salaModo].arena); // reaplica atrito/escala da variante
           console.log('arena ->', ARENAS_ON[arenaIdx].nome);
+        }
+      } else if (m.t === 'grito') {
+        // provocação com emoji (balão sobre a cabeça, todo mundo vê); cooldown anti-spam
+        const j = jogadores.get(ws);
+        if (j && now > (j._gritoAt ?? 0)) {
+          j._gritoAt = now + 1.6;
+          ev('grito', j.slot, Math.min(3, Math.max(0, m.g | 0)));
         }
       }
     } catch (e) {

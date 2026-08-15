@@ -809,6 +809,7 @@ function resetBlocos(m) {
 const MAPAS = [
   {
     nome: 'ESTÁDIO',
+    desc: 'bola de demolição no meio',
     build(m) {
       chaoFixo(m, ARENA.halfX, ARENA.halfZ, new THREE.MeshStandardMaterial({ map: deckTex, roughness: 0.85 }));
       // Bola de demolição
@@ -865,6 +866,7 @@ const MAPAS = [
   },
   {
     nome: 'GANGORRA',
+    desc: 'a arena inclina com o peso',
     build(m) {
       climaMapa({ ceu: 0xffd8e8, chao: 0x4a2a3a, fog: 0x2a1435, sol: 0xffd0b0, solInt: 1.45 }); // entardecer rosa
       // Plataforma inteira apoiada num eixo central — o peso inclina
@@ -908,6 +910,7 @@ const MAPAS = [
   },
   {
     nome: 'QUEIJO',
+    desc: 'buracos — cuidado onde pisa',
     build(m) {
       climaMapa({ ceu: 0xfff3c0, chao: 0x5a4410, fog: 0x3a2c0e, sol: 0xffe28a, solInt: 1.5 }); // banho de queijo
       // Ilhas com buracos entre elas — cuidado onde pisa
@@ -934,6 +937,7 @@ const MAPAS = [
   },
   {
     nome: 'GELO',
+    desc: 'escorrega que é uma beleza',
     fundoTex: FUNDOS.aurora,
     build(m) {
       climaMapa({ ceu: 0xd8f0ff, chao: 0x1c3a4a, fog: 0x16283a, sol: 0xcfe8ff, solInt: 1.35, expo: 1.05 }); // frio azulado
@@ -947,6 +951,7 @@ const MAPAS = [
   },
   {
     nome: 'MORTE SÚBITA',
+    desc: 'a plataforma encolhe a cada round',
     build(m) {
       climaMapa({ ceu: 0xffb0a0, chao: 0x401010, fog: 0x330d0d, sol: 0xff8a70, solInt: 1.4, expo: 1.08 }); // vermelho tenso
       // A plataforma encolhe a cada round
@@ -986,6 +991,7 @@ const MAPAS = [
   },
   {
     nome: 'MARTELO',
+    desc: 'braço giratório varre a arena',
     build(m) {
       climaMapa({ ceu: 0xd0b8ff, chao: 0x2a1440, fog: 0x241040, sol: 0xe8d0ff, solInt: 1.45 }); // arcade roxo
       chaoFixo(m, 5.5, 4, new THREE.MeshStandardMaterial({ map: deckTex, roughness: 0.85 }));
@@ -1041,6 +1047,7 @@ const MAPAS = [
   },
   {
     nome: 'SUMÔ',
+    desc: 'sem soco: empurra e arremessa',
     semSoco: true,
     build(m) {
       climaMapa({ ceu: 0xffe2b0, chao: 0x3a2a10, fog: 0x2e2410, sol: 0xffd080, solInt: 1.5 }); // templo dourado
@@ -1078,6 +1085,7 @@ const MAPAS = [
   },
   {
     nome: 'BATATA QUENTE',
+    desc: 'a bomba pula de mão em mão',
     build(m) {
       climaMapa({ ceu: 0xffc9a0, chao: 0x3a1c08, fog: 0x2e1608, sol: 0xffa060, solInt: 1.4 }); // alerta laranja
       chaoFixo(m, 4.6, 3.5, new THREE.MeshStandardMaterial({ map: deckTex, roughness: 0.85 }));
@@ -1143,6 +1151,7 @@ const MAPAS = [
   },
   {
     nome: 'CIDADE',
+    desc: 'prédios desabam e viram arma',
     fundo: 'assets/fundo-cidade.jpg',
     build(m) {
       climaMapa({ ceu: 0x9fb0ff, chao: 0x101430, fog: 0x0d1230, sol: 0xaCC4ff, solInt: 1.2, expo: 1.02 }); // noite neon
@@ -1175,6 +1184,7 @@ const MAPAS = [
   },
   {
     nome: 'RIO',
+    desc: 'luta à beira da lagoa',
     fundo: 'assets/fundo-rio.png',
     build(m) {
       // Atmosfera de pôr-do-sol (casa com a pintura do fundo): luz dourada,
@@ -1352,6 +1362,7 @@ const MAPAS = [
   },
   {
     nome: 'ESTEIRAS',
+    desc: 'o chão te leva — ande contra!',
     fundoTex: FUNDOS.fabrica,
     build(m) {
       // Duas esteiras rolantes em direções opostas — parou de andar, foi levado pra fora
@@ -1395,6 +1406,7 @@ const MAPAS = [
   },
   {
     nome: 'VENDAVAL',
+    desc: 'rajadas empurram todo mundo',
     fundoTex: FUNDOS.tempestade,
     build(m) {
       chaoFixo(m, 5.5, 4, new THREE.MeshStandardMaterial({ map: deckTex, roughness: 0.85 }));
@@ -1455,6 +1467,7 @@ const MAPAS = [
   },
   {
     nome: 'CHÃO QUENTE',
+    desc: 'placas esquentam e caem',
     fundoTex: FUNDOS.vulcao,
     build(m) {
       // Placas esquentam (ficam vermelhas) e caem — leia o aviso e sai de cima!
@@ -1506,6 +1519,7 @@ const MAPAS = [
   },
   {
     nome: 'TRAMPOLIM',
+    desc: 'todo mundo quica — voadora!',
     fundoTex: FUNDOS.circo,
     build(m) {
       // Chão elástico: todo mundo quica — a voadora vira a arma principal
@@ -1527,6 +1541,7 @@ const MAPAS = [
   },
   {
     nome: 'BLACKOUT',
+    desc: 'as luzes apagam do nada 😱',
     fundoTex: FUNDOS.noite,
     build(m) {
       chaoFixo(m, 5.5, 4, new THREE.MeshStandardMaterial({ map: deckTex, roughness: 0.85 }));
@@ -1551,6 +1566,7 @@ const MAPAS = [
   },
   {
     nome: 'PLATAFORMAS',
+    desc: 'ilhas móveis sobre o abismo',
     fundoTex: FUNDOS.ceuAberto,
     build(m) {
       // Ilha central + duas plataformas que passeiam sobre o abismo
@@ -2792,6 +2808,7 @@ function atualizarSelecao() {
   }
   $('sel-mapa').style.display = selFase === 'mapa' ? 'block' : 'none';
   $('sel-mapa-nome').textContent = MAPAS[mapaIdx].nome;
+  if ($('sel-mapa-desc')) $('sel-mapa-desc').textContent = MAPAS[mapaIdx].desc || '';
   if ($('sel-modo-nome')) $('sel-modo-nome').textContent = MODOS[modoIdx].nome;
   if ($('sel-jaeger')) $('sel-jaeger').textContent = ESTILO === 'j' ? 'SIM 🤖' : 'não';
   if ($('sel-nivel')) $('sel-nivel').textContent = NIVEIS[nivelIdx].nome;
@@ -3309,6 +3326,11 @@ function iniciarOnline() {
     if (e.code === 'KeyJ') online.ws.send(JSON.stringify({ t: 'jaeger' }));   // host liga robôs x monstros
     if (e.code === 'KeyT') online.ws.send(JSON.stringify({ t: 'lutador' }));  // QUALQUER um troca robô↔monstro
     if (e.code === 'KeyB') online.ws.send(JSON.stringify({ t: 'arena' }));    // host troca a variante de arena
+    // provocações 😂💀😱❤️ nas teclas 1-4 (valem a qualquer momento)
+    if (e.code === 'Digit1') online.ws.send(JSON.stringify({ t: 'grito', g: 0 }));
+    if (e.code === 'Digit2') online.ws.send(JSON.stringify({ t: 'grito', g: 1 }));
+    if (e.code === 'Digit3') online.ws.send(JSON.stringify({ t: 'grito', g: 2 }));
+    if (e.code === 'Digit4') online.ws.send(JSON.stringify({ t: 'grito', g: 3 }));
   });
 }
 
@@ -3474,10 +3496,11 @@ function receberSnap(m) {
   if (touchAtivo() && $('online-acoes')) $('online-acoes').style.display = (m.st === 'lobby' || m.st === 'fim') ? 'flex' : 'none';
   if ($('compartilhar')) $('compartilhar').style.display = (m.st === 'lobby' || m.st === 'fim') ? 'flex' : 'none';
   if (m.st === 'lobby') {
-    // lista de quem tá na sala (até 8 nomes; depois "+N")
+    // lista de quem tá na sala (até 8 nomes; depois "+N") + ranking da noite
     const lista = [...online.nomes.values()];
-    const quem = lista.length ? `<br>na sala: <b>${lista.slice(0, 8).join('</b> · <b>')}</b>${lista.length > 8 ? ` +${lista.length - 8}` : ''}` : '';
-    showMsg('SALA ONLINE 🌐', `${m.mo || ''} — <b>${m.na || 0}/${m.cap || 0}</b> na sala &nbsp;·&nbsp; ${m.pt || ''} &nbsp;·&nbsp; arena: <b>${m.an || 'CLÁSSICA'}</b>${quem}<br><b>T</b> troca 🤖↔🦖 &nbsp;·&nbsp; host: <b>F</b> começa &nbsp;·&nbsp; <b>M</b> modo &nbsp;·&nbsp; <b>N</b> pontuação &nbsp;·&nbsp; <b>B</b> arena`);
+    let quem = lista.length ? `<br>na sala: <b>${lista.slice(0, 8).join('</b> · <b>')}</b>${lista.length > 8 ? ` +${lista.length - 8}` : ''}` : '';
+    if (m.rk && m.rk.length) quem += `<br>🏆 placar da noite: ${m.rk.map(([n, v]) => `<b>${n}</b> ${v}`).join(' &nbsp;·&nbsp; ')}`;
+    showMsg('SALA ONLINE 🌐', `${m.mo || ''} — <b>${m.na || 0}/${m.cap || 0}</b> na sala &nbsp;·&nbsp; ${m.pt || ''} &nbsp;·&nbsp; arena: <b>${m.an || 'CLÁSSICA'}</b>${quem}<br><b>T</b> troca 🤖↔🦖 &nbsp;·&nbsp; <b>1-4</b> provocam 😂 &nbsp;·&nbsp; host: <b>F</b> começa &nbsp;·&nbsp; <b>M</b> modo &nbsp;·&nbsp; <b>N</b> pontuação &nbsp;·&nbsp; <b>B</b> arena`);
     online.msgAtual = '__lobby__'; online._fimMostrado = false; online.faseFinal = null; online.melhorPend = null;
   } else if (m.st === 'fim') {
     if (!online._fimMostrado) {
@@ -3522,6 +3545,40 @@ function receberSnap(m) {
       powFx(pos); burstEstrelas(pos); puffFx(pos);
       for (let i = 0; i < 10; i++) { const a = (i / 10) * Math.PI * 2; spawnFx(puffTex, pos, { escala: 0.5, vida: 0.5, cresce: 2, cor: i % 2 ? 0xff8a3c : 0xffd24a, vx: Math.cos(a) * 3, vz: Math.sin(a) * 3, vy: 1.5 }); }
       som.bolada?.(); trauma = 1;
+    } else if (tipo === 'grito') { // [_, slot, idx] — provocação: balão de emoji sobre a cabeça
+      mostrarGrito(evn[1], evn[2]);
+    }
+  }
+}
+
+// Balão de provocação (online): emoji grandão preso na cabeça por ~1.8s
+const GRITOS = ['😂', '💀', '😱', '❤️'];
+const gritosAtivos = [];
+function mostrarGrito(slot, idx) {
+  const v = online && online.visuais.get(slot);
+  if (!v || !v.meshes?.head) return;
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const g = c.getContext('2d');
+  g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = '92px system-ui, sans-serif';
+  g.fillText(GRITOS[idx] || GRITOS[0], 64, 70);
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+  const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, fog: false }));
+  spr.scale.setScalar(0.5); spr.position.set(0, 0.75, 0);
+  v.meshes.head.add(spr);
+  gritosAtivos.push({ spr, ate: performance.now() / 1000 + 1.8 });
+  som.selecionar?.();
+}
+function updateGritos() {
+  const agora = performance.now() / 1000;
+  for (let i = gritosAtivos.length - 1; i >= 0; i--) {
+    const gr = gritosAtivos[i];
+    const resta = gr.ate - agora;
+    if (resta <= 0) {
+      gr.spr.parent?.remove(gr.spr); gr.spr.material.map?.dispose(); gr.spr.material.dispose();
+      gritosAtivos.splice(i, 1);
+    } else {
+      gr.spr.position.y = 0.75 + Math.sin(agora * 10) * 0.02; // balancinho
+      gr.spr.material.opacity = Math.min(1, resta * 3);
     }
   }
 }
@@ -3641,6 +3698,7 @@ function frameOnline(t, fdt) {
   }
   mapa.update?.(t / 1000);
   updateEfeitos(fdt);
+  updateGritos();
   mirarHolofotes(t / 1000);
   cairConfetes(fdt, t / 1000);
   // câmera pelos bonecos na tela
