@@ -28,9 +28,13 @@ const MODOS = [
   { nome: 'Melhor de 3', vitorias: 3, caos: false },
   { nome: 'Morte Súbita', vitorias: 1, caos: false },
   { nome: 'CAOS ⚔️ (armas sem parar)', vitorias: 5, caos: true },
+  { nome: 'REI DO MORRO 👑 (domine o centro)', vitorias: 3, caos: false, morro: true },
 ];
 let modoIdx = 0;
 let MODO_CAOS = false; // partida atual usa drop de armas acelerado?
+let MODO_MORRO = false;    // partida atual é rei do morro?
+const MORRO_RAIO = 1.25, MORRO_ALVO = 10; // ficar 10s na zona central ganha o round
+let morroVis = null, morroTickAt = 0;
 // Dificuldade dos bots: reação, agressividade e mira mudam com o nível.
 const NIVEIS = [
   { nome: 'Fácil', reacao: 1.7, esquiva: 0.25, ataque: 1.4, mira: 0.9 },
@@ -2421,6 +2425,11 @@ function botInput(l) {
     dx = ap.x * (1 - rec) - me.x;
     dz = ap.z * (1 - rec) - me.z;
   }
+  // REI DO MORRO: sem briga por perto, o bot disputa a zona central
+  if (MODO_MORRO && dAlvo > 1.4) {
+    dx = dx * 0.35 - me.x * 0.9;
+    dz = dz * 0.35 - me.z * 0.9;
+  }
   // fugir da bola de demolição em velocidade
   for (const b of mapa.bolas) {
     const bp = b.translation();
@@ -2856,6 +2865,7 @@ function addBot() {
   atualizarSelecao();
 }
 function mostrarSelecao() {
+  if (morroVis) { scene.remove(morroVis); morroVis = null; }
   world.gravity = { x: 0, y: -9.81, z: 0 }; // desfaz modificador de festa no menu
   AJUSTES.forcaSoco = 1; AJUSTES.turbo = 1;
   selFase = 'skins';
@@ -2874,6 +2884,10 @@ function startIntro(roundN) {
   introStep = 0;
   stateUntil = simNow + 0.9;
   replayBuf.length = 0;
+  for (const l of lutadores) l._morroT = 0; // rei do morro zera a coroa por round
+  morroTickAt = 0;
+  const elM = document.getElementById('mapa');
+  if (elM) elM.textContent = 'MAPA: ' + MAPAS[mapaIdx].nome;
   limparPowerups();
   proxPowerEm = 0;
   showMsg('ROUND ' + roundN);
@@ -2882,6 +2896,16 @@ function iniciarLuta() {
   $('selecao').style.display = 'none';
   WIN_SCORE = MODOS[modoIdx].vitorias;   // aplica o modo escolhido
   MODO_CAOS = MODOS[modoIdx].caos;
+  MODO_MORRO = !!MODOS[modoIdx].morro;
+  if (morroVis) { scene.remove(morroVis); morroVis = null; }
+  if (MODO_MORRO) { // zona dourada no centro
+    morroVis = new THREE.Mesh(
+      new THREE.RingGeometry(MORRO_RAIO - 0.16, MORRO_RAIO, 48),
+      new THREE.MeshBasicMaterial({ color: 0xffd94a, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false }),
+    );
+    morroVis.rotation.x = -Math.PI / 2; morroVis.position.y = 0.03;
+    scene.add(morroVis);
+  }
   aplicarModificador(); // festa: lua/turbo/fortões (ou volta ao normal)
   const configs = selCfg.filter((c) => c.ativo).map((c) => ({ ...c }));
   montarLutadores(configs);
@@ -3167,6 +3191,29 @@ function handleRounds(now) {
         cairam.push(l);
         for (const o of lutadores) o.rag.rivals = lutadores.filter((x) => x !== o && x.vivo).map((x) => x.rag);
       }
+    }
+    // REI DO MORRO: ficar na zona central acumula a coroa; 10s fecham o round
+    if (MODO_MORRO) {
+      const dtm = morroTickAt ? Math.min(0.1, simNow - morroTickAt) : 0;
+      morroTickAt = simNow;
+      let lider = null;
+      for (const l of lutadores) {
+        if (!l.vivo) continue;
+        const pp = l.rag.parts.pelvis.translation();
+        if (Math.hypot(pp.x, pp.z) < MORRO_RAIO && pp.y > -1 && !l.rag.isDowned(simNow)) l._morroT = (l._morroT || 0) + dtm;
+        if (!lider || (l._morroT || 0) > (lider._morroT || 0)) lider = l;
+      }
+      if (morroVis) {
+        const dono = lider && (lider._morroT || 0) > 0.5;
+        morroVis.material.opacity = 0.35 + 0.2 * Math.sin(simNow * 5);
+        morroVis.material.color.setHex(dono ? SKINS[lider.cfg.skin].cores.torso : 0xffd94a);
+      }
+      const elM = document.getElementById('mapa');
+      if (elM && lider && (lider._morroT || 0) > 0) {
+        elM.textContent = `👑 ${SKINS[lider.cfg.skin].nome}: ${Math.min(MORRO_ALVO, lider._morroT).toFixed(1)}s / ${MORRO_ALVO}s`;
+      }
+      const rei = lutadores.find((l) => l.vivo && (l._morroT || 0) >= MORRO_ALVO);
+      if (rei) { som.vitoria(); for (const l of lutadores) if (l !== rei) l.vivo = false; } // rei fecha o round
     }
     const v = vivos();
     // Guarda os ring-outs como candidatos a "melhor jogada" (decisivo = fecha a partida)
