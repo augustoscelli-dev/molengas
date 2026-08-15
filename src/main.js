@@ -2953,6 +2953,7 @@ addEventListener('keydown', (e) => {
   } else {
     if (e.code === 'KeyA') { setMapa(mapaIdx - 1); som.selecionar(); }
     if (e.code === 'KeyD') { setMapa(mapaIdx + 1); som.selecionar(); }
+    if (e.code === 'KeyX') { setMapa((Math.random() * MAPAS.length) | 0); som.confirmar(); } // 🎲 sorteio
     if (e.code === 'KeyC') addBot();
     if (e.code === 'KeyN') { modoIdx = (modoIdx + 1) % MODOS.length; som.selecionar(); } // modo de jogo
     if (e.code === 'KeyV') { nivelIdx = (nivelIdx + 1) % NIVEIS.length; som.selecionar(); } // dificuldade dos bots
@@ -3974,6 +3975,19 @@ function frame(t) {
       if (state === 'luta') considerarHighlight(l, 'ko', false); // candidato a melhor jogada
     }
     if (p.lastPunchStartAt > (p._sSoco ?? -1)) { p._sSoco = p.lastPunchStartAt; som.soco(); som.vozSoco(VOZES[l.slot]); }
+    // SOCÃO carregando: faíscas douradas crescendo nos punhos
+    if ((p._carga || 0) > 0.15 && simNow > (l._cargaFxAt ?? 0)) {
+      l._cargaFxAt = simNow + 0.09;
+      for (const h of ['forearmL', 'forearmR']) {
+        const fp = p.parts[h].translation();
+        spawnFx(starTex, fp, {
+          escala: 0.08 + p._carga * 0.16, vida: 0.3, giro: 8, cor: p._carga >= 1 ? 0xff5c3c : 0xffd94a,
+          vx: (Math.random() - 0.5) * 1.2, vy: 0.8 + p._carga, vz: (Math.random() - 0.5) * 1.2,
+        });
+      }
+      if (p._carga >= 1 && !l._cargaCheiaAvisada) { l._cargaCheiaAvisada = true; som.selecionar?.(); }
+      if (p._carga < 1) l._cargaCheiaAvisada = false;
+    }
     if (p.lastCabecadaAt > (p._sCab ?? -1)) { p._sCab = p.lastCabecadaAt; som.soco(); som.vozSoco(VOZES[l.slot]); trauma = Math.min(1, trauma + 0.4); hitStop = Math.max(hitStop, 0.06); }
     if (p.lastChuteAt > (p._sChu ?? -1)) { p._sChu = p.lastChuteAt; som.soco(); }
     if (p.lastJumpAt > (p._sPulo ?? -1)) { p._sPulo = p.lastJumpAt; som.pulo(); puffFx(p.parts.pelvis.translation()); }

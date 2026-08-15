@@ -73,18 +73,21 @@ const ARENAS_ON = [
   { id: 'classica', nome: 'CLÁSSICA' },
   { id: 'gelo', nome: 'GELO 🧊' },      // chão escorregadio + tração reduzida
   { id: 'encolhe', nome: 'ENCOLHE 😱' }, // o chão encolhe durante o round
+  { id: 'rodizio', nome: 'RODÍZIO 🎲' }, // sorteia uma das três a cada partida
 ];
+const NOME_ARENA = { classica: 'CLÁSSICA', gelo: 'GELO 🧊', encolhe: 'ENCOLHE 😱' };
 let arenaIdx = 0;
+let arenaAtiva = 'classica'; // variante em vigor (o rodízio sorteia ao começar)
 let escalaEncolhe = 1;
 let proxEncolheAt = 0;
 let chaoCol = null;
 function setChaoEscala(k) { // troca só o collider do chão (não mexe na bola/caixotes)
   if (chaoCol) world.removeCollider(chaoCol, true);
-  const atrito = ARENAS_ON[arenaIdx].id === 'gelo' ? 0.03 : 0.8;
+  const atrito = arenaAtiva === 'gelo' ? 0.03 : 0.8;
   chaoCol = world.createCollider(RAPIER.ColliderDesc.cuboid(arenaHX * k, 0.3, arenaHZ * k).setFriction(atrito).setCollisionGroups(GROUND_GROUPS), chao);
 }
 function aplicarControleArena() { // tração por variante (gelo derrapa)
-  const c = ARENAS_ON[arenaIdx].id === 'gelo' ? 0.4 : 1;
+  const c = arenaAtiva === 'gelo' ? 0.4 : 1;
   for (const j of jogadores.values()) j.rag.controle = c;
 }
 function montarArena(scale) {
@@ -374,6 +377,10 @@ function startIntro(roundN) {
   msg = 'ROUND ' + roundN;
 }
 function comecarPartida() {
+  // RODÍZIO: sorteia a variante desta partida antes de montar
+  arenaAtiva = ARENAS_ON[arenaIdx].id === 'rodizio'
+    ? ['classica', 'gelo', 'encolhe'][(Math.random() * 3) | 0]
+    : ARENAS_ON[arenaIdx].id;
   montarArena(MODOS_SALA[salaModo].arena); // arena do modo escolhido
   const tot = capSala();
   for (const j of jogadores.values()) {
@@ -502,7 +509,7 @@ setInterval(() => {
   if (estado === 'luta') {
     tickArmas(); tickPowerups(); // armas + power-ups
     // Variante ENCOLHE: o chão diminui em degraus durante o round
-    if (ARENAS_ON[arenaIdx].id === 'encolhe') {
+    if (arenaAtiva === 'encolhe') {
       if (!proxEncolheAt) proxEncolheAt = now + 9;
       if (now > proxEncolheAt && escalaEncolhe > 0.45) {
         escalaEncolhe = Math.max(0.45, escalaEncolhe * 0.82);
@@ -539,7 +546,7 @@ setInterval(() => {
     const meta = {
       t: 's', st: estado, msg,
       mo: MODOS_SALA[salaModo].nome, cap: capSala(), na: jogadores.size, pt: PONTOS[pontoIdx].n, jg: salaJaeger ? 1 : 0,
-      an: ARENAS_ON[arenaIdx].nome, as: q2(escalaEncolhe),
+      an: (estado === 'lobby' || estado === 'fim') ? ARENAS_ON[arenaIdx].nome : NOME_ARENA[arenaAtiva], as: q2(escalaEncolhe),
       rk: (estado === 'lobby' || estado === 'fim') && rankingNoite.size
         ? [...rankingNoite.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5) : undefined,
       ev: eventos.splice(0),
@@ -644,6 +651,7 @@ wss.on('connection', (ws) => {
         const j = jogadores.get(ws);
         if (j && j === host() && (estado === 'lobby' || estado === 'fim')) {
           arenaIdx = (arenaIdx + 1) % ARENAS_ON.length;
+          arenaAtiva = ARENAS_ON[arenaIdx].id === 'rodizio' ? 'classica' : ARENAS_ON[arenaIdx].id;
           montarArena(MODOS_SALA[salaModo].arena); // reaplica atrito/escala da variante
           console.log('arena ->', ARENAS_ON[arenaIdx].nome);
         }

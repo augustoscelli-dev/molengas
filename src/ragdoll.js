@@ -73,6 +73,11 @@ export class Ragdoll {
     this.punchReadyAt = 0;
     this.punchUntil = 0;
     this.punchHit = true;
+    // Golpe carregado: toque = soco normal; segurar carrega o SOCÃO (solta no release)
+    this._punchHeld = false;
+    this._carga = 0;        // 0..1 — carga atual (o cliente desenha faíscas)
+    this._cargaDesde = -1;
+    this._cargaGolpe = 0;   // carga do golpe em voo (multiplica o knockback)
     this.jumpReadyAt = 0;
     this._jumpPrev = false; this._pulosAr = 0; // duplo pulo
     this.hoverBlockUntil = 0;
@@ -334,7 +339,7 @@ export class Ragdoll {
         const nx = mx / mlen, nz = mz / mlen;
         const speedAlong = pv.x * nx + pv.z * nz;
         if (speedAlong < 3.6) {
-          const tr = 220 * this.controle * (this.buffVel || 1);
+          const tr = 220 * this.controle * (this.buffVel || 1) * (this._carga > 0.1 ? 0.55 : 1);
           pelvis.applyImpulse({ x: nx * tr * dt, y: 0, z: nz * tr * dt }, true);
           this.parts.torso.applyImpulse({ x: nx * tr * 0.4 * dt, y: 0, z: nz * tr * 0.4 * dt }, true);
         }
@@ -422,8 +427,9 @@ export class Ragdoll {
         pelvis.applyImpulse({ x: 0, y: 20, z: 0 }, true);
         this.parts.torso.applyImpulse({ x: 0, y: 12, z: 0 }, true);
       }
-      // Ataques com o botão de soco: CABEÇADA (agarrando), CHUTE (segurando trás) ou SOCO
-      if (input.punch && now >= this.punchReadyAt) {
+      // Ataques com o botão de soco: CABEÇADA (agarrando), CHUTE (segurando trás) ou SOCO.
+      // Só no APERTO (segurar não repete mais): segurando, carrega o SOCÃO — solta no release.
+      if (input.punch && !this._punchHeld && now >= this.punchReadyAt) {
         const dir = [Math.sin(this.heading), 0, Math.cos(this.heading)];
         const alvoAgarrado = this.grabbedRival();
         const querChute = grounded && input.move && input.move.z > 0.5; // segurar p/ trás/baixo + soco
@@ -450,6 +456,7 @@ export class Ragdoll {
           this.punchReadyAt = now + (this._socoFraco ? 1.3 : querChute ? 0.95 : 0.8);
           this.punchUntil = now + (this._voadora ? 0.32 : querChute ? 0.3 : 0.25);
           this.punchHit = false;
+          this._cargaGolpe = 0;
           this.lastPunchStartAt = now;
           if (querChute) this.lastChuteAt = now;
           this.stats.socos++;
@@ -473,6 +480,36 @@ export class Ragdoll {
           }
         }
       }
+      // ---- SOCÃO carregado: continuar segurando (sem rival agarrado/arma) carrega ----
+      const seguraCoisa = this.grabJoints && this.grabJoints.some((g) => g);
+      // carrega já durante o cooldown do soco do toque (só a SOLTURA espera o cooldown);
+      // 0.12s de tolerância pra toque rápido não acender faísca
+      if (input.punch && this._punchHeld && !this.grabbedRival() && !seguraCoisa) {
+        if (this._cargaDesde < 0) this._cargaDesde = now;
+        this._carga = Math.min(1, Math.max(0, now - this._cargaDesde - 0.12) / 0.7);
+      }
+      if (!input.punch && this._punchHeld) {
+        if (this._carga > 0.25 && now >= this.punchReadyAt) {
+          // solta o SOCÃO: pancada com corpo junto, knockback escala com a carga
+          const dir = [Math.sin(this.heading), 0, Math.cos(this.heading)];
+          this._socoFraco = false;
+          this._voadora = !grounded;
+          this._chute = false;
+          this._cargaGolpe = this._carga;
+          this.folego = Math.max(0, this.folego - (0.34 + this._carga * 0.2));
+          this.punchReadyAt = now + 1.05;
+          this.punchUntil = now + 0.3;
+          this.punchHit = false;
+          this.lastPunchStartAt = now;
+          this.stats.socos++;
+          const forca = 7 * (1 + this._carga * 0.9);
+          for (const h of ['forearmL', 'forearmR']) this.parts[h].applyImpulse({ x: dir[0] * forca, y: 1.4, z: dir[2] * forca }, true);
+          this.parts.torso.applyImpulse({ x: dir[0] * 3 * this._carga, y: 0.3, z: dir[2] * 3 * this._carga }, true);
+          pelvis.applyImpulse({ x: dir[0] * 2.5 * this._carga, y: 0, z: dir[2] * 2.5 * this._carga }, true);
+        }
+        this._carga = 0; this._cargaDesde = -1;
+      }
+      this._punchHeld = input.punch;
     }
 
     // Janela do golpe: o membro continua indo pra frente + detecção de acerto.
@@ -503,14 +540,14 @@ export class Ragdoll {
                 const strong = pname === 'head';
                 // forcaSoco = quão forte ESTE lutador bate; resistencia = quanto o RIVAL aguenta
                 const kb = (this.forcaSoco || 1) * (this.buffForca || 1) * (AJUSTES.forcaSoco || 1) / (rival.resistencia || 1);
-                const fator = (this._voadora ? 1.35 : 1) * (this._socoFraco ? 0.55 : 1) * (this._chute ? 1.3 : 1) * kb;
+                const fator = (this._voadora ? 1.35 : 1) * (this._socoFraco ? 0.55 : 1) * (this._chute ? 1.3 : 1) * (1 + (this._cargaGolpe || 0) * 1.1) * kb;
                 tb.applyImpulse({
                   x: dir[0] * (strong ? 6.5 : 5) * fator,
                   y: (this._chute ? 1.0 : (strong ? 2.2 : 1.5)) * fator, // chute empurra mais reto (bom p/ ring-out)
                   z: dir[2] * (strong ? 6.5 : 5) * fator,
                 }, true);
                 // nocaute acumulativo: combo atordoa cada vez mais (rival mais resistente sobe o dano mais devagar)
-                rival.dano = Math.min(4, rival.dano + (this.forcaSoco || 1) / (rival.resistencia || 1));
+                rival.dano = Math.min(4, rival.dano + ((this.forcaSoco || 1) * (1 + (this._cargaGolpe || 0) * 0.8)) / (rival.resistencia || 1));
                 const dur = Math.min(2.6, (strong ? 1.35 : 0.4) * (1 + rival.dano * 0.35) * fator);
                 rival.stun(now + dur);
                 rival._agr = this; rival._agrAt = now; // quem bateu por último (pra "melhor jogada")
