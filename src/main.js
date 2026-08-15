@@ -198,7 +198,187 @@ function setFundo(caminho) {
     backMesh.material.needsUpdate = true;
   }, undefined, () => {});
 }
+function setFundoTex(tex) { // fundo pintado em canvas (sem depender de arquivo)
+  ++fundoPedido; // invalida qualquer load de arquivo em andamento
+  backMesh.material.map = tex;
+  backMesh.material.color.set(0xffffff);
+  backMesh.material.needsUpdate = true;
+}
 setFundo('assets/fundo.jpg');
+
+// ---------- Fundos pintados (procedurais, por arena) ----------
+// Cada um é lazy + memoizado: só desenha na primeira vez que a arena abre.
+function fundoCanvas(desenha) {
+  let tex = null;
+  return () => {
+    if (tex) return tex;
+    const c = document.createElement('canvas');
+    c.width = 1024; c.height = 512;
+    desenha(c.getContext('2d'), 1024, 512);
+    tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  };
+}
+const FUNDOS = {
+  tempestade: fundoCanvas((g, W, H) => {
+    const ceu = g.createLinearGradient(0, 0, 0, H);
+    ceu.addColorStop(0, '#1a2430'); ceu.addColorStop(0.7, '#33424e'); ceu.addColorStop(1, '#46565e');
+    g.fillStyle = ceu; g.fillRect(0, 0, W, H);
+    // nuvens pesadas em camadas
+    for (const [y, r, cor] of [[70, 90, '#222e3a'], [120, 70, '#28343f'], [95, 110, '#1e2a35']]) {
+      g.fillStyle = cor;
+      for (let x = -40; x < W + 60; x += r * 0.9) {
+        g.beginPath(); g.ellipse(x + (y % 50), y + Math.sin(x * 0.02) * 18, r, r * 0.45, 0, 0, Math.PI * 2); g.fill();
+      }
+    }
+    // raios
+    g.strokeStyle = '#ffe98a'; g.lineWidth = 4; g.lineJoin = 'round';
+    for (const x0 of [220, 700]) {
+      g.beginPath(); g.moveTo(x0, 120);
+      g.lineTo(x0 - 22, 210); g.lineTo(x0 + 8, 220); g.lineTo(x0 - 30, 330);
+      g.stroke();
+    }
+    // chuva diagonal
+    g.strokeStyle = 'rgba(200,220,235,.28)'; g.lineWidth = 2;
+    for (let i = 0; i < 90; i++) {
+      const x = Math.random() * W, y = Math.random() * H;
+      g.beginPath(); g.moveTo(x, y); g.lineTo(x - 14, y + 26); g.stroke();
+    }
+  }),
+  vulcao: fundoCanvas((g, W, H) => {
+    const ceu = g.createLinearGradient(0, 0, 0, H);
+    ceu.addColorStop(0, '#12060a'); ceu.addColorStop(0.62, '#3a0e0c'); ceu.addColorStop(1, '#7a2410');
+    g.fillStyle = ceu; g.fillRect(0, 0, W, H);
+    // vulcão com brilho
+    g.fillStyle = '#1c0c0c';
+    g.beginPath(); g.moveTo(300, H); g.lineTo(470, 150); g.lineTo(520, 150); g.lineTo(700, H); g.closePath(); g.fill();
+    const brilho = g.createRadialGradient(495, 150, 8, 495, 150, 130);
+    brilho.addColorStop(0, 'rgba(255,150,40,.95)'); brilho.addColorStop(1, 'rgba(255,80,20,0)');
+    g.fillStyle = brilho; g.fillRect(360, 40, 280, 240);
+    g.fillStyle = '#ffb347';
+    g.beginPath(); g.ellipse(495, 152, 30, 8, 0, 0, Math.PI * 2); g.fill();
+    // rio de lava no horizonte
+    g.fillStyle = '#ff7a20'; g.fillRect(0, H - 26, W, 26);
+    g.fillStyle = '#ffc060';
+    for (let x = 0; x < W; x += 34) g.fillRect(x, H - 26, 16, 5);
+    // fagulhas
+    g.fillStyle = '#ffd080';
+    for (let i = 0; i < 60; i++) g.fillRect(Math.random() * W, Math.random() * (H - 80), 3, 3);
+  }),
+  aurora: fundoCanvas((g, W, H) => {
+    const ceu = g.createLinearGradient(0, 0, 0, H);
+    ceu.addColorStop(0, '#060c22'); ceu.addColorStop(1, '#12304a');
+    g.fillStyle = ceu; g.fillRect(0, 0, W, H);
+    // estrelas
+    g.fillStyle = 'rgba(255,255,255,.85)';
+    for (let i = 0; i < 110; i++) g.fillRect(Math.random() * W, Math.random() * H * 0.6, 2, 2);
+    // aurora boreal (faixas translúcidas onduladas)
+    for (const [cor, y0, amp] of [['rgba(80,255,180,.30)', 120, 40], ['rgba(120,200,255,.25)', 170, 55], ['rgba(180,120,255,.18)', 90, 30]]) {
+      g.fillStyle = cor;
+      g.beginPath(); g.moveTo(0, y0);
+      for (let x = 0; x <= W; x += 32) g.lineTo(x, y0 + Math.sin(x * 0.012 + y0) * amp);
+      for (let x = W; x >= 0; x -= 32) g.lineTo(x, y0 + 90 + Math.sin(x * 0.012 + y0) * amp * 0.7);
+      g.closePath(); g.fill();
+    }
+    // montanhas nevadas
+    g.fillStyle = '#dceefb';
+    g.beginPath(); g.moveTo(0, H);
+    for (const [x, y] of [[0, 400], [140, 300], [260, 390], [420, 260], [560, 380], [720, 290], [860, 400], [1024, 330], [1024, 512]]) g.lineTo(x, y);
+    g.closePath(); g.fill();
+    g.fillStyle = '#b8d8ee';
+    g.beginPath(); g.moveTo(0, H);
+    for (const [x, y] of [[0, 460], [200, 380], [380, 460], [600, 360], [800, 450], [1024, 400], [1024, 512]]) g.lineTo(x, y);
+    g.closePath(); g.fill();
+  }),
+  circo: fundoCanvas((g, W, H) => {
+    // interior de tenda: listras radiais saindo do topo
+    g.fillStyle = '#7a1e2e'; g.fillRect(0, 0, W, H);
+    g.fillStyle = '#ffdf9e';
+    const cx = W / 2, cy = -40;
+    for (let i = 0; i < 16; i += 2) {
+      const a0 = (i / 16) * Math.PI, a1 = ((i + 1) / 16) * Math.PI;
+      g.beginPath(); g.moveTo(cx, cy);
+      g.arc(cx, cy, 1200, a0, a1); g.closePath(); g.fill();
+    }
+    // varal de luzinhas
+    g.strokeStyle = 'rgba(40,10,10,.55)'; g.lineWidth = 4;
+    g.beginPath(); g.moveTo(0, 180); g.quadraticCurveTo(W / 2, 300, W, 180); g.stroke();
+    const CORES = ['#ffd94a', '#7ee0ff', '#ff5c8a', '#7ed957'];
+    for (let i = 0; i <= 20; i++) {
+      const t = i / 20, x = t * W, y = 180 + Math.sin(Math.PI * t) * 118;
+      g.fillStyle = CORES[i % CORES.length];
+      g.beginPath(); g.arc(x, y + 8, 7, 0, Math.PI * 2); g.fill();
+    }
+  }),
+  noite: fundoCanvas((g, W, H) => {
+    const ceu = g.createLinearGradient(0, 0, 0, H);
+    ceu.addColorStop(0, '#04060f'); ceu.addColorStop(1, '#101830');
+    g.fillStyle = ceu; g.fillRect(0, 0, W, H);
+    g.fillStyle = 'rgba(255,255,255,.9)';
+    for (let i = 0; i < 130; i++) g.fillRect(Math.random() * W, Math.random() * H * 0.75, 2, 2);
+    // lua
+    g.fillStyle = '#f4f0dc'; g.beginPath(); g.arc(820, 90, 38, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#04060f'; g.beginPath(); g.arc(836, 80, 34, 0, Math.PI * 2); g.fill();
+    // skyline apagado com janelinhas raras acesas
+    g.fillStyle = '#0a0e1c';
+    let x = 0;
+    while (x < W) {
+      const w = 60 + Math.random() * 80, h = 120 + Math.random() * 200;
+      g.fillRect(x, H - h, w, h);
+      g.fillStyle = '#ffd94a';
+      for (let i = 0; i < 3; i++) if (Math.random() < 0.5) g.fillRect(x + 8 + Math.random() * (w - 20), H - h + 12 + Math.random() * (h - 30), 6, 8);
+      g.fillStyle = '#0a0e1c';
+      x += w + 12;
+    }
+  }),
+  fabrica: fundoCanvas((g, W, H) => {
+    const parede = g.createLinearGradient(0, 0, 0, H);
+    parede.addColorStop(0, '#23262e'); parede.addColorStop(1, '#3a3e49');
+    g.fillStyle = parede; g.fillRect(0, 0, W, H);
+    // janelões altos
+    g.fillStyle = 'rgba(140,190,220,.20)';
+    for (let x = 60; x < W; x += 190) g.fillRect(x, 40, 110, 170);
+    // canos
+    g.strokeStyle = '#171a20'; g.lineWidth = 18;
+    g.beginPath(); g.moveTo(0, 250); g.lineTo(W, 250); g.stroke();
+    g.beginPath(); g.moveTo(180, 250); g.lineTo(180, 0); g.stroke();
+    g.beginPath(); g.moveTo(760, 250); g.lineTo(760, 0); g.stroke();
+    // engrenagens de silhueta
+    g.fillStyle = '#14161c';
+    for (const [cx, cy, r] of [[330, 330, 70], [430, 380, 46], [880, 340, 60]]) {
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2;
+        g.fillRect(cx + Math.cos(a) * r - 9, cy + Math.sin(a) * r - 9, 18, 18);
+      }
+      g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.fill();
+      g.fillStyle = '#3a3e49'; g.beginPath(); g.arc(cx, cy, r * 0.35, 0, Math.PI * 2); g.fill();
+      g.fillStyle = '#14161c';
+    }
+    // faixa de perigo
+    g.fillStyle = '#ffd94a'; g.fillRect(0, H - 46, W, 46);
+    g.fillStyle = '#1c1e24';
+    for (let x = -40; x < W; x += 80) { g.beginPath(); g.moveTo(x, H); g.lineTo(x + 40, H - 46); g.lineTo(x + 80, H - 46); g.lineTo(x + 40, H); g.closePath(); g.fill(); }
+  }),
+  ceuAberto: fundoCanvas((g, W, H) => {
+    const ceu = g.createLinearGradient(0, 0, 0, H);
+    ceu.addColorStop(0, '#4aa3e8'); ceu.addColorStop(1, '#bfe4ff');
+    g.fillStyle = ceu; g.fillRect(0, 0, W, H);
+    // sol com halo
+    const halo = g.createRadialGradient(160, 90, 10, 160, 90, 120);
+    halo.addColorStop(0, 'rgba(255,240,180,.95)'); halo.addColorStop(1, 'rgba(255,240,180,0)');
+    g.fillStyle = halo; g.fillRect(20, -30, 300, 260);
+    // nuvens fofas em camadas (a de baixo dá sensação de altura)
+    const nuvem = (x, y, s, alpha) => {
+      g.fillStyle = `rgba(255,255,255,${alpha})`;
+      for (const [dx, dy, r] of [[0, 0, 34], [28, -12, 26], [-30, -8, 24], [54, 4, 20], [-52, 6, 18]]) {
+        g.beginPath(); g.arc(x + dx * s, y + dy * s, r * s, 0, Math.PI * 2); g.fill();
+      }
+    };
+    nuvem(300, 190, 0.9, 0.95); nuvem(650, 120, 0.7, 0.9); nuvem(900, 220, 1.1, 0.92);
+    nuvem(140, 330, 1.5, 0.98); nuvem(520, 400, 1.9, 1); nuvem(880, 380, 1.6, 0.97);
+  }),
+};
 
 // ---------- Mapas ----------
 const texCaixote = (() => {
@@ -754,6 +934,7 @@ const MAPAS = [
   },
   {
     nome: 'GELO',
+    fundoTex: FUNDOS.aurora,
     build(m) {
       climaMapa({ ceu: 0xd8f0ff, chao: 0x1c3a4a, fog: 0x16283a, sol: 0xcfe8ff, solInt: 1.35, expo: 1.05 }); // frio azulado
       // Pista escorregadia: atrito quase zero + tração reduzida
@@ -1171,6 +1352,7 @@ const MAPAS = [
   },
   {
     nome: 'ESTEIRAS',
+    fundoTex: FUNDOS.fabrica,
     build(m) {
       // Duas esteiras rolantes em direções opostas — parou de andar, foi levado pra fora
       const texEst = (dir) => {
@@ -1213,6 +1395,7 @@ const MAPAS = [
   },
   {
     nome: 'VENDAVAL',
+    fundoTex: FUNDOS.tempestade,
     build(m) {
       chaoFixo(m, 5.5, 4, new THREE.MeshStandardMaterial({ map: deckTex, roughness: 0.85 }));
       // céu de tempestade
@@ -1272,6 +1455,7 @@ const MAPAS = [
   },
   {
     nome: 'CHÃO QUENTE',
+    fundoTex: FUNDOS.vulcao,
     build(m) {
       // Placas esquentam (ficam vermelhas) e caem — leia o aviso e sai de cima!
       hemi.color.setHex(0xffc8a0); hemi.groundColor.setHex(0x50201a); hemi.intensity = 0.95;
@@ -1322,6 +1506,7 @@ const MAPAS = [
   },
   {
     nome: 'TRAMPOLIM',
+    fundoTex: FUNDOS.circo,
     build(m) {
       // Chão elástico: todo mundo quica — a voadora vira a arma principal
       const texTramp = (() => {
@@ -1342,6 +1527,7 @@ const MAPAS = [
   },
   {
     nome: 'BLACKOUT',
+    fundoTex: FUNDOS.noite,
     build(m) {
       chaoFixo(m, 5.5, 4, new THREE.MeshStandardMaterial({ map: deckTex, roughness: 0.85 }));
       fazerCaixote(m, -2.8, 2.2); fazerCaixote(m, 2.8, -2.2);
@@ -1365,6 +1551,7 @@ const MAPAS = [
   },
   {
     nome: 'PLATAFORMAS',
+    fundoTex: FUNDOS.ceuAberto,
     build(m) {
       // Ilha central + duas plataformas que passeiam sobre o abismo
       const matIlha = new THREE.MeshStandardMaterial({ map: deckTex, roughness: 0.85 });
@@ -1417,7 +1604,8 @@ function setMapa(idx) {
   restaurarAmbiente();
   MAPAS[mapaIdx].build(mapa);
   mapa.semSoco = !!MAPAS[mapaIdx].semSoco;
-  setFundo(MAPAS[mapaIdx].fundo ?? 'assets/fundo.jpg');
+  if (MAPAS[mapaIdx].fundoTex) setFundoTex(MAPAS[mapaIdx].fundoTex());
+  else setFundo(MAPAS[mapaIdx].fundo ?? 'assets/fundo.jpg');
   for (const l of lutadores) {
     l.rag.props = mapa.props;
     l.rag.controle = mapa.controle ?? 1;
