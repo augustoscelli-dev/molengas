@@ -1147,6 +1147,236 @@ const MAPAS = [
       });
     },
   },
+  {
+    nome: 'ESTEIRAS',
+    build(m) {
+      // Duas esteiras rolantes em direções opostas — parou de andar, foi levado pra fora
+      const texEst = (dir) => {
+        const c = document.createElement('canvas'); c.width = c.height = 256;
+        const g = c.getContext('2d');
+        g.fillStyle = '#3a3f4c'; g.fillRect(0, 0, 256, 256);
+        g.strokeStyle = '#262a33'; g.lineWidth = 5;
+        for (let x = 0; x <= 256; x += 32) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, 256); g.stroke(); }
+        g.fillStyle = '#ffd94a';
+        for (let x = 20; x < 256; x += 64) for (let y = 34; y < 256; y += 62) {
+          g.beginPath();
+          if (dir > 0) { g.moveTo(x, y); g.lineTo(x + 26, y + 14); g.lineTo(x, y + 28); }
+          else { g.moveTo(x + 26, y); g.lineTo(x, y + 14); g.lineTo(x + 26, y + 28); }
+          g.closePath(); g.fill();
+        }
+        const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+        t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(3, 1.5);
+        return t;
+      };
+      const t1 = texEst(1), t2 = texEst(-1);
+      const g = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, -0.3, 0));
+      world.createCollider(RAPIER.ColliderDesc.cuboid(5.5, 0.3, 4).setFriction(0.4).setCollisionGroups(GROUND_GROUPS), g);
+      m.bodies.push(g);
+      const faixa1 = new THREE.Mesh(new THREE.BoxGeometry(11, 0.6, 4), new THREE.MeshStandardMaterial({ map: t1, roughness: 0.9 }));
+      faixa1.position.set(0, -0.3, -2); faixa1.receiveShadow = true; scene.add(faixa1); m.meshes.push(faixa1);
+      const faixa2 = new THREE.Mesh(new THREE.BoxGeometry(11, 0.6, 4), new THREE.MeshStandardMaterial({ map: t2, roughness: 0.9 }));
+      faixa2.position.set(0, -0.3, 2); faixa2.receiveShadow = true; scene.add(faixa2); m.meshes.push(faixa2);
+      m.update = (t) => {
+        t1.offset.x = (t * 0.55) % 1; t2.offset.x = (-t * 0.55) % 1;
+        const dt = 1 / 60;
+        for (const l of lutadores) {
+          if (!l.vivo) continue;
+          const p = l.rag.parts.pelvis.translation();
+          if (p.y > 1.4 || Math.abs(p.x) > 5.5 || Math.abs(p.z) > 4) continue; // no ar/fora
+          const dir = p.z < 0 ? 1 : -1; // faixa de trás empurra pra +x, da frente pra -x
+          l.rag.parts.pelvis.applyImpulse({ x: dir * 15 * dt, y: 0, z: 0 }, true);
+        }
+      };
+    },
+  },
+  {
+    nome: 'VENDAVAL',
+    build(m) {
+      chaoFixo(m, 5.5, 4, new THREE.MeshStandardMaterial({ map: deckTex, roughness: 0.85 }));
+      // céu de tempestade
+      hemi.color.setHex(0xaebfd0); hemi.groundColor.setHex(0x2e3a3a); hemi.intensity = 0.9;
+      sun.color.setHex(0xdfe8ee); sun.intensity = 1.15;
+      scene.fog.color.setHex(0x2a3440); scene.fog.near = 16; scene.fog.far = 48;
+      fazerCaixote(m, -2.8, 2.2); fazerCaixote(m, 2.8, -2.2);
+      // riscos de vento (sprites esticados, aparecem só na rajada)
+      const riscoTex = (() => {
+        const c = document.createElement('canvas'); c.width = 128; c.height = 16;
+        const g = c.getContext('2d');
+        const gr = g.createLinearGradient(0, 0, 128, 0);
+        gr.addColorStop(0, 'rgba(255,255,255,0)'); gr.addColorStop(0.5, 'rgba(255,255,255,.9)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+        g.fillStyle = gr; g.fillRect(0, 5, 128, 6);
+        const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+      })();
+      const riscos = [];
+      for (let i = 0; i < 14; i++) {
+        const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: riscoTex, transparent: true, opacity: 0, depthWrite: false }));
+        s.scale.set(1.6, 0.1, 1); scene.add(s); m.meshes.push(s);
+        riscos.push({ s, seed: Math.random() * 20 });
+      }
+      let prox = 0, fase = 'calmo', faseAte = 0, dirV = { x: 1, z: 0 };
+      m.reset = () => { fase = 'calmo'; prox = 0; resetCaixotes(m); for (const r of riscos) r.s.material.opacity = 0; };
+      m.update = (t) => {
+        if (prox === 0) prox = t + 5 + Math.random() * 4;
+        if (fase === 'calmo' && t > prox) {
+          const a = Math.random() * Math.PI * 2; dirV = { x: Math.cos(a), z: Math.sin(a) };
+          fase = 'aviso'; faseAte = t + 1.0; som.selecionar?.();
+        } else if (fase === 'aviso' && t > faseAte) {
+          fase = 'rajada'; faseAte = t + 0.9; trauma = Math.min(1, trauma + 0.25);
+        } else if (fase === 'rajada' && t > faseAte) {
+          fase = 'calmo'; prox = t + 6 + Math.random() * 5;
+        }
+        const dt = 1 / 60;
+        const forca = fase === 'rajada' ? 42 : 0;
+        if (forca) {
+          for (const l of lutadores) {
+            if (!l.vivo) continue;
+            l.rag.parts.pelvis.applyImpulse({ x: dirV.x * forca * dt, y: 2 * dt, z: dirV.z * forca * dt }, true);
+            l.rag.parts.torso.applyImpulse({ x: dirV.x * forca * 0.6 * dt, y: 0, z: dirV.z * forca * 0.6 * dt }, true);
+          }
+          for (const [cb] of m._caixotes) cb.applyImpulse({ x: dirV.x * 10 * dt, y: 0, z: dirV.z * 10 * dt }, true);
+        }
+        const vis = fase === 'aviso' ? 0.35 : fase === 'rajada' ? 0.9 : 0;
+        for (const r of riscos) {
+          r.s.material.opacity += (vis - r.s.material.opacity) * 0.2;
+          if (vis > 0) {
+            const k = ((t * (fase === 'rajada' ? 2.2 : 1.1) + r.seed) % 3) / 3; // 0..1 varrendo a arena
+            r.s.position.set(dirV.x * (k * 12 - 6) - dirV.z * ((r.seed % 2.4) - 1.2) * 2.6,
+              0.5 + (r.seed % 1.7), dirV.z * (k * 12 - 6) + dirV.x * ((r.seed % 2.4) - 1.2) * 2.6);
+            r.s.material.rotation = Math.atan2(-dirV.z, dirV.x);
+          }
+        }
+      };
+    },
+  },
+  {
+    nome: 'CHÃO QUENTE',
+    build(m) {
+      // Placas esquentam (ficam vermelhas) e caem — leia o aviso e sai de cima!
+      hemi.color.setHex(0xffc8a0); hemi.groundColor.setHex(0x50201a); hemi.intensity = 0.95;
+      scene.fog.color.setHex(0x3a1410); scene.fog.near = 18; scene.fog.far = 50;
+      sun.color.setHex(0xffb37a); sun.intensity = 1.3;
+      const tiles = [];
+      const NX = 4, NZ = 3, HX = 0.65, HZ = 0.9; // 4×3 placas de 1.3×1.8 (cobre os spawns)
+      for (let ix = 0; ix < NX; ix++) for (let iz = 0; iz < NZ; iz++) {
+        const cx = (ix - (NX - 1) / 2) * HX * 2, cz = (iz - (NZ - 1) / 2) * HZ * 2;
+        const body = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(cx, -0.3, cz));
+        world.createCollider(RAPIER.ColliderDesc.cuboid(HX - 0.02, 0.3, HZ - 0.02).setFriction(0.8).setCollisionGroups(GROUND_GROUPS), body);
+        m.bodies.push(body);
+        const mat = new THREE.MeshStandardMaterial({ map: deckTex, roughness: 0.85, emissive: 0xff2200, emissiveIntensity: 0 });
+        const mesh = new THREE.Mesh(new THREE.BoxGeometry(HX * 2 - 0.06, 0.6, HZ * 2 - 0.06), mat);
+        mesh.position.set(cx, -0.3, cz); mesh.receiveShadow = true;
+        scene.add(mesh); m.meshes.push(mesh);
+        tiles.push({ body, mesh, mat, cx, cz, estado: 'ok', ate: 0 });
+      }
+      let prox = 0;
+      m.reset = () => {
+        prox = 0;
+        for (const t of tiles) { t.estado = 'ok'; t.mat.emissiveIntensity = 0; t.body.setTranslation({ x: t.cx, y: -0.3, z: t.cz }, true); t.mesh.position.y = -0.3; }
+      };
+      m.update = (t) => {
+        if (prox === 0) prox = t + 4;
+        if (t > prox) {
+          prox = t + 3.2 + Math.random() * 1.6;
+          const livres = tiles.filter((x) => x.estado === 'ok');
+          for (let i = 0; i < Math.min(3, livres.length - 4); i++) { // nunca derruba tudo
+            const tile = livres.splice((Math.random() * livres.length) | 0, 1)[0];
+            tile.estado = 'quente'; tile.ate = t + 1.5;
+          }
+        }
+        for (const tile of tiles) {
+          if (tile.estado === 'quente') {
+            tile.mat.emissiveIntensity = 0.25 + 0.55 * Math.abs(Math.sin(t * 9)); // pisca vermelho
+            if (t > tile.ate) { tile.estado = 'caiu'; tile.ate = t + 2.4; tile.body.setTranslation({ x: tile.cx, y: -7, z: tile.cz }, true); }
+          } else if (tile.estado === 'caiu') {
+            tile.mesh.position.y += (-5 - tile.mesh.position.y) * 0.2; tile.mat.emissiveIntensity *= 0.9;
+            if (t > tile.ate) { tile.estado = 'ok'; tile.body.setTranslation({ x: tile.cx, y: -0.3, z: tile.cz }, true); }
+          } else {
+            tile.mat.emissiveIntensity *= 0.85;
+            tile.mesh.position.y += (-0.3 - tile.mesh.position.y) * 0.25;
+          }
+        }
+      };
+    },
+  },
+  {
+    nome: 'TRAMPOLIM',
+    build(m) {
+      // Chão elástico: todo mundo quica — a voadora vira a arma principal
+      const texTramp = (() => {
+        const c = document.createElement('canvas'); c.width = c.height = 512;
+        const g = c.getContext('2d');
+        g.fillStyle = '#274a8a'; g.fillRect(0, 0, 512, 512);
+        g.strokeStyle = '#1a3560'; g.lineWidth = 4;
+        for (let i = 64; i < 512; i += 64) { g.beginPath(); g.moveTo(i, 0); g.lineTo(i, 512); g.stroke(); g.beginPath(); g.moveTo(0, i); g.lineTo(512, i); g.stroke(); }
+        g.strokeStyle = '#d63b30'; g.lineWidth = 26; g.strokeRect(13, 13, 486, 486);
+        const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+      })();
+      const g = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, -0.3, 0));
+      world.createCollider(RAPIER.ColliderDesc.cuboid(5, 0.3, 3.6).setFriction(0.8).setRestitution(1.6).setCollisionGroups(GROUND_GROUPS), g);
+      m.bodies.push(g);
+      const deck = new THREE.Mesh(new THREE.BoxGeometry(10, 0.6, 7.2), new THREE.MeshStandardMaterial({ map: texTramp, roughness: 0.75 }));
+      deck.position.y = -0.3; deck.receiveShadow = true; scene.add(deck); m.meshes.push(deck);
+    },
+  },
+  {
+    nome: 'BLACKOUT',
+    build(m) {
+      chaoFixo(m, 5.5, 4, new THREE.MeshStandardMaterial({ map: deckTex, roughness: 0.85 }));
+      fazerCaixote(m, -2.8, 2.2); fazerCaixote(m, 2.8, -2.2);
+      // De tempos em tempos o estádio APAGA — 2s de escuridão e volta
+      let prox = 0, fase = 'aceso', faseAte = 0;
+      const alvoEscuro = { hemi: 0.06, sun: 0.04, rim: 0.1, expo: 0.62 };
+      const alvoClaro = { hemi: AMBIENTE_PADRAO.hemiInt, sun: AMBIENTE_PADRAO.sunInt, rim: AMBIENTE_PADRAO.rimInt, expo: AMBIENTE_PADRAO.expo };
+      m.reset = () => { fase = 'aceso'; prox = 0; resetCaixotes(m); };
+      m.update = (t) => {
+        if (prox === 0) prox = t + 7 + Math.random() * 4;
+        if (fase === 'aceso' && t > prox) { fase = 'apagando'; faseAte = t + 2.0; som.selecionar?.(); }
+        else if (fase === 'apagando' && t > faseAte) { fase = 'aceso'; prox = t + 8 + Math.random() * 5; }
+        const alvo = fase === 'apagando' ? alvoEscuro : alvoClaro;
+        const k = 0.12;
+        hemi.intensity += (alvo.hemi - hemi.intensity) * k;
+        sun.intensity += (alvo.sun - sun.intensity) * k;
+        rim.intensity += (alvo.rim - rim.intensity) * k;
+        r3.toneMappingExposure += (alvo.expo - r3.toneMappingExposure) * k;
+      };
+    },
+  },
+  {
+    nome: 'PLATAFORMAS',
+    build(m) {
+      // Ilha central + duas plataformas que passeiam sobre o abismo
+      const matIlha = new THREE.MeshStandardMaterial({ map: deckTex, roughness: 0.85 });
+      chaoFixo(m, 1.35, 3.2, matIlha); // faixa central cobre os spawns de cima/baixo
+      const texMetal = (() => {
+        const c = document.createElement('canvas'); c.width = c.height = 256;
+        const g = c.getContext('2d');
+        g.fillStyle = '#5a6474'; g.fillRect(0, 0, 256, 256);
+        g.strokeStyle = '#414957'; g.lineWidth = 3;
+        for (let i = 0; i < 7; i++) { g.beginPath(); g.moveTo(0, i * 40 + 18); g.lineTo(256, i * 40 + 18); g.stroke(); }
+        g.fillStyle = '#ffd94a'; g.fillRect(0, 0, 256, 14); g.fillRect(0, 242, 256, 14);
+        const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+      })();
+      const plats = [];
+      for (const lado of [-1, 1]) {
+        const body = world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(lado * 2.9, -0.3, 0));
+        world.createCollider(RAPIER.ColliderDesc.cuboid(1.15, 0.3, 0.95).setFriction(1.0).setCollisionGroups(GROUND_GROUPS), body);
+        m.bodies.push(body);
+        const mesh = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.6, 1.9), new THREE.MeshStandardMaterial({ map: texMetal, roughness: 0.7 }));
+        mesh.receiveShadow = true; scene.add(mesh); m.meshes.push(mesh);
+        m.syncPairs.push([body, mesh]);
+        plats.push({ body, lado, seed: lado * Math.PI * 0.5 });
+      }
+      let t0 = 0;
+      m.reset = () => { t0 = -1; };
+      m.update = (t) => {
+        if (t0 < 0) t0 = t; // fase zera no round: plataformas começam no centro (spawn seguro)
+        for (const p of plats) {
+          const z = Math.sin((t - t0) * 0.55 + p.seed) * 1.7;
+          p.body.setNextKinematicTranslation({ x: p.lado * 2.9, y: -0.3, z });
+        }
+      };
+    },
+  },
 ];
 
 let mapaIdx = 0;
