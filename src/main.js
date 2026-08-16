@@ -2557,6 +2557,7 @@ function montarLutadores(configs) {
     destroyVisual(l.meshes);
     l.rag.destroy();
     if (l._sight) { scene.remove(l._sight.grp); l._sight = null; }
+    if (l._gauge) { scene.remove(l._gauge.spr); l._gauge.tex.dispose(); l._gauge = null; } // manômetro do SOCÃO
   }
   lutadores = configs.map((cfg, i) => {
     const [sx, sz] = SPAWNS[i];
@@ -3438,6 +3439,27 @@ function mostrarVitoria(winner) {
   $('vit-baixar')?.addEventListener('click', baixarMelhorJogada);
 }
 
+// Manômetro sci-fi do SOCÃO: dial escuro, escala de 270°, zona vermelha no fim
+function desenharGauge(cv, carga) {
+  const g = cv.getContext('2d'), C = 64;
+  g.clearRect(0, 0, 128, 128);
+  g.beginPath(); g.arc(C, C, 52, 0, 6.29);
+  g.fillStyle = 'rgba(12,10,28,.88)'; g.fill();
+  g.lineWidth = 6; g.strokeStyle = '#2a1030'; g.stroke();
+  const a0 = Math.PI * 0.75, a1 = Math.PI * 2.25; // 270° de escala
+  g.lineWidth = 10; g.lineCap = 'round';
+  g.strokeStyle = 'rgba(255,255,255,.14)';
+  g.beginPath(); g.arc(C, C, 38, a0, a1); g.stroke();
+  g.strokeStyle = 'rgba(255,70,70,.45)'; // zona vermelha (25% finais)
+  g.beginPath(); g.arc(C, C, 38, a0 + (a1 - a0) * 0.75, a1); g.stroke();
+  g.strokeStyle = carga < 0.5 ? '#7ed957' : carga < 0.8 ? '#ffd94a' : '#ff5252';
+  g.beginPath(); g.arc(C, C, 38, a0, a0 + (a1 - a0) * carga); g.stroke();
+  const ang = a0 + (a1 - a0) * carga; // ponteiro
+  g.strokeStyle = '#fff'; g.lineWidth = 4;
+  g.beginPath(); g.moveTo(C, C); g.lineTo(C + Math.cos(ang) * 34, C + Math.sin(ang) * 34); g.stroke();
+  g.beginPath(); g.arc(C, C, 5, 0, 6.29); g.fillStyle = '#fff'; g.fill();
+  if (carga >= 1) { g.font = '26px sans-serif'; g.textAlign = 'center'; g.fillText('💥', C, C - 16); }
+}
 const CORES_CONFETE = ['#ff5a5a', '#ffd94a', '#7ed957', '#66e0ff', '#c77dff', '#ff9a3c'];
 function confete(qtd = 70) {
   for (let i = 0; i < qtd; i++) {
@@ -4678,6 +4700,27 @@ function frame(t) {
       const pt = p.parts.pelvis.translation();
       l._anelTime.position.set(pt.x, 0.04, pt.z);
       l._anelTime.visible = l.vivo && pt.y > -1.5;
+    }
+    // 🧭 Manômetro do SOCÃO: pressão subindo sobre a cabeça enquanto carrega
+    // (vale pros bots também — dá pra ver o pancadão vindo e esquivar!)
+    if ((p._carga || 0) > 0.03 && l.vivo) {
+      if (!l._gauge) {
+        const cv = document.createElement('canvas'); cv.width = cv.height = 128;
+        const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+        const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
+        spr.scale.setScalar(0.5);
+        scene.add(spr);
+        l._gauge = { cv, tex, spr, ult: -1 };
+      }
+      const g = l._gauge;
+      if (Math.abs(p._carga - g.ult) > 0.008) { g.ult = p._carga; desenharGauge(g.cv, p._carga); g.tex.needsUpdate = true; }
+      const hp = p.parts.head.translation();
+      g.spr.position.set(hp.x, hp.y + 0.55, hp.z);
+      g.spr.visible = true;
+      g.spr.scale.setScalar(p._carga >= 1 ? 0.5 + Math.sin(simNow * 18) * 0.05 : 0.5); // cheio: treme
+    } else if (l._gauge && l._gauge.spr.visible) {
+      l._gauge.spr.visible = false;
+      l._gauge.ult = -1;
     }
     if (p.lastHitLandedAt > 0 && p.lastHitLandedAt > (p._fxVisto ?? -1)) {
       p._fxVisto = p.lastHitLandedAt;
