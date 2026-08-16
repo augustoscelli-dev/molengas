@@ -2276,19 +2276,25 @@ const MAPAS = [
         if (prox === 0) prox = t + 7 + Math.random() * 4;
         if (fase === 'calmo' && t > prox) {
           fase = 'aviso'; faseAte = t + 1.1;
-          avisoMoedas('🌊 VAGALHÃO À VISTA!'); som.selecionar?.();
+          avisoMoedas('🌊 VAGALHÃO! segure AGARRAR pra se firmar!'); som.selecionar?.();
         } else if (fase === 'aviso' && t > faseAte) {
           fase = 'onda'; faseAte = t + 1.2; trauma = Math.min(1, trauma + 0.3);
         } else if (fase === 'onda' && t > faseAte) {
           fase = 'calmo'; prox = t + 8 + Math.random() * 5;
           const a = Math.random() * Math.PI * 2; dirO = { x: Math.cos(a), z: Math.sin(a) };
         }
+        m._vagalhao = fase !== 'calmo'; // os bots leem isso pra se firmar também
         if (fase === 'onda') {
           const dt = 1 / 60, forca = 30;
           for (const l of lutadores) {
             if (!l.vivo) continue;
-            l.rag.parts.pelvis.applyImpulse({ x: dirO.x * forca * dt, y: 3 * dt, z: dirO.z * forca * dt }, true);
-            l.rag.parts.torso.applyImpulse({ x: dirO.x * forca * 0.5 * dt, y: 0, z: dirO.z * forca * 0.5 * dt }, true);
+            // SE FIRMAR: segurando AGARRAR com os pés no convés você aguenta a onda
+            // (leva só ~20% do tranco e nada de levantar do chão)
+            const pp = l.rag.parts.pelvis.translation();
+            const firmou = l._inp?.grab && pp.y < 1.3;
+            const fk = firmou ? 0.2 : 1;
+            l.rag.parts.pelvis.applyImpulse({ x: dirO.x * forca * fk * dt, y: firmou ? 0 : 3 * dt, z: dirO.z * forca * fk * dt }, true);
+            l.rag.parts.torso.applyImpulse({ x: dirO.x * forca * 0.5 * fk * dt, y: 0, z: dirO.z * forca * 0.5 * fk * dt }, true);
           }
           for (const [cb] of m._caixotes) cb.applyImpulse({ x: dirO.x * 8 * dt, y: 0, z: dirO.z * 8 * dt }, true);
         }
@@ -3148,6 +3154,12 @@ function botInput(l) {
   if (dAlvo > 0.85 || rC > 3.3) {
     out.move.x = dx / dl;
     out.move.z = dz / dl;
+  }
+  // VAGALHÃO no ALTO MAR: longe da briga, o bot para e SE FIRMA (segura o convés)
+  if (mapa?._vagalhao && dAlvo > 1.4) {
+    out.grab = true; out.punch = false;
+    out.move.x *= 0.15; out.move.z *= 0.15;
+    return out;
   }
   // Armas: se segura uma, usa; senão vai buscar a mais próxima. Serve pra qualquer
   // posição da arena (não só no centro), respeitando o medo da beirada.
@@ -5216,6 +5228,7 @@ function frame(t) {
         if (l.cfg.tipo !== 'cpu') detectarDash(l, inp, simNow);
         detectarEsquiva(l, inp, simNow); // humanos e bots podem esquivar
       }
+      l._inp = inp; // hazards leem o input do frame (ex.: se firmar no VAGALHÃO)
       l.rag.update(FIXED_DT, simNow, inp);
     }
     world.step();

@@ -69,8 +69,9 @@ PULO / ESQUIVA** na direita. Ao abrir, já cai numa luta rápida contra um bot.
    pra adicionar um **bot 🤖**.
 2. **Tela de arena:** fileira de **cards com foto** de cada mapa (são 21! — no
    **ABISMO 🕳️** não tem chão, no **JARDIM 🌿** a grama amassa na briga, o **DOJO 🥋**
-   tem sacos de pancada pra treinar e no **ALTO MAR 🌊** você luta num convés de
-   navio em oceano de verdade, com vagalhões que empurram todo mundo) e o
+   tem sacos de pancada pra treinar e no **ALTO MAR 🌊** você luta no convés de
+   um navio navegando em oceano de verdade — quando o VAGALHÃO vier, **segure
+   AGARRAR pra se firmar** no convés, senão a onda te varre pro mar) e o
    mapa de verdade montado ao vivo atrás. **A / D** navega · **X** sorteia 🎲 ·
    clique no card também funciona · **F** confirma.
 3. **Tela de modo:** cards dos 6 modos — Melhor de 5 🏆 · Melhor de 3 ⚡ ·
