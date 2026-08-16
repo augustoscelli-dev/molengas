@@ -4,3 +4,4 @@ servidor/node_modules/
 .DS_Store
 .env
 .fly/
+servidor/placar-noite.json

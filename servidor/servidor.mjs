@@ -7,6 +7,7 @@
 
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
+import { readFileSync, writeFile } from 'node:fs';
 import { join, extname, normalize, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { networkInterfaces } from 'node:os';
@@ -385,6 +386,15 @@ function host() { return [...jogadores.values()].sort((a, b) => a.slot - b.slot)
 
 // ---------- Rounds ----------
 const rankingNoite = new Map(); // nome -> vitórias na sessão (o "placar da noite")
+// O placar sobrevive a restart do servidor (arquivo ao lado do servidor.mjs)
+const ARQ_PLACAR = fileURLToPath(new URL('./placar-noite.json', import.meta.url));
+try {
+  for (const [n, v] of Object.entries(JSON.parse(readFileSync(ARQ_PLACAR, 'utf8')))) rankingNoite.set(n, v);
+  if (rankingNoite.size) console.log(`placar da noite recarregado (${rankingNoite.size} nomes)`);
+} catch { /* primeira noite: sem arquivo ainda */ }
+function salvarPlacar() {
+  writeFile(ARQ_PLACAR, JSON.stringify(Object.fromEntries(rankingNoite)), () => {});
+}
 let estado = 'lobby'; // lobby | intro | luta | ponto | fim
 let estadoAte = 0;
 let introStep = 0;
@@ -403,13 +413,18 @@ function startIntro(roundN) {
   proxEncolheAt = 0;
   for (const j of jogadores.values()) j._morroT = 0; // coroa zera por round
   morroLider = null;
-  msg = 'ROUND ' + roundN;
+  const decisivo = winScore() > 1 && [...jogadores.values()].some((j) => j.score === winScore() - 1);
+  msg = 'ROUND ' + roundN + (decisivo ? ' · 🔥 DECISIVO!' : '');
 }
 function comecarPartida() {
   // RODÍZIO: sorteia a variante desta partida antes de montar
   arenaAtiva = ARENAS_ON[arenaIdx].id === 'rodizio'
     ? ['classica', 'gelo', 'encolhe', 'abismo'][(Math.random() * 4) | 0]
     : ARENAS_ON[arenaIdx].id;
+  if (arenaAtiva === 'abismo' && salaMorro) { // o centro do abismo é buraco: morro impossível
+    salaMorro = false;
+    console.log('morro desligado: incompatível com ABISMO');
+  }
   montarArena(MODOS_SALA[salaModo].arena); // arena do modo escolhido
   const tot = capSala();
   for (const j of jogadores.values()) {
@@ -475,6 +490,7 @@ function rounds() {
         if (salaTimes) { // placar da noite: todo mundo do time campeão pontua
           for (const j of jogadores.values()) if (timeS(j) === timeS(winner)) rankingNoite.set(j.nome, (rankingNoite.get(j.nome) || 0) + 1);
         } else rankingNoite.set(winner.nome, (rankingNoite.get(winner.nome) || 0) + 1);
+        salvarPlacar();
         enviarMelhor(); // manda a melhor jogada da partida pra todos
       } else {
         estado = 'ponto';
@@ -668,6 +684,11 @@ const wss = new WebSocketServer({ server: http });
 
 wss.on('connection', (ws) => {
   ws.on('message', (dados) => {
+    // Anti-flood: um cliente legítimo manda ~60 inputs/s; acima de 120/s o
+    // excesso é simplesmente ignorado (não derruba nem pune quem tá no limite).
+    const agoraMs = Date.now();
+    if (!ws._rlT || agoraMs - ws._rlT > 1000) { ws._rlT = agoraMs; ws._rlN = 0; }
+    if (++ws._rlN > 120) return;
     let m;
     try { m = JSON.parse(dados); } catch { return; }
     if (!m || typeof m !== 'object') return;

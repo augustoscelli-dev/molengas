@@ -74,6 +74,17 @@ async function main() {
     if (await alive()) ok('servidor segue vivo após o esvaziamento'); else falha('servidor morreu');
   }
 
+  // ---- D) flood de mensagens é ignorado sem derrubar ----
+  console.log('D) flood de mensagens (anti-DoS por volume)');
+  const F1 = mkCli(0), F2 = mkCli(1);
+  await Promise.all([F1.ready, F2.ready]);
+  for (let i = 0; i < 3000; i++) F1.send({ t: 'grito', g: i % 4 }); // rajada muito acima do limite
+  await sleep(800);
+  F2.send({ t: 'lutador' }); await sleep(500); // outro cliente segue funcionando?
+  if (await alive()) ok('servidor vivo após rajada de 3000 msgs'); else falha('flood derrubou o servidor');
+  if (F2.last?.st != null) ok('outros clientes seguem recebendo snapshots'); else falha('flood travou os snapshots');
+  F1.ws.close(); F2.ws.close();
+
   A.ws.close();
   await sleep(300);
   console.log('\n=== RESUMO ===');

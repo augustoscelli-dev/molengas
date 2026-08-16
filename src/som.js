@@ -154,6 +154,33 @@ const TRILHAS = {
     lead:  [880, 0, 784, 0, 659, 0, 784, 0, 880, 0, 988, 0, 784, 659, 587, 0],
     leadVol: 0.05, leadType: 'square',
   },
+  gelada: { // GELO: lenta e cristalina
+    bpm: 112,
+    baixo: [55, 0, 0, 0, 65.4, 0, 0, 0, 49, 0, 0, 0, 58.3, 0, 0, 0],
+    kick:  [1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0],
+    snare: [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
+    hat:   [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0],
+    lead:  [880, 0, 0, 659, 0, 0, 698, 0, 587, 0, 0, 523, 0, 0, 659, 0],
+    leadVol: 0.045, leadType: 'sine',
+  },
+  tensa: { // ABISMO/BLACKOUT: grave, esparsa, suspense
+    bpm: 122,
+    baixo: [41.2, 0, 0, 41.2, 0, 0, 43.7, 0, 41.2, 0, 0, 41.2, 0, 46.2, 0, 0],
+    kick:  [1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0],
+    snare: [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1],
+    hat:   [1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1],
+    lead:  [0, 0, 0, 0, 330, 0, 0, 0, 0, 0, 311, 0, 0, 0, 0, 0],
+    leadVol: 0.05, leadType: 'sawtooth',
+  },
+  quente: { // CHÃO QUENTE: acelerada, urgente
+    bpm: 158,
+    baixo: [55, 55, 0, 55, 0, 55, 0, 65.4, 73.4, 0, 73.4, 0, 82.4, 0, 65.4, 0],
+    kick:  [1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0],
+    snare: [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0],
+    hat:   [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    lead:  [0, 440, 0, 523, 0, 587, 0, 659, 0, 587, 0, 523, 0, 440, 523, 0],
+    leadVol: 0.05, leadType: 'square',
+  },
 };
 function musicaAplicar() {
   if (musTimer) { clearInterval(musTimer); musTimer = null; }
@@ -192,10 +219,16 @@ export const som = {
     [420, 350, 290].forEach((f, i) => tom(f * p, 0.2, { type: 'triangle', vol: 0.13, delay: i * 0.2, slideTo: f * 0.75 * p }));
   },
   vozYay(p = 1) { voz(380, 820, 0.45, p, 'triangle', 0.2); },
-  soco() { sopro(0.13, { freq: 900, slideTo: 250, vol: 0.35 }); },
-  acerto() {
-    tom(110, 0.18, { type: 'sine', vol: 0.7, slideTo: 55 });
-    sopro(0.06, { freq: 2000, vol: 0.3 });
+  soco() { const p = 0.85 + Math.random() * 0.3; sopro(0.13, { freq: 900 * p, slideTo: 250 * p, vol: 0.35 }); },
+  // Impacto em camadas: corpo + SUB-GRAVE (o "gordo") + estalo, com pitch variado
+  // pra não enjoar. forca cresce com o dano da vítima — pancada tarde soa maior.
+  acerto(forca = 1) {
+    const v = Math.min(1.6, forca);
+    const p = 0.92 + Math.random() * 0.16;
+    tom(110 * p, 0.18, { type: 'sine', vol: 0.55 * v, slideTo: 55 * p }); // corpo do soco
+    tom(58 * p, 0.28, { type: 'sine', vol: 0.5 * v, slideTo: 34 });      // sub-grave
+    sopro(0.07, { freq: 1900 * p, vol: 0.28 * v });                      // estalo/chicote
+    if (v > 1.15) sopro(0.18, { freq: 680, slideTo: 220, vol: 0.26, type: 'lowpass' }); // pancadão: rasgo extra
   },
   bolada() {
     tom(196, 0.5, { type: 'triangle', vol: 0.5, slideTo: 130 });

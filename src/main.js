@@ -1035,6 +1035,7 @@ const MAPAS = [
     desc: 'escorrega que é uma beleza',
     fundoTex: FUNDOS.aurora,
     amb: 'neve',
+    trilha: 'gelada',
     build(m) {
       climaMapa({ ceu: 0xd8f0ff, chao: 0x1c3a4a, fog: 0x16283a, sol: 0xcfe8ff, solInt: 1.35, expo: 1.05 }); // frio azulado
       // Pista escorregadia: atrito quase zero + tração reduzida
@@ -1614,6 +1615,7 @@ const MAPAS = [
     desc: 'placas esquentam e caem',
     fundoTex: FUNDOS.vulcao,
     amb: 'lava',
+    trilha: 'quente',
     build(m) {
       // Placas esquentam (ficam vermelhas) e caem — leia o aviso e sai de cima!
       hemi.color.setHex(0xffc8a0); hemi.groundColor.setHex(0x50201a); hemi.intensity = 0.95;
@@ -1729,6 +1731,7 @@ const MAPAS = [
     nome: 'BLACKOUT',
     desc: 'as luzes apagam do nada 😱',
     fundoTex: FUNDOS.noite,
+    trilha: 'tensa',
     build(m) {
       chaoFixo(m, 5.5, 4, new THREE.MeshStandardMaterial({ map: deckTex, roughness: 0.85 }));
       fazerCaixote(m, -2.8, 2.2); fazerCaixote(m, 2.8, -2.2);
@@ -1838,6 +1841,8 @@ const MAPAS = [
     desc: 'sem chão — arrasta o rival pro buraco',
     fundoTex: FUNDOS.noite,
     amb: 'vento',
+    trilha: 'tensa',
+    pontes: true,       // bots andam eixo por eixo (diagonal = queda no vão)
     semHolofotes: true, // no vazio só a luz fria da noite (cones lavariam o breu)
     build(m) {
       // Vazio total embaixo: caiu, morreu. Ilhas + pontes finas — o jogo aqui é
@@ -2701,11 +2706,15 @@ function botInput(l) {
       dz = me.z - bp.z;
     }
   }
-  // medo da beirada: longe do centro, puxa pra dentro
+  // medo da beirada: longe do centro, puxa pra dentro (não vale em mapa de pontes)
   const rC = Math.hypot(me.x, me.z);
-  if (rC > 3.3) {
+  if (rC > 3.3 && !MAPAS[mapaIdx].pontes) {
     dx = dx * 0.35 - me.x * 0.65;
     dz = dz * 0.35 - me.z * 0.65;
+  }
+  // Mapa de PONTES (ABISMO): anda em L, um eixo por vez — diagonal cai no vão
+  if (MAPAS[mapaIdx].pontes && dAlvo > 1.1) {
+    if (Math.abs(dx) > Math.abs(dz)) dz = 0; else dx = 0;
   }
   const dl = Math.hypot(dx, dz) || 1;
   if (dAlvo > 0.85 || rC > 3.3) {
@@ -3239,7 +3248,9 @@ function startIntro(roundN) {
   if (elM) elM.textContent = 'MAPA: ' + MAPAS[mapaIdx].nome;
   limparPowerups();
   proxPowerEm = 0;
-  showMsg('ROUND ' + roundN);
+  // Round decisivo: alguém (ou uma dupla) está a 1 ponto de fechar a partida
+  const decisivo = WIN_SCORE > 1 && lutadores.some((l) => l.score === WIN_SCORE - 1);
+  showMsg('ROUND ' + roundN, decisivo ? '🔥 ROUND DECISIVO!' : '');
 }
 function iniciarLuta() {
   $('selecao').style.display = 'none';
@@ -3267,7 +3278,7 @@ function iniciarLuta() {
   melhorClip = null; finalWinner = null; // zera a melhor jogada da partida
   updateScore();
   som.confirmar();
-  som.musica('luta');
+  som.musica(MAPAS[mapaIdx].trilha || 'luta'); // trilha temática do bioma
   startIntro(1);
 }
 
@@ -4493,7 +4504,7 @@ function frame(t) {
       const pos = p.parts.head.translation();
       burstEstrelas(pos);
       powFx(pos);
-      som.acerto();
+      som.acerto(1 + p.dano * 0.15); // vítima grogue = pancada soa maior
       som.vozDor(VOZES[l.slot]);
       // Golpe mais forte (quanto mais grogue, maior o baque) sacode e congela mais
       trauma = Math.min(1, trauma + 0.5 + p.dano * 0.06);
