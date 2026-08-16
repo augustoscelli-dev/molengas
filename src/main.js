@@ -3337,12 +3337,16 @@ function mostrarVitoria(winner) {
   }).join('');
   const titulo = MODO_TIMES ? `🏆 DUPLA ${NOMES_TIME[timeDe(winner)]} VENCEU!` : `🏆 ${SKINS[winner.cfg.skin].nome} VENCEU!`;
   const retrato = ASSET(`assets/retratos/${SKINS[winner.cfg.skin].id}.jpg`);
+  const btnClip = (melhorClip && window.MediaRecorder)
+    ? `<button id="vit-baixar" type="button">🎬 BAIXAR A MELHOR JOGADA</button>` : '';
   $('msg').innerHTML =
     `<div class="vitoria"><img class="vit-retrato" src="${retrato}" alt="">` +
     `<div class="vit-tit">${titulo}</div>` +
     `<div class="vit-stats">${linhas}</div>` +
+    btnClip +
     `<div class="vit-dica">Aperte R pra voltar à seleção</div></div>`;
   $('msg').style.display = 'block';
+  $('vit-baixar')?.addEventListener('click', baixarMelhorJogada);
 }
 
 const CORES_CONFETE = ['#ff5a5a', '#ffd94a', '#7ed957', '#66e0ff', '#c77dff', '#ff9a3c'];
@@ -3475,6 +3479,34 @@ function aplicarReplay(idx) {
 let melhorClip = null;   // { frames, score, tipo, autorNome, autorSkin }
 let finalWinner = null;  // vencedor da partida (pra cutscene)
 let cutT = 0;            // tempo da cutscene
+let gravandoClip = false, gravacao = null; // download da melhor jogada (.webm)
+// Toca a melhor jogada DE NOVO gravando só o canvas (sem HUD) e baixa o .webm
+function baixarMelhorJogada() {
+  if (!melhorClip || state !== 'fim' || gravandoClip || !window.MediaRecorder) return;
+  const btn = $('vit-baixar');
+  if (btn) { btn.disabled = true; btn.textContent = '⏺️ gravando…'; }
+  const stream = r3.domElement.captureStream(60);
+  const mime = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm']
+    .find((mm) => MediaRecorder.isTypeSupported(mm)) || '';
+  const rec = new MediaRecorder(stream, mime ? { mimeType: mime, videoBitsPerSecond: 6e6 } : undefined);
+  const chunks = [];
+  rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+  rec.onstop = () => {
+    const blob = new Blob(chunks, { type: 'video/webm' });
+    window._replayBytes = blob.size; // teste automatizado espia aqui
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'wobblers-melhor-jogada.webm';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  };
+  gravacao = rec;
+  rec.start();
+  showMsg(''); // vídeo limpo: esconde a tela de vitória enquanto grava
+  gravandoClip = true;
+  state = 'melhor'; replayT = 0;
+  som.lutem?.();
+}
 function considerarHighlight(vitima, tipo, decisiva) {
   if (replayBuf.length < 15) return;
   const autorRag = (simNow - (vitima.rag._agrAt ?? -10) < 3.5) ? vitima.rag._agr : null;
@@ -4310,7 +4342,14 @@ function frame(t) {
   if (state === 'melhor') {
     replayT += fdt * 0.35;
     const idx = Math.floor(replayT * 60);
-    if (idx >= melhorClip.frames.length) { iniciarCutscene(); }
+    if (idx >= melhorClip.frames.length) {
+      if (gravandoClip) { // fim da regravação: para, baixa e volta pra tela de vitória
+        gravandoClip = false;
+        gravacao?.stop(); gravacao = null;
+        state = 'fim';
+        mostrarVitoria(finalWinner);
+      } else iniciarCutscene();
+    }
     else { aplicarClipe(melhorClip.frames, idx); }
     camMeioAcao(2.2, 4.4, 0.06);
     updateEfeitos(fdt); mirarHolofotes(simNow); cairConfetes(fdt, simNow); atualizarSkins(); renderCena();

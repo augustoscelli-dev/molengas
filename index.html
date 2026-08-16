@@ -210,6 +210,15 @@
   .aj-sec { font-size: 14px; line-height: 1.55; background: rgba(0,0,0,.25);
     border-radius: 14px; padding: 10px 14px; width: 100%; box-sizing: border-box; }
   .aj-sec b { color: #ffd94a; }
+  #vit-baixar { pointer-events: auto; cursor: pointer; font-family: var(--f-disp);
+    font-size: clamp(13px, 2vw, 16px); letter-spacing: .5px; color: #2a1030;
+    border: 3px solid #2a1030; border-radius: 999px; padding: 9px 24px; margin-top: 10px;
+    background: linear-gradient(180deg, #ffe27a, #ffb03c);
+    box-shadow: 0 5px 0 #2a1030, 0 10px 20px rgba(0,0,0,.4);
+    transition: transform .12s cubic-bezier(.2,1.4,.4,1); -webkit-tap-highlight-color: transparent; }
+  #vit-baixar:hover { transform: translateY(-2px) rotate(-1deg); }
+  #vit-baixar:active { transform: translateY(3px); box-shadow: 0 2px 0 #2a1030; }
+  #vit-baixar:disabled { opacity: .7; cursor: wait; transform: none; }
   #ajuda-fechar { align-self: center; margin-top: 4px; }
   /* ---------- Seleção de personagens (palco 3D + cards) ---------- */
   #selecao { position: fixed; inset: 0; z-index: 5; display: flex; flex-direction: column;
