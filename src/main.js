@@ -3559,7 +3559,10 @@ function handleRounds(now) {
     for (const l of lutadores) { l.rag.reset(); l.vivo = true; }
     for (const o of lutadores) o.rag.rivals = rivaisDe(o, false).map((x) => x.rag);
     mapa.reset?.(false);
-    startIntro(lutadores.reduce((s, l) => s + l.score, 0) + 1);
+    // em DUPLAS o score é por time — conta um representante de cada, senão o nº do round dobra
+    startIntro(MODO_TIMES
+      ? (lutadores.find((l) => timeDe(l) === 0)?.score || 0) + (lutadores.find((l) => timeDe(l) === 1)?.score || 0) + 1
+      : lutadores.reduce((s, l) => s + l.score, 0) + 1);
   } else if (state === 'fim' && isDown('KeyR')) {
     for (const l of lutadores) { l.rag.reset(); l.vivo = true; }
     mapa.reset?.(true);

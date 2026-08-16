@@ -409,6 +409,17 @@ function comecarPartida() {
   limparMelhor(); // zera a melhor jogada da partida
   startIntro(1);
 }
+// Nº do round: em TIMES o score é por time (todo membro pontua junto), então
+// somar todo mundo inflaria o contador — soma um representante de cada time.
+function proximoRound() {
+  const js = [...jogadores.values()];
+  if (salaTimes) {
+    const s0 = js.find((j) => timeS(j) === 0)?.score || 0;
+    const s1 = js.find((j) => timeS(j) === 1)?.score || 0;
+    return s0 + s1 + 1;
+  }
+  return js.reduce((s, j) => s + j.score, 0) + 1;
+}
 function rounds() {
   if (estado === 'intro') {
     if (now > estadoAte) {
@@ -459,7 +470,7 @@ function rounds() {
     for (const j of jogadores.values()) { j.rag.reset(); j.vivo = true; }
     resetProps();
     refazerRivais();
-    startIntro([...jogadores.values()].reduce((s, j) => s + j.score, 0) + 1);
+    startIntro(proximoRound());
   }
 }
 
