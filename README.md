@@ -58,7 +58,9 @@ PULO / ESQUIVA** na direita. Ao abrir, já cai numa luta rápida contra um bot.
    e **K** (J2). Aperte **C** pra adicionar um **bot 🤖**.
 2. **Tela de mapa** (depois de todos confirmarem):
    - **A / D** — troca o **mapa** (são 17!) · **X** sorteia 🎲
-   - **N** — modo (Melhor de 5 · Melhor de 3 · Morte Súbita · CAOS ⚔️ · REI DO MORRO 👑)
+   - **N** — modo (Melhor de 5 · Melhor de 3 · Morte Súbita · CAOS ⚔️ · REI DO MORRO 👑 ·
+     **DUPLAS 2v2 🤝** — você + aliado contra a dupla rival, sem fogo amigo, anel
+     colorido mostra o time; bots completam a sala)
    - **G** — modificador de festa (LUA 🌙 · TURBO ⚡ · FORTÕES 💪)
    - **V** — **dificuldade** dos bots (Fácil · Médio · Difícil)
    - **J** — liga o **Jaeger × Kaiju** (robô × monstro, com força assimétrica)

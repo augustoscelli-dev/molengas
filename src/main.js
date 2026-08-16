@@ -29,12 +29,40 @@ const MODOS = [
   { nome: 'Morte Súbita', vitorias: 1, caos: false },
   { nome: 'CAOS ⚔️ (armas sem parar)', vitorias: 5, caos: true },
   { nome: 'REI DO MORRO 👑 (domine o centro)', vitorias: 3, caos: false, morro: true },
+  { nome: 'DUPLAS 2v2 🤝 (você + aliado)', vitorias: 3, caos: false, times: true },
 ];
 let modoIdx = 0;
 let MODO_CAOS = false; // partida atual usa drop de armas acelerado?
 let MODO_MORRO = false;    // partida atual é rei do morro?
+let MODO_TIMES = false;    // partida atual é duplas 2v2?
+const timeDe = (l) => l.slot % 2; // time 🔴 = slots 0/2 · time 🔵 = slots 1/3
+// rivais de um lutador (em DUPLAS, o parceiro não é rival: sem fogo amigo)
+const rivaisDe = (l, soVivos) => lutadores.filter((o) =>
+  o !== l && (!soVivos || o.vivo) && (!MODO_TIMES || timeDe(o) !== timeDe(l)));
 const MORRO_RAIO = 1.25, MORRO_ALVO = 10; // ficar 10s na zona central ganha o round
 let morroVis = null, morroTickAt = 0;
+const CORES_TIME = [0xff5252, 0x40a0ff]; // 🔴 slots pares · 🔵 slots ímpares
+const NOMES_TIME = ['🔴 VERMELHA', '🔵 AZUL'];
+let aneisTime = []; // anéis no chão marcando o time de cada lutador (DUPLAS)
+function limparAneisTime() {
+  for (const a of aneisTime) { scene.remove(a); a.geometry.dispose(); a.material.dispose(); }
+  aneisTime = [];
+}
+// Um anel colorido sob cada lutador pra ler os times de longe (só em DUPLAS).
+function criarAneisTime() {
+  limparAneisTime();
+  if (!MODO_TIMES) return;
+  for (const l of lutadores) {
+    const anel = new THREE.Mesh(
+      new THREE.RingGeometry(0.3, 0.42, 32),
+      new THREE.MeshBasicMaterial({ color: CORES_TIME[timeDe(l)], transparent: true, opacity: 0.75, side: THREE.DoubleSide, depthWrite: false }),
+    );
+    anel.rotation.x = -Math.PI / 2;
+    scene.add(anel);
+    l._anelTime = anel;
+    aneisTime.push(anel);
+  }
+}
 // Dificuldade dos bots: reação, agressividade e mira mudam com o nível.
 const NIVEIS = [
   { nome: 'Fácil', reacao: 1.7, esquiva: 0.25, ataque: 1.4, mira: 0.9 },
@@ -2476,7 +2504,7 @@ function montarLutadores(configs) {
     aplicarClasse(rag, meshes);
     return { rag, meshes, cfg, slot: i, vivo: true, score: 0 };
   });
-  for (const l of lutadores) l.rag.rivals = lutadores.filter((o) => o !== l).map((o) => o.rag);
+  for (const l of lutadores) l.rag.rivals = rivaisDe(l, false).map((o) => o.rag);
 }
 
 // Tecla M: alterna entre o estilo base e o Jaeger rigado ('j') em runtime,
@@ -2565,7 +2593,7 @@ function botInput(l) {
     mira: nv0.mira / dda,
   };
   const bordaP = P.borda * (1 + PH.beirada * 0.8); // quem vive na beirada é caçado lá
-  const alvos = lutadores.filter((o) => o !== l && o.vivo);
+  const alvos = rivaisDe(l, true);
   if (!alvos.length) return out;
   // Escolha de alvo por utilidade: o mais perto, com bônus pra quem está na beirada
   // (ring-out fácil) — quanto a persona valoriza isso vem de P.borda.
@@ -3032,6 +3060,8 @@ function addBot() {
 }
 function mostrarSelecao() {
   if (morroVis) { scene.remove(morroVis); morroVis = null; }
+  limparAneisTime();
+  for (const l of lutadores) l._anelTime = null;
   world.gravity = { x: 0, y: -9.81, z: 0 }; // desfaz modificador de festa no menu
   AJUSTES.forcaSoco = 1; AJUSTES.turbo = 1;
   selFase = 'skins';
@@ -3063,6 +3093,7 @@ function iniciarLuta() {
   WIN_SCORE = MODOS[modoIdx].vitorias;   // aplica o modo escolhido
   MODO_CAOS = MODOS[modoIdx].caos;
   MODO_MORRO = !!MODOS[modoIdx].morro;
+  MODO_TIMES = !!MODOS[modoIdx].times;
   if (morroVis) { scene.remove(morroVis); morroVis = null; }
   if (MODO_MORRO) { // zona dourada no centro
     morroVis = new THREE.Mesh(
@@ -3074,7 +3105,10 @@ function iniciarLuta() {
   }
   aplicarModificador(); // festa: lua/turbo/fortões (ou volta ao normal)
   const configs = selCfg.filter((c) => c.ativo).map((c) => ({ ...c }));
+  // DUPLAS: completa a sala até 4 com bots (seus aliados e rivais)
+  if (MODO_TIMES) while (configs.length < 4) configs.push({ tipo: 'cpu', skin: MENU_SKINS[configs.length % MENU_SKINS.length], ativo: true, conf: true });
   montarLutadores(configs);
+  criarAneisTime(); // anel colorido do time sob cada lutador (só em DUPLAS)
   mapa.reset?.(true);
   melhorClip = null; finalWinner = null; // zera a melhor jogada da partida
   updateScore();
@@ -3132,14 +3166,15 @@ function mostrarVitoria(winner) {
   const linhas = lutadores.map((l) => {
     const s = l.rag.stats;
     const prec = s.socos ? Math.round((s.acertos / s.socos) * 100) : 0;
-    const eu = l === winner;
+    const eu = MODO_TIMES ? timeDe(l) === timeDe(winner) : l === winner;
     return `<div class="vit-linha${eu ? ' mvp' : ''}"><span class="vl-nome">${eu ? '🏆 ' : ''}${SKINS[l.cfg.skin].nome}</span>` +
       `<span>👊 ${s.acertos}/${s.socos} (${prec}%) · 🤸 ${s.arremessos} · ⏱️ ${s.pendurado.toFixed(0)}s</span></div>`;
   }).join('');
+  const titulo = MODO_TIMES ? `🏆 DUPLA ${NOMES_TIME[timeDe(winner)]} VENCEU!` : `🏆 ${SKINS[winner.cfg.skin].nome} VENCEU!`;
   const retrato = ASSET(`assets/retratos/${SKINS[winner.cfg.skin].id}.jpg`);
   $('msg').innerHTML =
     `<div class="vitoria"><img class="vit-retrato" src="${retrato}" alt="">` +
-    `<div class="vit-tit">🏆 ${SKINS[winner.cfg.skin].nome} VENCEU!</div>` +
+    `<div class="vit-tit">${titulo}</div>` +
     `<div class="vit-stats">${linhas}</div>` +
     `<div class="vit-dica">Aperte R pra voltar à seleção</div></div>`;
   $('msg').style.display = 'block';
@@ -3355,7 +3390,7 @@ function handleRounds(now) {
         trauma = 1; hitStop = Math.max(hitStop, 0.11); // baque forte no nocaute/ring-out
         l.rag.rivals = [];
         cairam.push(l);
-        for (const o of lutadores) o.rag.rivals = lutadores.filter((x) => x !== o && x.vivo).map((x) => x.rag);
+        for (const o of lutadores) o.rag.rivals = rivaisDe(o, true).map((x) => x.rag);
       }
     }
     // REI DO MORRO: ficar na zona central acumula a coroa; 10s fecham o round
@@ -3387,9 +3422,12 @@ function handleRounds(now) {
       const decisiva = v.length <= 1 && v[0] && (v[0].score + 1) >= WIN_SCORE;
       for (const l of cairam) considerarHighlight(l, 'ringout', decisiva);
     }
-    if (v.length <= 1) {
+    // DUPLAS: o round fecha quando só sobra gente de UM time
+    const fimRound = MODO_TIMES ? new Set(v.map(timeDe)).size <= 1 : v.length <= 1;
+    if (fimRound) {
       const winner = v[0] ?? null;
-      if (winner) winner.score++;
+      if (winner && MODO_TIMES) { for (const l of lutadores) if (timeDe(l) === timeDe(winner)) l.score++; }
+      else if (winner) winner.score++;
       updateScore();
       som.torcidaOh();
       pendente = winner;
@@ -3403,7 +3441,7 @@ function handleRounds(now) {
     }
   } else if (state === 'ponto' && now > stateUntil) {
     for (const l of lutadores) { l.rag.reset(); l.vivo = true; }
-    for (const o of lutadores) o.rag.rivals = lutadores.filter((x) => x !== o).map((x) => x.rag);
+    for (const o of lutadores) o.rag.rivals = rivaisDe(o, false).map((x) => x.rag);
     mapa.reset?.(false);
     startIntro(lutadores.reduce((s, l) => s + l.score, 0) + 1);
   } else if (state === 'fim' && isDown('KeyR')) {
@@ -3421,7 +3459,7 @@ function fecharRound() {
     som.ponto();
     state = 'ponto';
     stateUntil = simNow + 1.4;
-    showMsg(winner ? 'PONTO DO ' + SKINS[winner.cfg.skin].nome + '!' : 'EMPATE!');
+    showMsg(winner ? (MODO_TIMES ? 'PONTO DA DUPLA ' + NOMES_TIME[timeDe(winner)] + '!' : 'PONTO DO ' + SKINS[winner.cfg.skin].nome + '!') : 'EMPATE!');
   }
 }
 
@@ -4235,6 +4273,11 @@ function frame(t) {
   // Efeitos + sons por lutador
   for (const l of lutadores) {
     const p = l.rag;
+    if (l._anelTime) { // anel do time acompanha o lutador (some quando ele cai)
+      const pt = p.parts.pelvis.translation();
+      l._anelTime.position.set(pt.x, 0.04, pt.z);
+      l._anelTime.visible = l.vivo && pt.y > -1.5;
+    }
     if (p.lastHitLandedAt > 0 && p.lastHitLandedAt > (p._fxVisto ?? -1)) {
       p._fxVisto = p.lastHitLandedAt;
       const pos = p.parts.head.translation();
