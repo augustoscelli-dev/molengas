@@ -57,7 +57,9 @@ PULO / ESQUIVA** na direita. Ao abrir, já cai numa luta rápida contra um bot.
 0. **Tela de título:** 🎮 JOGAR · 🌐 JOGAR ONLINE · ❓ COMO JOGAR (**ENTER** pula
    direto pro jogo; **ESC** volta um passo em qualquer tela).
 1. **Escolha o lutador** no palco 3D: J1 com **A/D**, J2 com **←/→** (ou clique no
-   card). Confirme com **F** (J1) e **K** (J2). Aperte **C** pra adicionar um **bot 🤖**.
+   card). **Pinte o seu boneco** 🎨: J1 com **W/S**, J2 com **↑/↓** (12 tintas — o
+   boneco no palco muda na hora). Confirme com **F** (J1) e **K** (J2). Aperte **C**
+   pra adicionar um **bot 🤖**.
 2. **Tela de arena:** fileira de **cards com foto** de cada mapa (são 18! — no
    **ABISMO 🕳️** não tem chão: agarre o rival e **arraste ele pro buraco**) e o
    mapa de verdade montado ao vivo atrás. **A / D** navega · **X** sorteia 🎲 ·
@@ -100,7 +102,8 @@ De tempos em tempos caem coisas na arena (mais rápido no modo **CAOS**):
    as dependências sozinho).
 2. Ele mostra um endereço tipo `http://192.168.x.x:8877/?servidor=1`. Cada jogador
    abre esse endereço no navegador do seu aparelho (PC ou celular, na mesma rede).
-3. Ao entrar você digita seu **apelido** (aparece sobre o boneco e no placar).
+3. Ao entrar você digita seu **apelido** e **pinta seu boneco** 🎨 na paleta
+   (aparece sobre o boneco, no placar, e todo mundo vê a sua cor).
 4. **Lobby** — **qualquer um** aperta **T** pra trocar seu lutador (🤖 robô ↔ 🦖
    monstro). O **host** (1º a entrar) escolhe e começa:
    - **F** — começa a partida
