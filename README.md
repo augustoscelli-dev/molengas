@@ -81,8 +81,8 @@ Jogando você ganha moedas: **+5** por round vencido, **+20** por partida e
 
 - **Tintas especiais** 🎨 — OURO, CROMADO, NEON (brilha!) e SOMBRA, com material
   de verdade (metal/brilho). Entram no ciclo de pintura e **valem online**.
-- **Bonecos clássicos** 🧸 — as 14 fantasias originais (Vermelhinho, Galinha,
-  Unicórnio, Dino…) voltam como personagens jogáveis no offline.
+- **Novos lutadores** 🧸 — em produção no Meshy (guia e prompts em
+  `docs/personagens-meshy.md`). Guarde suas moedas!
 
 Tudo salvo no navegador — sem dinheiro real, é só diversão.
 

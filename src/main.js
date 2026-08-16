@@ -3096,7 +3096,6 @@ const TINTAS_LOJA = [
   { id: 'neon', nome: 'NEON', preco: 200, cor: 0x39ff88, matx: { metalness: 0.1, roughness: 0.5, emissivoK: 0.6 } },
   { id: 'sombra', nome: 'SOMBRA', preco: 150, cor: 0x14141c, matx: { metalness: 0.15, roughness: 0.95, emissivoK: 0 } },
 ];
-const PRECO_BONECO = 100;
 const loja = (() => {
   let d = {};
   try { d = JSON.parse(store.get('wobblers_loja') || '{}') || {}; } catch { /* carteira nova */ }
@@ -3120,14 +3119,11 @@ function atualizarSaldoLoja() {
   if ($('tit-moedas')) $('tit-moedas').textContent = loja.moedas;
   if ($('loja-saldo')) $('loja-saldo').textContent = `🪙 ${loja.moedas}`;
 }
-// Aplica o que já foi comprado: tintas entram na paleta, bonecos no ciclo de fantasias
+// Aplica o que já foi comprado: tintas entram na paleta.
+// (Lutadores novos virão dos modelos do Meshy — entram no MENU_SKINS quando chegarem.)
 function aplicarComprasLoja() {
   for (const t of TINTAS_LOJA) {
     if (loja.tintas.includes(t.id) && !PALETA.some((e) => e && e.id === t.id)) PALETA.push({ id: t.id, cor: t.cor, matx: t.matx });
-  }
-  for (const id of loja.skins) {
-    const idx = SKINS.findIndex((s) => s.id === id);
-    if (idx >= 0 && !MENU_SKINS.includes(idx)) MENU_SKINS.push(idx);
   }
 }
 aplicarComprasLoja();
@@ -4853,8 +4849,8 @@ $('tit-ajuda')?.addEventListener('click', () => { $('ajuda').style.display = 'fl
 $('ajuda-fechar')?.addEventListener('click', () => { $('ajuda').style.display = 'none'; });
 // ---------- Loja 🛒 (UI) ----------
 function montarLoja() {
-  const ct = $('loja-tintas'), cb = $('loja-bonecos');
-  if (!ct || !cb) return;
+  const ct = $('loja-tintas');
+  if (!ct) return;
   ct.innerHTML = TINTAS_LOJA.map((t) => {
     const tenho = loja.tintas.includes(t.id);
     const brilho = t.matx.emissivoK > 0.3 ? `,0 0 18px ${cssCor(t.cor)}` : '';
@@ -4863,23 +4859,14 @@ function montarLoja() {
       + `<div class="lj-nome">${t.nome}</div>`
       + `<button class="lj-btn" data-tinta="${t.id}" ${tenho ? 'disabled' : ''}>${tenho ? 'TENHO ✔' : `${t.preco} 🪙`}</button></div>`;
   }).join('');
-  cb.innerHTML = SKINS.map((s) => {
-    if (s.modelo) return ''; // Jaeger e Kaiju já vêm de graça
-    const tenho = loja.skins.includes(s.id);
-    return `<div class="lj-card${tenho ? ' tenho' : ''}">`
-      + `<img src="${ASSET(`assets/retratos/${s.id}.jpg`)}" alt="" onerror="this.style.visibility='hidden'">`
-      + `<div class="lj-nome">${s.nome}</div>`
-      + `<button class="lj-btn" data-skin="${s.id}" ${tenho ? 'disabled' : ''}>${tenho ? 'TENHO ✔' : `${PRECO_BONECO} 🪙`}</button></div>`;
-  }).join('');
   atualizarSaldoLoja();
   $('loja').querySelectorAll('.lj-btn:not([disabled])').forEach((b) => b.addEventListener('click', () => {
-    const preco = b.dataset.tinta ? TINTAS_LOJA.find((t) => t.id === b.dataset.tinta).preco : PRECO_BONECO;
+    const preco = TINTAS_LOJA.find((t) => t.id === b.dataset.tinta).preco;
     if (loja.moedas < preco) { avisoMoedas(`faltam ${preco - loja.moedas} 🪙 — ganhe jogando!`); som.queda?.(); return; }
     loja.moedas -= preco;
-    if (b.dataset.tinta) loja.tintas.push(b.dataset.tinta); else loja.skins.push(b.dataset.skin);
+    loja.tintas.push(b.dataset.tinta);
     salvarLoja();
-    aplicarComprasLoja(); // tinta entra na paleta / boneco entra no elenco
-    montarRoster();
+    aplicarComprasLoja(); // tinta entra na paleta na hora
     atualizarSelecao();
     som.confirmar();
     montarLoja(); // re-renderiza com o item marcado como TENHO ✔
