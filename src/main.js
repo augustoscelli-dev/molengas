@@ -2206,11 +2206,13 @@ function buildVisual(skin, fase = 0, slot = 0) {
             o.material = src.clone(); o.material.metalness = 0.5; o.material.roughness = 0.5;
             if (o.material.color) o.material.color.lerp(tinta, 0.28);
           } else {
-            // sem textura (caso do jaeger-rigado): aço tingido pela cor do jogador
+            // sem textura (caso do jaeger-rigado): aço tingido pela cor do jogador.
+            // skin.matx = tinta especial da loja (ouro/cromo/neon/sombra) 🛒
             o.material = new THREE.MeshStandardMaterial({
-              color: new THREE.Color(0x8b95a6).lerp(tinta, 0.5),
-              metalness: 0.6, roughness: 0.48,
-              emissive: new THREE.Color(tinta).multiplyScalar(0.06),
+              color: new THREE.Color(0x8b95a6).lerp(tinta, skin.matx ? 0.85 : 0.5),
+              metalness: skin.matx?.metalness ?? 0.6,
+              roughness: skin.matx?.roughness ?? 0.48,
+              emissive: new THREE.Color(tinta).multiplyScalar(skin.matx?.emissivoK ?? 0.06),
             });
           }
         }
@@ -3075,10 +3077,60 @@ const lerSkin = (k, padrao) => {
   return MENU_SKINS.includes(v) ? v : padrao; // só aceita as fantasias jogáveis
 };
 // 🎨 Tinta do boneco: cada jogador pinta o seu. null = cor original da fantasia.
+// Entradas podem ser um número (cor) ou {id, cor, matx} (tinta especial da loja).
 const PALETA = [null, 0xff5252, 0xff9a3c, 0xffd94a, 0x7ed957, 0x2fbfa4, 0x66e0ff, 0x4a7dff, 0xc77dff, 0xff5a99, 0xf2f2f2, 0x30303c];
-const corSkin = (skin, cor) => (cor == null ? skin : { ...skin, cores: { ...skin.cores, torso: cor, barriga: undefined } });
+const corDe = (e) => (e && typeof e === 'object' ? e.cor : e);
+const matDe = (e) => (e && typeof e === 'object' ? e.matx : null);
+const corSkin = (skin, ent) => {
+  const cor = corDe(ent), matx = matDe(ent);
+  if (cor == null && !matx) return skin;
+  return { ...skin, matx: matx || undefined, cores: { ...skin.cores, torso: cor ?? skin.cores.torso, barriga: undefined } };
+};
 const cssCor = (c) => '#' + c.toString(16).padStart(6, '0');
 const lerCorIdx = (k) => { const v = parseInt(store.get(k), 10); return v >= 0 && v < PALETA.length ? v : 0; };
+
+// ---------- LOJA 🛒 — moedas de brincadeira, ganhas JOGANDO (nada de dinheiro real) ----------
+const TINTAS_LOJA = [
+  { id: 'ouro', nome: 'OURO', preco: 250, cor: 0xffc832, matx: { metalness: 1.0, roughness: 0.2, emissivoK: 0.12 } },
+  { id: 'cromo', nome: 'CROMADO', preco: 250, cor: 0xdde4f0, matx: { metalness: 1.0, roughness: 0.06, emissivoK: 0.03 } },
+  { id: 'neon', nome: 'NEON', preco: 200, cor: 0x39ff88, matx: { metalness: 0.1, roughness: 0.5, emissivoK: 0.6 } },
+  { id: 'sombra', nome: 'SOMBRA', preco: 150, cor: 0x14141c, matx: { metalness: 0.15, roughness: 0.95, emissivoK: 0 } },
+];
+const PRECO_BONECO = 100;
+const loja = (() => {
+  let d = {};
+  try { d = JSON.parse(store.get('wobblers_loja') || '{}') || {}; } catch { /* carteira nova */ }
+  return { moedas: d.moedas | 0, skins: Array.isArray(d.skins) ? d.skins : [], tintas: Array.isArray(d.tintas) ? d.tintas : [] };
+})();
+const salvarLoja = () => store.set('wobblers_loja', JSON.stringify(loja));
+if (PARAMS.has('moedas')) { loja.moedas += parseInt(PARAMS.get('moedas'), 10) || 0; salvarLoja(); } // dev/teste
+function avisoMoedas(txt) {
+  const d = document.createElement('div');
+  d.className = 'moeda-toast'; d.textContent = txt;
+  document.body.appendChild(d);
+  setTimeout(() => d.remove(), 2600);
+}
+function ganharMoedas(n) {
+  loja.moedas += n;
+  salvarLoja();
+  avisoMoedas(`+${n} 🪙  (total: ${loja.moedas})`);
+  atualizarSaldoLoja();
+}
+function atualizarSaldoLoja() {
+  if ($('tit-moedas')) $('tit-moedas').textContent = loja.moedas;
+  if ($('loja-saldo')) $('loja-saldo').textContent = `🪙 ${loja.moedas}`;
+}
+// Aplica o que já foi comprado: tintas entram na paleta, bonecos no ciclo de fantasias
+function aplicarComprasLoja() {
+  for (const t of TINTAS_LOJA) {
+    if (loja.tintas.includes(t.id) && !PALETA.some((e) => e && e.id === t.id)) PALETA.push({ id: t.id, cor: t.cor, matx: t.matx });
+  }
+  for (const id of loja.skins) {
+    const idx = SKINS.findIndex((s) => s.id === id);
+    if (idx >= 0 && !MENU_SKINS.includes(idx)) MENU_SKINS.push(idx);
+  }
+}
+aplicarComprasLoja();
 const selCfg = [
   { tipo: 'kb1', ativo: true, conf: false, skin: lerSkin('molengas_skin0', IDX_JAEGER), corIdx: lerCorIdx('wobblers_cor0') },
   { tipo: 'kb2', ativo: true, conf: false, skin: lerSkin('molengas_skin1', IDX_KAIJU), corIdx: lerCorIdx('wobblers_cor1') },
@@ -3132,7 +3184,6 @@ function atualizarSelecao() {
     const img = $('sel-card-img' + k);
     if (!img) return;
     const s = SKINS[skinIdx];
-    if (!img.getAttribute('src')) img.src = ASSET(`assets/retratos/${s.id}.jpg`);
     $('sel-card-nome' + k).textContent = s.nome;
     $('sel-card-cl' + k).textContent = CLASSE_SKIN[s.id] || '';
     $('sel-badges' + k).innerHTML = selCfg.map((c, i) => (c.ativo && c.skin === skinIdx)
@@ -3144,7 +3195,7 @@ function atualizarSelecao() {
   if ($('sel-chips')) {
     $('sel-chips').innerHTML = selCfg.map((c, i) => {
       if (!c.ativo) return `<span class="sel-chip vazio">🎮 ${ROTULO_J[i]} · aperte A</span>`;
-      const cor = PALETA[c.corIdx || 0];
+      const cor = corDe(PALETA[c.corIdx || 0]);
       const bola = cor != null
         ? `<i style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${cssCor(cor)};border:1px solid rgba(0,0,0,.4);vertical-align:-1px;margin-right:2px"></i>`
         : '';
@@ -3212,19 +3263,31 @@ const slugMapa = (n) => n.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
     }));
   }
 }
-// Clicar num card escolhe a fantasia do J1; clicar de novo confirma (bom pra mouse)
-document.querySelectorAll('.sel-card').forEach((card) => {
-  card.addEventListener('click', () => {
-    if (state !== 'selecao' || selFase !== 'skins') return;
-    const skinIdx = MENU_SKINS[parseInt(card.dataset.k, 10)];
-    if (selCfg[0].skin !== skinIdx && !selCfg[0].conf) {
-      setSkinDireto(0, skinIdx);
-    } else if (!selCfg[0].conf) {
-      selCfg[0].conf = true; som.confirmar(); checarFaseMapa();
-    }
-    atualizarSelecao();
+// Monta o elenco da seleção (Jaeger, Kaiju + bonecos comprados na loja 🛒).
+// Clicar num card escolhe a fantasia do J1; clicar de novo confirma (bom pra mouse).
+function montarRoster() {
+  const r = $('sel-roster');
+  if (!r) return;
+  r.classList.toggle('muitos', MENU_SKINS.length > 4);
+  r.innerHTML = MENU_SKINS.map((skinIdx, k) => `<div class="sel-card" data-k="${k}">`
+    + `<div class="sel-badges" id="sel-badges${k}"></div>`
+    + `<img id="sel-card-img${k}" alt="" src="${ASSET(`assets/retratos/${SKINS[skinIdx].id}.jpg`)}" onerror="this.style.visibility='hidden'">`
+    + `<div class="sel-card-nome" id="sel-card-nome${k}"></div>`
+    + `<div class="sel-card-classe" id="sel-card-cl${k}"></div></div>`).join('');
+  r.querySelectorAll('.sel-card').forEach((card) => {
+    card.addEventListener('click', () => {
+      if (state !== 'selecao' || selFase !== 'skins') return;
+      const skinIdx = MENU_SKINS[parseInt(card.dataset.k, 10)];
+      if (selCfg[0].skin !== skinIdx && !selCfg[0].conf) {
+        setSkinDireto(0, skinIdx);
+      } else if (!selCfg[0].conf) {
+        selCfg[0].conf = true; som.confirmar(); checarFaseMapa();
+      }
+      atualizarSelecao();
+    });
   });
-});
+}
+montarRoster();
 function checarFaseMapa() {
   const ativos = selCfg.filter((c) => c.ativo);
   if (ativos.length >= 2 && ativos.every((c) => c.conf || c.tipo === 'cpu')) selFase = 'mapa';
@@ -3575,6 +3638,11 @@ function iniciarSequenciaFinal(winner) {
   finalWinner = winner;
   som.vitoria();
   som.vozYay(VOZES[winner.slot]);
+  // 🪙 partida fechada por gente de verdade: bônus da loja
+  const humanoVenceu = MODO_TIMES
+    ? lutadores.some((l) => timeDe(l) === timeDe(winner) && l.cfg.tipo !== 'cpu')
+    : winner.cfg.tipo !== 'cpu';
+  if (humanoVenceu) ganharMoedas(20);
   if (melhorClip && melhorClip.frames.length > 15) {
     state = 'melhor'; replayT = 0;
     const quem = melhorClip.semAutor ? '' : `de ${melhorClip.autorNome}`;
@@ -3677,6 +3745,11 @@ function handleRounds(now) {
       const winner = v[0] ?? null;
       if (winner && MODO_TIMES) { for (const l of lutadores) if (timeDe(l) === timeDe(winner)) l.score++; }
       else if (winner) winner.score++;
+      // 🪙 round vencido por gente de verdade rende moedas da loja
+      const humanoVenceu = winner && (MODO_TIMES
+        ? lutadores.some((l) => timeDe(l) === timeDe(winner) && l.cfg.tipo !== 'cpu')
+        : winner.cfg.tipo !== 'cpu');
+      if (humanoVenceu) ganharMoedas(5);
       updateScore();
       som.torcidaOh();
       pendente = winner;
@@ -3758,12 +3831,14 @@ function iniciarOnline() {
       b.style.outline = i === online.corIdx ? '3px solid #fff' : 'none';
       b.style.transform = i === online.corIdx ? 'scale(1.18)' : 'none';
     });
-    PALETA.forEach((cor, i) => {
+    PALETA.forEach((ent, i) => {
+      const cor = corDe(ent);
       const b = document.createElement('button');
       b.type = 'button';
-      b.title = cor == null ? 'cor original' : cssCor(cor);
+      b.title = ent && ent.id ? ent.id.toUpperCase() + ' 🛒' : (cor == null ? 'cor original' : cssCor(cor));
       b.style.cssText = `width:28px;height:28px;border-radius:50%;cursor:pointer;border:2px solid rgba(0,0,0,.45);`
-        + (cor == null ? 'background:conic-gradient(#ff5252,#ffd94a,#7ed957,#66e0ff,#c77dff,#ff5252);' : `background:${cssCor(cor)};`);
+        + (cor == null ? 'background:conic-gradient(#ff5252,#ffd94a,#7ed957,#66e0ff,#c77dff,#ff5252);' : `background:${cssCor(cor)};`)
+        + (ent && ent.matx && ent.matx.emissivoK > 0.3 ? `box-shadow:0 0 10px ${cssCor(cor)};` : '');
       b.addEventListener('click', () => { online.corIdx = i; store.set('wobblers_corOn', i); pintarSel(); som.selecionar?.(); });
       caixa.appendChild(b);
     });
@@ -3790,7 +3865,8 @@ function iniciarOnline() {
   ws.binaryType = 'arraybuffer'; // snapshots vêm em binário (poses Int16)
   online.ws = ws; online.desconectou = false;
   ws.addEventListener('open', () => {
-    ws.send(JSON.stringify({ t: 'entrar', skin: selCfg[0].skin, kaiju: selCfg[0].skin === IDX_KAIJU, nome: online.nome, cor: PALETA[online.corIdx ?? 0] ?? undefined }));
+    const entC = PALETA[online.corIdx ?? 0]; // tinta escolhida (pode ser especial da loja)
+    ws.send(JSON.stringify({ t: 'entrar', skin: selCfg[0].skin, kaiju: selCfg[0].skin === IDX_KAIJU, nome: online.nome, cor: corDe(entC) ?? undefined, mat: (entC && entC.id) || undefined }));
     showMsg('NA SALA! 🌐', 'quando todos entrarem, o host (1º jogador) aperta F');
     online.inputTimer = setInterval(() => {
       if (ws.readyState !== 1) return;
@@ -3945,6 +4021,11 @@ function mostrarVitoriaOnline(m) {
     `<div class="vit-dica">host aperta F pra reiniciar</div></div>`;
   $('msg').style.display = 'block';
   confete();
+  // 🪙 você venceu online: bônus da loja (1x por partida)
+  if (!online._premiado && campeao && campeao.s === online.slot) {
+    online._premiado = true;
+    ganharMoedas(25);
+  }
 }
 
 // Aplica um frame do clipe da melhor jogada nos bonecos online (6 valores/parte, w reconstruído)
@@ -4043,13 +4124,17 @@ function receberSnap(m) {
   }
   for (const pl of m.pl) {
     let v = online.visuais.get(pl.s);
-    if (!v || v.skin !== pl.sk || v.cor !== pl.cr) {
+    if (!v || v.skin !== pl.sk || v.cor !== pl.cr || v.mt !== pl.mt) {
       if (v) { destroyVisual(v.meshes); if (v.anelT) { scene.remove(v.anelT); v.anelT = null; } }
       // online usa .modeloHint (não .modelo): o modelo segue a fantasia escolhida
       // quando o estilo 'j' está ligado, mas o fallback de performance ainda manda.
       const base = SKINS[pl.sk % SKINS.length];
-      const skOn = corSkin({ ...base, modelo: undefined, modeloHint: base.modelo }, pl.cr ?? null); // 🎨 tinta do jogador
-      v = { skin: pl.sk, cor: pl.cr, meshes: buildVisual(skOn, pl.s * 1.9, pl.s) };
+      // 🎨 tinta do jogador (pl.mt = tinta especial da loja com material próprio)
+      const ent = pl.mt
+        ? { cor: pl.cr, matx: (TINTAS_LOJA.find((t) => t.id === pl.mt) || {}).matx }
+        : (pl.cr ?? null);
+      const skOn = corSkin({ ...base, modelo: undefined, modeloHint: base.modelo }, ent);
+      v = { skin: pl.sk, cor: pl.cr, mt: pl.mt, meshes: buildVisual(skOn, pl.s * 1.9, pl.s) };
       online.visuais.set(pl.s, v);
     }
     garantirNomeSprite(v, pl.s); // plaquinha com o apelido sobre a cabeça
@@ -4131,7 +4216,7 @@ function receberSnap(m) {
     // 🗳️ urna da arena ao vivo (aparece assim que alguém vota no B)
     if (m.vt) quem += `<br>🗳️ votos de arena: ${m.vt.map((v, i) => v ? `<b>${ARENAS_CLI[i]}</b> ${v}` : '').filter(Boolean).join(' &nbsp;·&nbsp; ')}`;
     showMsg('SALA ONLINE 🌐', `${m.mo || ''} — <b>${m.na || 0}/${m.cap || 0}</b> na sala &nbsp;·&nbsp; ${m.pt || ''} &nbsp;·&nbsp; arena: <b>${m.an || 'CLÁSSICA'}</b>${m.mr ? ' &nbsp;·&nbsp; 👑 <b>REI DO MORRO</b>' : ''}${m.tm ? ' &nbsp;·&nbsp; 🔴🔵 <b>TIMES</b> (par x ímpar)' : ''}${quem}<br><b>T</b> troca 🤖↔🦖 &nbsp;·&nbsp; <b>B</b> vota arena 🗳️ &nbsp;·&nbsp; <b>1-4</b> provocam 😂 &nbsp;·&nbsp; host: <b>F</b> começa &nbsp;·&nbsp; <b>M</b> modo &nbsp;·&nbsp; <b>N</b> pontuação &nbsp;·&nbsp; <b>H</b> 👑 &nbsp;·&nbsp; <b>Y</b> 🔴🔵`);
-    online.msgAtual = '__lobby__'; online._fimMostrado = false; online.faseFinal = null; online.melhorPend = null;
+    online.msgAtual = '__lobby__'; online._fimMostrado = false; online._premiado = false; online.faseFinal = null; online.melhorPend = null;
   } else if (m.st === 'fim') {
     if (!online._fimMostrado) {
       online._fimMostrado = true; online.msgAtual = m.msg; online.finalSnap = m;
@@ -4766,7 +4851,48 @@ $('tit-jogar')?.addEventListener('click', () => {
 $('tit-online')?.addEventListener('click', () => { $('titulo').style.display = 'none'; if (!online) iniciarOnline(); });
 $('tit-ajuda')?.addEventListener('click', () => { $('ajuda').style.display = 'flex'; som.selecionar(); });
 $('ajuda-fechar')?.addEventListener('click', () => { $('ajuda').style.display = 'none'; });
+// ---------- Loja 🛒 (UI) ----------
+function montarLoja() {
+  const ct = $('loja-tintas'), cb = $('loja-bonecos');
+  if (!ct || !cb) return;
+  ct.innerHTML = TINTAS_LOJA.map((t) => {
+    const tenho = loja.tintas.includes(t.id);
+    const brilho = t.matx.emissivoK > 0.3 ? `,0 0 18px ${cssCor(t.cor)}` : '';
+    return `<div class="lj-card${tenho ? ' tenho' : ''}">`
+      + `<div class="lj-swatch" style="background:radial-gradient(circle at 30% 30%, rgba(255,255,255,.5), transparent 45%), ${cssCor(t.cor)};box-shadow:inset 0 -6px 12px rgba(0,0,0,.35)${brilho}"></div>`
+      + `<div class="lj-nome">${t.nome}</div>`
+      + `<button class="lj-btn" data-tinta="${t.id}" ${tenho ? 'disabled' : ''}>${tenho ? 'TENHO ✔' : `${t.preco} 🪙`}</button></div>`;
+  }).join('');
+  cb.innerHTML = SKINS.map((s) => {
+    if (s.modelo) return ''; // Jaeger e Kaiju já vêm de graça
+    const tenho = loja.skins.includes(s.id);
+    return `<div class="lj-card${tenho ? ' tenho' : ''}">`
+      + `<img src="${ASSET(`assets/retratos/${s.id}.jpg`)}" alt="" onerror="this.style.visibility='hidden'">`
+      + `<div class="lj-nome">${s.nome}</div>`
+      + `<button class="lj-btn" data-skin="${s.id}" ${tenho ? 'disabled' : ''}>${tenho ? 'TENHO ✔' : `${PRECO_BONECO} 🪙`}</button></div>`;
+  }).join('');
+  atualizarSaldoLoja();
+  $('loja').querySelectorAll('.lj-btn:not([disabled])').forEach((b) => b.addEventListener('click', () => {
+    const preco = b.dataset.tinta ? TINTAS_LOJA.find((t) => t.id === b.dataset.tinta).preco : PRECO_BONECO;
+    if (loja.moedas < preco) { avisoMoedas(`faltam ${preco - loja.moedas} 🪙 — ganhe jogando!`); som.queda?.(); return; }
+    loja.moedas -= preco;
+    if (b.dataset.tinta) loja.tintas.push(b.dataset.tinta); else loja.skins.push(b.dataset.skin);
+    salvarLoja();
+    aplicarComprasLoja(); // tinta entra na paleta / boneco entra no elenco
+    montarRoster();
+    atualizarSelecao();
+    som.confirmar();
+    montarLoja(); // re-renderiza com o item marcado como TENHO ✔
+  }));
+}
+$('tit-loja')?.addEventListener('click', () => { montarLoja(); $('loja').style.display = 'flex'; som.selecionar(); });
+$('loja-fechar')?.addEventListener('click', () => { $('loja').style.display = 'none'; });
+atualizarSaldoLoja();
 addEventListener('keydown', (e) => {
+  if ($('loja') && $('loja').style.display === 'flex') { // loja aberta: só o ESC interessa
+    if (e.code === 'Escape') $('loja').style.display = 'none';
+    return;
+  }
   if ($('ajuda').style.display === 'flex') { // ajuda aberta: só o ESC interessa
     if (e.code === 'Escape') $('ajuda').style.display = 'none';
     return;

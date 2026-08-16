@@ -220,6 +220,44 @@
   #vit-baixar:hover { transform: translateY(-2px) rotate(-1deg); }
   #vit-baixar:active { transform: translateY(3px); box-shadow: 0 2px 0 #2a1030; }
   #vit-baixar:disabled { opacity: .7; cursor: wait; transform: none; }
+  /* ---------- Loja 🛒 ---------- */
+  #loja { position: fixed; inset: 0; z-index: 8; display: none; align-items: center;
+    justify-content: center; padding: 18px; font-family: var(--f-ui);
+    background: rgba(10,6,26,.78); backdrop-filter: blur(4px); }
+  .lj-sub { font-size: 13px; color: #b0a6c8; }
+  .lj-tit { font-family: var(--f-disp); font-size: 17px; color: #ffd94a; margin-top: 6px;
+    text-shadow: 0 2px 0 rgba(0,0,0,.4); }
+  .lj-tit small { font-family: var(--f-ui); font-size: 11px; color: #b0a6c8; font-weight: 600; }
+  .lj-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+    gap: 10px; width: 100%; }
+  .lj-card { background: rgba(0,0,0,.28); border: 2px solid rgba(255,255,255,.14);
+    border-radius: 14px; padding: 10px 8px 9px; display: flex; flex-direction: column;
+    align-items: center; gap: 6px; text-align: center; }
+  .lj-card img { width: 62px; height: 62px; border-radius: 50%; object-fit: cover;
+    border: 3px solid rgba(255,255,255,.35); }
+  .lj-swatch { width: 56px; height: 56px; border-radius: 50%; border: 3px solid rgba(255,255,255,.35); }
+  .lj-nome { font-family: var(--f-disp); font-size: 13px; letter-spacing: .4px; }
+  .lj-btn { font-family: var(--f-disp); font-size: 12.5px; cursor: pointer; color: #2a1030;
+    border: 2px solid #2a1030; border-radius: 999px; padding: 5px 14px;
+    background: linear-gradient(180deg, #ffe27a, #ffb03c); box-shadow: 0 3px 0 #2a1030;
+    -webkit-tap-highlight-color: transparent; }
+  .lj-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 #2a1030; }
+  .lj-btn:disabled { opacity: .45; cursor: not-allowed; }
+  .lj-card.tenho { border-color: #6ee787; }
+  .lj-card.tenho .lj-btn { background: linear-gradient(180deg, #8af0b0, #4ec97e); cursor: default; }
+  .moeda-toast { position: fixed; top: 68px; right: 18px; z-index: 30; pointer-events: none;
+    font-family: var(--f-disp); font-size: 17px; color: #4a3608; padding: 9px 18px;
+    border-radius: 999px; border: 3px solid #2a1030; background: linear-gradient(180deg, #ffe27a, #ffb03c);
+    box-shadow: 0 4px 0 #2a1030, 0 10px 24px rgba(0,0,0,.4);
+    animation: moedaPop .5s cubic-bezier(.2,1.4,.4,1) both, moedaSome .5s ease 2s both; }
+  @keyframes moedaPop { 0% { transform: translateY(-18px) scale(.6); opacity: 0; }
+    100% { transform: none; opacity: 1; } }
+  @keyframes moedaSome { to { opacity: 0; transform: translateY(-12px); } }
+  /* roster com muitos bonecos comprados: cards menores e quebrando linha */
+  .sel-roster { flex-wrap: wrap; justify-content: center; }
+  .sel-roster.muitos .sel-card { width: clamp(96px, 11vw, 132px); }
+  .sel-roster.muitos .sel-card-nome { font-size: 13px; }
+  .sel-roster.muitos .sel-card-classe { display: none; }
   #ajuda-fechar { align-self: center; margin-top: 4px; }
   /* ---------- Seleção de personagens (palco 3D + cards) ---------- */
   #selecao { position: fixed; inset: 0; z-index: 5; display: flex; flex-direction: column;
@@ -324,8 +362,22 @@
     <button class="tit-btn" id="tit-jogar" type="button">🎮 JOGAR</button>
     <button class="tit-btn" id="tit-online" type="button">🌐 JOGAR ONLINE</button>
     <button class="tit-btn tit-btn-mini" id="tit-ajuda" type="button">❓ COMO JOGAR</button>
+    <button class="tit-btn tit-btn-mini" id="tit-loja" type="button">🛒 LOJA &nbsp;·&nbsp; <span id="tit-moedas">0</span> 🪙</button>
   </div>
   <div class="tit-rodape">ENTER começa &nbsp;·&nbsp; até 4 no mesmo PC &nbsp;·&nbsp; até 20 online</div>
+</div>
+<div id="loja" style="display:none">
+  <div class="aj-card" style="max-width:860px">
+    <div class="aj-tit" style="display:flex;align-items:center;gap:14px;width:100%">🛒 LOJA
+      <span id="loja-saldo" style="margin-left:auto;font-size:.8em">🪙 0</span></div>
+    <div class="lj-sub">moedas de brincadeira — ganhe jogando: <b>+5</b> por round vencido ·
+      <b>+20</b> por partida · <b>+25</b> vencendo online</div>
+    <div class="lj-tit">🎨 TINTAS ESPECIAIS <small>(brilham de verdade — valem online também)</small></div>
+    <div id="loja-tintas" class="lj-grid"></div>
+    <div class="lj-tit">🧸 BONECOS CLÁSSICOS <small>(jogáveis no offline)</small></div>
+    <div id="loja-bonecos" class="lj-grid"></div>
+    <button class="tit-btn tit-btn-mini" id="loja-fechar" type="button">FECHAR (ESC)</button>
+  </div>
 </div>
 <div id="ajuda" style="display:none">
   <div class="aj-card">
@@ -352,20 +404,7 @@
   <div class="sel-titulo-mini" id="sel-tit">ESCOLHA SEU LUTADOR</div>
   <div class="sel-baixo">
     <div class="sel-chips" id="sel-chips"></div>
-    <div class="sel-roster" id="sel-roster">
-      <div class="sel-card" data-k="0">
-        <div class="sel-badges" id="sel-badges0"></div>
-        <img id="sel-card-img0" alt="">
-        <div class="sel-card-nome" id="sel-card-nome0"></div>
-        <div class="sel-card-classe" id="sel-card-cl0"></div>
-      </div>
-      <div class="sel-card" data-k="1">
-        <div class="sel-badges" id="sel-badges1"></div>
-        <img id="sel-card-img1" alt="">
-        <div class="sel-card-nome" id="sel-card-nome1"></div>
-        <div class="sel-card-classe" id="sel-card-cl1"></div>
-      </div>
-    </div>
+    <div class="sel-roster" id="sel-roster"></div>
     <div id="sel-mapa">
       <div id="mapa-grid"></div>
       <span id="sel-mapa-nome" style="display:none"></span>

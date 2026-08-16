@@ -74,6 +74,18 @@ PULO / ESQUIVA** na direita. Ao abrir, já cai numa luta rápida contra um bot.
 
 ---
 
+## 🛒 Loja (moedas de brincadeira)
+
+Jogando você ganha moedas: **+5** por round vencido, **+20** por partida e
+**+25** vencendo online. Na **LOJA** (botão na tela de título) dá pra comprar:
+
+- **Tintas especiais** 🎨 — OURO, CROMADO, NEON (brilha!) e SOMBRA, com material
+  de verdade (metal/brilho). Entram no ciclo de pintura e **valem online**.
+- **Bonecos clássicos** 🧸 — as 14 fantasias originais (Vermelhinho, Galinha,
+  Unicórnio, Dino…) voltam como personagens jogáveis no offline.
+
+Tudo salvo no navegador — sem dinheiro real, é só diversão.
+
 ## 🔫 Armas e power-ups
 
 De tempos em tempos caem coisas na arena (mais rápido no modo **CAOS**):
@@ -109,9 +121,9 @@ De tempos em tempos caem coisas na arena (mais rápido no modo **CAOS**):
    - **F** — começa a partida
    - **M** — modo de sala: **Normal (até 8)** ou **LOUCURA (até 20)** 🤪
    - **N** — pontuação (Melhor de 5/3, Morte Súbita)
-   - **B** — arena: **CLÁSSICA**, **GELO 🧊** (escorrega), **ENCOLHE 😱** (o chão
-     diminui!), **ABISMO 🕳️** (buraco no meio — arrasta o rival pra morte!) ou
-     **RODÍZIO 🎲** (sorteia uma a cada partida)
+   - **B** — **vota** 🗳️ na arena (todo mundo vota, não só o host!): **CLÁSSICA**,
+     **GELO 🧊**, **ENCOLHE 😱**, **ABISMO 🕳️** (buraco no meio) ou **RODÍZIO 🎲**.
+     A urna aparece no lobby e a mais votada vence no F (empate = sorteio)
    - **H** — **REI DO MORRO 👑** (dominar o centro por 10s fecha o round)
    - **Y** — **TIMES 🔴x🔵**: slots pares vs ímpares, **sem fogo amigo**, anel
      colorido sob cada jogador — funciona com qualquer tamanho de sala, **até

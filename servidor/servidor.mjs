@@ -338,7 +338,8 @@ function enviarNomes() {
   const pkt = JSON.stringify({ t: 'nomes', ns });
   for (const j of jogadores.values()) if (j.ws.readyState === 1) j.ws.send(pkt);
 }
-function criarJogador(ws, skin, ehKaiju = false, nome = null, cor = null) {
+const MATS_LOJA = ['ouro', 'cromo', 'neon', 'sombra']; // tintas especiais válidas 🛒
+function criarJogador(ws, skin, ehKaiju = false, nome = null, cor = null, mat = null) {
   const livres = slotsLivres();
   if (!livres.length) return null;
   const slot = livres[0];
@@ -351,9 +352,10 @@ function criarJogador(ws, skin, ehKaiju = false, nome = null, cor = null) {
     owner, onCollider: (col) => { ownerByHandle.set(col.handle, owner); handles.push(col.handle); },
   });
   rag.props = props;
-  // 🎨 tinta escolhida pelo jogador (validada: int de cor ou nada)
+  // 🎨 tinta escolhida pelo jogador (validada: int de cor ou nada; mat da lista)
   const corOk = Number.isInteger(cor) && cor >= 0 && cor <= 0xffffff ? cor : null;
-  const j = { ws, slot, skin: skin | 0, ehKaiju: !!ehKaiju, cor: corOk, nome: limparNome(nome) || `JOGADOR ${slot + 1}`, rag, input: { ...IDLE }, vivo: estado === 'lobby', score: 0, handles };
+  const matOk = MATS_LOJA.includes(mat) ? mat : null;
+  const j = { ws, slot, skin: skin | 0, ehKaiju: !!ehKaiju, cor: corOk, mat: matOk, nome: limparNome(nome) || `JOGADOR ${slot + 1}`, rag, input: { ...IDLE }, vivo: estado === 'lobby', score: 0, handles };
   jogadores.set(ws, j);
   refazerRivais();
   atualizarPropsDosRags(); // inclui as armas já dropadas nos props agarráveis
@@ -647,7 +649,7 @@ setInterval(() => {
       rk: (estado === 'lobby' || estado === 'fim') && rankingNoite.size
         ? [...rankingNoite.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5) : undefined,
       ev: eventos.splice(0),
-      pl: js.map((j) => ({ s: j.slot, sk: j.skin, v: j.vivo ? 1 : 0, at: j.rag.isStunned(now) ? 1 : 0, sc: j.score, d: Math.round(j.rag.dano * 10) / 10, es: j.rag.escudo ? 1 : undefined, cr: j.cor ?? undefined })),
+      pl: js.map((j) => ({ s: j.slot, sk: j.skin, v: j.vivo ? 1 : 0, at: j.rag.isStunned(now) ? 1 : 0, sc: j.score, d: Math.round(j.rag.dano * 10) / 10, es: j.rag.escudo ? 1 : undefined, cr: j.cor ?? undefined, mt: j.mat ?? undefined })),
       pr: props.map((b) => { const tr = b.translation(), ro = b.rotation(); return [q(tr.x), q(tr.y), q(tr.z), q(ro.x), q(ro.y), q(ro.z), q(ro.w)]; }),
       wp: armas.map((a) => { const tr = a.body.translation(), ro = a.body.rotation(); return { id: a.id, ti: ARMA_TIPOS.indexOf(a.tipo), q: a.quente ? 1 : 0, p: [q(tr.x), q(tr.y), q(tr.z), q(ro.x), q(ro.y), q(ro.z), q(ro.w)] }; }),
       pu: powerups.map((p) => ({ id: p.id, ti: POWER_TIPOS.indexOf(p.tipo), p: [q(p.x), q(p.y), q(p.z)] })),
@@ -712,7 +714,7 @@ wss.on('connection', (ws) => {
     if (!m || typeof m !== 'object') return;
     try {
       if (m.t === 'entrar' && !jogadores.has(ws)) {
-        const j = criarJogador(ws, m.skin, m.kaiju, m.nome, m.cor);
+        const j = criarJogador(ws, m.skin, m.kaiju, m.nome, m.cor, m.mat);
         if (!j) { ws.send(JSON.stringify({ t: 'cheio' })); ws.close(); return; }
         ws.send(JSON.stringify({ t: 'oi', slot: j.slot }));
         enviarNomes();
