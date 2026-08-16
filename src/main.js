@@ -1085,19 +1085,41 @@ const MAPAS = [
       fazerCaixote(m, 2.8, -2.2);
       // neve caindo devagarinho
       const flocos = [];
-      for (let i = 0; i < 70; i++) {
+      for (let i = 0; i < 150; i++) {
         const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: texBolinha, transparent: true, opacity: 0.85, depthWrite: false }));
         s.scale.setScalar(0.05 + Math.random() * 0.06);
         s.position.set((Math.random() * 2 - 1) * 8, Math.random() * 6, (Math.random() * 2 - 1) * 6);
         scene.add(s); m.meshes.push(s);
         flocos.push({ s, v: 0.35 + Math.random() * 0.5, seed: Math.random() * 10 });
       }
+      // NEVE ACUMULANDO: camada branca com manchas (alphaMap) que vai cobrindo a
+      // pista ao longo da luta — nevasca de verdade, não só enfeite caindo.
+      const texNeve = (() => {
+        const c = document.createElement('canvas'); c.width = c.height = 256;
+        const g = c.getContext('2d');
+        g.fillStyle = '#000'; g.fillRect(0, 0, 256, 256);
+        for (let i = 0; i < 340; i++) {
+          const r = 8 + Math.random() * 26;
+          const gr = g.createRadialGradient(0, 0, 0, 0, 0, r);
+          gr.addColorStop(0, 'rgba(255,255,255,0.55)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+          g.save(); g.translate(Math.random() * 256, Math.random() * 256);
+          g.fillStyle = gr; g.beginPath(); g.arc(0, 0, r, 0, 7); g.fill(); g.restore();
+        }
+        return new THREE.CanvasTexture(c);
+      })();
+      const manto = new THREE.Mesh(
+        new THREE.PlaneGeometry(11, 8),
+        new THREE.MeshStandardMaterial({ color: 0xf4f8ff, roughness: 0.9, transparent: true, opacity: 0, alphaMap: texNeve, depthWrite: false }),
+      );
+      manto.rotation.x = -Math.PI / 2; manto.position.y = 0.045; manto.receiveShadow = true;
+      scene.add(manto); m.meshes.push(manto);
       m.update = (t) => {
         for (const f of flocos) {
           f.s.position.y -= f.v / 60;
           f.s.position.x += Math.sin(t * 0.8 + f.seed) * 0.004;
           if (f.s.position.y < 0) { f.s.position.y = 5.5 + Math.random(); f.s.position.x = (Math.random() * 2 - 1) * 8; f.s.position.z = (Math.random() * 2 - 1) * 6; }
         }
+        manto.material.opacity = Math.min(0.85, t * 0.011); // ~80s pra nevasca cobrir tudo
       };
       m.reset = () => resetCaixotes(m);
     },
@@ -1371,10 +1393,24 @@ const MAPAS = [
         corA[i * 3] = tmpC.r; corA[i * 3 + 1] = tmpC.g; corA[i * 3 + 2] = tmpC.b;
       }
       gA.setAttribute('color', new THREE.BufferAttribute(corA, 3));
-      const agua = new THREE.Mesh(gA, new THREE.MeshStandardMaterial({
+      const matAgua = new THREE.MeshStandardMaterial({
         vertexColors: true, roughness: 0.13, metalness: 0.32, transparent: true, opacity: 0.94,
         emissive: 0x14323d, emissiveIntensity: 0.18,
-      }));
+      });
+      // Fresnel: na RASANTE a água vira espelho do céu de pôr-do-sol (a cor
+      // própria só aparece olhando de cima) — receita da ref. de óptica de água.
+      matAgua.onBeforeCompile = (sh) => {
+        sh.uniforms.uCeuAgua = { value: new THREE.Color(0xffd9a8).convertSRGBToLinear() };
+        sh.fragmentShader = sh.fragmentShader
+          .replace('#include <common>', '#include <common>\nuniform vec3 uCeuAgua;')
+          .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+            {
+              vec3 vDir = normalize(vViewPosition);
+              float fres = pow(1.0 - abs(dot(vDir, normalize(normal))), 4.0);
+              totalEmissiveRadiance += uCeuAgua * min(fres, 0.55) * 0.38;
+            }`);
+      };
+      const agua = new THREE.Mesh(gA, matAgua);
       agua.rotation.x = -Math.PI / 2; agua.position.y = 0.06; agua.receiveShadow = true;
       m.aguaY = 0.06; // superfície da água (pra splash de nocaute ao cair no mar)
       scene.add(agua); m.meshes.push(agua);
@@ -2826,6 +2862,12 @@ function botInput(l) {
   atualizarPerfilHumano(); // barato (amostra a cada 0.5s)
   const out = { move: { x: 0, z: 0 }, punch: false, grab: false, jump: false, esquiva: false };
   const me = l.rag.parts.pelvis.translation();
+  // MANEQUIM do tutorial: passeia devagar perto do centro e NUNCA ataca
+  if (l.cfg.manequim) {
+    out.move.x = Math.sin(simNow * 0.5) * 0.25 - me.x * 0.2;
+    out.move.z = Math.cos(simNow * 0.4) * 0.2 - me.z * 0.2;
+    return out;
+  }
   const nv0 = NIVEIS[nivelIdx]; // dificuldade escolhida no menu
   if (!l._persona) l._persona = PERSONAS[(l.slot ?? 0) % PERSONAS.length];
   const P = l._persona;
@@ -3974,15 +4016,33 @@ function iniciarCutscene() {
   if (finalWinner) finalWinner.rag.emote?.(simNow); // vencedor comemora
   confete();
 }
-// Câmera cinematográfica: fecha no meio da ação (usada na MELHOR JOGADA)
-function camMeioAcao(altura, dist, lento) {
-  let midX = 0, midZ = 0, n = 0;
-  for (const l of lutadores) { const p = l.meshes.pelvis.position; midX += p.x; midZ += p.z; n++; }
-  if (n) { midX /= n; midZ /= n; }
-  const alvo = new THREE.Vector3(midX, altura, dist);
-  camPos.lerp(alvo, lento);
+// Tratamento de CINEMA: letterbox (CSS body.cine) + lente fechando pra 46°.
+// Chamar com true nos estados dirigidos e false no jogo normal (transição suave).
+function aplicarCine(ligado) {
+  const alvoFov = ligado ? 46 : 55;
+  if (Math.abs(camera.fov - alvoFov) > 0.05) {
+    camera.fov += (alvoFov - camera.fov) * 0.07;
+    camera.updateProjectionMatrix();
+  }
+  document.body.classList.toggle('cine', ligado);
+}
+// Órbita dirigida (replay/melhor jogada): altura de ombro, dolly-in com o tempo
+function camCineDirigida(ct, midX, midZ, spread = 0) {
+  const ang = -0.85 + ct * 0.22;
+  const raio = Math.max(3.4, 5.6 - ct * 0.45) + spread * 0.3;
+  camPos.lerp(_v3cam.set(
+    midX * 0.6 + Math.sin(ang) * raio,
+    1.5 + ct * 0.14 + spread * 0.08,
+    midZ * 0.3 + Math.cos(ang) * raio,
+  ), 0.09);
   camera.position.copy(camPos);
-  camera.lookAt(midX, 1.0, 0);
+  camera.lookAt(midX * 0.6, 0.95, midZ * 0.3);
+}
+// Média das pélvis de uma lista de {meshes} — foco das câmeras dirigidas
+function meioDe(iteravel) {
+  let mx = 0, mz = 0, n = 0;
+  for (const v of iteravel) { const p = v.meshes.pelvis.position; mx += p.x; mz += p.z; n++; }
+  return n ? [mx / n, mz / n] : [0, 0];
 }
 // Câmera orbitando o vencedor (cutscene)
 function camVencedor(t) {
@@ -4360,13 +4420,6 @@ function aplicarClipeOnline(frame) {
     }
   }
 }
-function camMeioAcaoOnline() {
-  let mx = 0, mz = 0, n = 0;
-  for (const v of online.visuais.values()) { const p = v.meshes.pelvis.position; mx += p.x; mz += p.z; n++; }
-  if (n) { mx /= n; mz /= n; }
-  camPos.lerp(new THREE.Vector3(mx, 2.2, 4.6), 0.06);
-  camera.position.copy(camPos); camera.lookAt(mx, 1.0, 0);
-}
 function camVencedorOnline(t) {
   const w = online.finalSnap ? [...online.finalSnap.pl].sort((a, b) => b.sc - a.sc)[0] : null;
   const v = w ? online.visuais.get(w.s) : null;
@@ -4677,7 +4730,9 @@ function frameOnline(t, fdt) {
     const idx = Math.floor(online.melhorT * 7); // ~7 frames/s = câmera lenta
     if (idx >= frames.length) { online.faseFinal = 'cutscene'; online.cutT = 0; }
     else aplicarClipeOnline(frames[idx]);
-    camMeioAcaoOnline();
+    const [omx, omz] = meioDe(online.visuais.values());
+    camCineDirigida(online.melhorT, omx, omz);
+    aplicarCine(true);
     for (const v of online.visuais.values()) atualizarSkinMesh(v.meshes);
     updateEfeitos(fdt); mirarHolofotes(t / 1000); cairConfetes(fdt, t / 1000); renderCena();
     return;
@@ -4685,11 +4740,13 @@ function frameOnline(t, fdt) {
   if (online.faseFinal === 'cutscene') {
     online.cutT += fdt;
     camVencedorOnline(t);
+    aplicarCine(true);
     for (const v of online.visuais.values()) atualizarSkinMesh(v.meshes);
     updateEfeitos(fdt); mirarHolofotes(t / 1000); cairConfetes(fdt, t / 1000); renderCena();
     if (online.cutT > 3.0) { online.faseFinal = null; if (online.finalSnap) mostrarVitoriaOnline(online.finalSnap); confete(); }
     return;
   }
+  aplicarCine(false); // fora da sequência final: lente e tela normais
   // Fallback de performance: se o FPS ficar baixo com muitos Jaeger, cai pra gominha
   if (online.jaeger && !online.forcarGominha && !PARAMS.has('semfallback')) {
     online._fN = (online._fN || 0) + 1;
@@ -4815,7 +4872,9 @@ function frame(t) {
       } else iniciarCutscene();
     }
     else { aplicarClipe(melhorClip.frames, idx); }
-    camMeioAcao(2.2, 4.4, 0.06);
+    const [mmx, mmz] = meioDe(lutadores);
+    camCineDirigida(replayT, mmx, mmz);
+    aplicarCine(true);
     updateEfeitos(fdt); mirarHolofotes(simNow); cairConfetes(fdt, simNow); atualizarSkins(); renderCena();
     return;
   }
@@ -4831,6 +4890,7 @@ function frame(t) {
     }
     for (const l of lutadores) syncVisual(l.rag, l.meshes, simNow);
     camVencedor(t);
+    aplicarCine(true);
     updateEfeitos(fdt); mirarHolofotes(simNow); cairConfetes(fdt, simNow); atualizarSkins(); renderCena();
     if (cutT > 3.6) { state = 'fim'; mostrarVitoria(finalWinner); confete(); }
     return;
@@ -5214,37 +5274,21 @@ function frame(t) {
     camera.position.copy(camPos);
     camera.lookAt(midX * 0.6, 1.05, 0);
   } else if (!online && (state === 'replay' || state === 'melhor')) {
-    // CÂMERA DIRIGIDA no replay: órbita lenta na altura do ombro + dolly-in,
-    // lente mais fechada (fov abaixo) e letterbox — cara de cinema.
-    const ct = replayT;
-    const ang = -0.85 + ct * 0.22;
-    const raio = Math.max(3.4, 5.6 - ct * 0.45) + spread * 0.3;
-    camPos.lerp(_v3cam.set(
-      midX * 0.6 + Math.sin(ang) * raio,
-      1.5 + ct * 0.14 + spread * 0.08,
-      midZ * 0.3 + Math.cos(ang) * raio,
-    ), 0.09);
-    camera.position.copy(camPos);
-    camera.lookAt(midX * 0.6, 0.95, midZ * 0.3);
+    // CÂMERA DIRIGIDA no replay: órbita lenta na altura do ombro + dolly-in
+    camCineDirigida(replayT, midX, midZ, spread);
   } else {
     const target = new THREE.Vector3(midX * 0.6, 3.9 + spread * 0.3, 6.6 + spread * 0.55);
     camPos.lerp(target, 0.05);
     camera.position.copy(camPos);
     camera.lookAt(midX * 0.6, 0.8, midZ * 0.3);
   }
-  // Lente: fecha pra 46° nas tomadas de replay, volta pra 55° no resto
-  const cine = !online && (state === 'replay' || state === 'melhor');
-  const fovAlvo = cine ? 46 : 55;
-  if (Math.abs(camera.fov - fovAlvo) > 0.05) {
-    camera.fov += (fovAlvo - camera.fov) * 0.07;
-    camera.updateProjectionMatrix();
-  }
-  document.body.classList.toggle('cine', cine);
+  aplicarCine(!online && (state === 'replay' || state === 'melhor'));
   const shake = trauma * trauma * 0.26 * (AJUSTES.shake || 1);
   camera.position.x += Math.sin(t * 0.061) * shake;
   camera.position.y += Math.cos(t * 0.047) * shake * 0.7;
 
   updateHudBarras(simNow);
+  if (tut) tutFrame(fdt);
   atualizarSkins();
   renderCena();
 }
@@ -5267,6 +5311,9 @@ $('tit-jogar')?.addEventListener('click', () => {
 });
 $('tit-online')?.addEventListener('click', () => { $('titulo').style.display = 'none'; if (!online) iniciarOnline(); });
 $('tit-ajuda')?.addEventListener('click', () => { $('ajuda').style.display = 'flex'; som.selecionar(); });
+$('tit-tutorial')?.addEventListener('click', () => { iniciarTutorial(); som.confirmar(); });
+// nunca fez o tutorial? o botão pulsa chamando atenção
+if (!localStorage.getItem('wobblers_tut')) $('tit-tutorial')?.classList.add('pulsa');
 $('ajuda-fechar')?.addEventListener('click', () => { $('ajuda').style.display = 'none'; });
 // ---------- Loja 🛒 (UI) ----------
 function montarLoja() {
@@ -5331,6 +5378,91 @@ addEventListener('keydown', (e) => {
   if (e.code === 'Enter' || e.code === 'Space' || e.code === 'KeyF') { mostrarSelecao(); som.confirmar(); }
 });
 // Celular: JOGAR no título cai direto numa luta rápida contra um bot
+// ---------- Tutorial 🎓 (DOJO vs manequim; passos com detecção de verdade) ----------
+let tut = null;
+const TUT_TEXTOS = [
+  ['🚶', 'ANDE pelo dojo', 'W A S D (ou analógico)'],
+  ['🥊', 'Dê 3 SOCOS', 'aperte F'],
+  ['🤲', 'AGARRE por 1 segundo', 'segure G'],
+  ['💨', 'DASH de ombro', '2 toques rápidos numa direção'],
+  ['🏁', 'DERRUBE o manequim do ringue!', 'soco + empurrão pra fora'],
+];
+function iniciarTutorial() {
+  $('titulo').style.display = 'none';
+  $('selecao').style.display = 'none';
+  document.body.classList.remove('menu');
+  setMapa(19); // DOJO — o mapa de treino
+  WIN_SCORE = 1; MODO_CAOS = false; MODO_MORRO = false; MODO_TIMES = false;
+  if (morroVis) { scene.remove(morroVis); morroVis = null; }
+  const configs = [{ ...selCfg[0], tipo: 'kb1' }, { tipo: 'cpu', skin: selCfg[1].skin, manequim: true }];
+  montarLutadores(configs);
+  mapa.reset?.(true);
+  updateScore();
+  som.musica(MAPAS[mapaIdx].trilha || 'luta');
+  startIntro(1);
+  tut = { passo: 0, andou: 0, socos: 0, agarrou: 0, prevSoco: false };
+  window._tut = tut; // teste automatizado espia os contadores aqui
+  tutMostrar();
+}
+function tutMostrar() {
+  const el = $('tut');
+  if (!el) return;
+  const [ico, tit, como] = TUT_TEXTOS[tut.passo];
+  el.style.display = 'block';
+  el.innerHTML = `<div class="tut-passo">TUTORIAL &nbsp;${tut.passo + 1}/${TUT_TEXTOS.length}</div>`
+    + `<div class="tut-txt">${ico} <b>${tit}</b></div><div class="tut-como">${como}</div>`;
+}
+function tutAvancar() {
+  tut.passo++;
+  som.confirmar?.();
+  tutMostrar();
+}
+function tutConcluir() {
+  const primeira = !localStorage.getItem('wobblers_tut');
+  if (primeira) { localStorage.setItem('wobblers_tut', '1'); ganharMoedas(50); }
+  const el = $('tut');
+  if (el) {
+    el.innerHTML = `<div class="tut-txt">🎉 <b>TUTORIAL COMPLETO!</b>${primeira ? ' +50 🪙' : ''}</div>`
+      + '<div class="tut-como">agora vai pra briga de verdade — R volta pro menu</div>';
+    setTimeout(() => { el.style.display = 'none'; }, 6000);
+  }
+  $('tit-tutorial')?.classList.remove('pulsa');
+  tut = null;
+}
+function tutFrame(fdt) {
+  if (!tut) return;
+  if (state === 'selecao' || state === 'titulo') { tut = null; const el = $('tut'); if (el) el.style.display = 'none'; return; }
+  // Último passo fecha quando o round termina (qualquer sequência de fim)
+  if (tut.passo === 4 && state !== 'luta' && state !== 'intro') { tutConcluir(); return; }
+  // Caiu do ringue (ou derrubou o manequim cedo demais) antes do passo final:
+  // a morte súbita fecharia a partida e encalharia o treino — recomeça o round
+  // mantendo o passo em que a pessoa estava.
+  if (tut.passo < 4 && ['replay', 'melhor', 'ponto', 'cutscene', 'fim'].includes(state)) {
+    const { passo, andou, agarrou } = tut;
+    iniciarTutorial();
+    Object.assign(tut, { passo, andou, agarrou });
+    tutMostrar();
+    return;
+  }
+  if (state !== 'luta' || !lutadores[0]) return;
+  const inp = inputDoLutador(lutadores[0]); // stateless: teclado+controle+toque
+  if (tut.passo === 0) {
+    if (Math.hypot(inp.move.x, inp.move.z) > 0.4) tut.andou += fdt;
+    if (tut.andou > 1.1) tutAvancar();
+  } else if (tut.passo === 1) {
+    // conta pelos SOCOS DADOS (stats do ragdoll) — tecla amostrada perde toque
+    // rápido em fps baixo; o stat conta exatamente o que o jogo executou
+    const dados = lutadores[0].rag.stats?.socos ?? 0;
+    tut._socos0 ??= dados;
+    if (dados - tut._socos0 >= 3) tutAvancar();
+  } else if (tut.passo === 2) {
+    if (inp.grab) tut.agarrou += fdt;
+    if (tut.agarrou > 0.9) tutAvancar();
+  } else if (tut.passo === 3) {
+    if (simNow - (lutadores[0].rag.lastDashAt ?? -9) < 0.3) tutAvancar();
+  }
+}
+
 function lutaRapidaTouch() {
   $('titulo').style.display = 'none';
   $('selecao').style.display = 'none';
@@ -5356,6 +5488,8 @@ if (PARAMS.has('servidor')) {
   if (PARAMS.get('win')) WIN_SCORE = Math.max(1, parseInt(PARAMS.get('win'), 10) || 5); // dev: encurta a partida
   updateScore();
   state = 'luta';
+} else if (PARAMS.has('tutorial')) {
+  iniciarTutorial(); // dev/teste: entra direto no tutorial
 } else {
   // dois lutadores de enfeite no palco atrás do menu
   montarLutadores([{ ...selCfg[0] }, { ...selCfg[1] }]);

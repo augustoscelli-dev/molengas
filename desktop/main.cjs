@@ -42,6 +42,7 @@ async function abrirJanela() {
     autoHideMenuBar: true,
     backgroundColor: '#171130',
     title: 'WOBBLERS!',
+    icon: path.join(__dirname, 'build', 'icon.png'),
     webPreferences: { contextIsolation: true },
   });
   // espera o servidor responder antes de carregar (retry simples)

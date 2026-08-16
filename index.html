@@ -372,6 +372,16 @@
     background: #000; z-index: 40; pointer-events: none; transition: height .55s ease; }
   body::before { top: 0; } body::after { bottom: 0; }
   body.cine::before, body.cine::after { height: 7vh; }
+  /* Tutorial: cartão de passo no rodapé + pulso no botão do título */
+  #tut { position: fixed; left: 50%; bottom: 9vh; transform: translateX(-50%); z-index: 30;
+    background: rgba(13, 10, 32, .88); border: 2px solid #ffb52e; border-radius: 14px;
+    padding: 12px 26px; text-align: center; color: #fff; font-family: inherit;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, .5); pointer-events: none; }
+  #tut .tut-passo { font-size: 11px; letter-spacing: 2px; color: #ffb52e; margin-bottom: 4px; }
+  #tut .tut-txt { font-size: 22px; }
+  #tut .tut-como { font-size: 13px; opacity: .75; margin-top: 3px; }
+  @keyframes tutPulsa { 0%, 100% { box-shadow: 0 0 0 0 rgba(255, 181, 46, .7); } 60% { box-shadow: 0 0 0 12px rgba(255, 181, 46, 0); } }
+  .tit-btn.pulsa { animation: tutPulsa 1.6s infinite; }
 </style>
 </head>
 <body>
@@ -382,6 +392,7 @@
   <div class="tit-botoes">
     <button class="tit-btn" id="tit-jogar" type="button">🎮 JOGAR</button>
     <button class="tit-btn" id="tit-online" type="button">🌐 JOGAR ONLINE</button>
+    <button class="tit-btn tit-btn-mini" id="tit-tutorial" type="button">🎓 TUTORIAL</button>
     <button class="tit-btn tit-btn-mini" id="tit-ajuda" type="button">❓ COMO JOGAR</button>
     <button class="tit-btn tit-btn-mini" id="tit-loja" type="button">🛒 LOJA &nbsp;·&nbsp; <span id="tit-moedas">0</span> 🪙</button>
     <button class="tit-btn tit-btn-mini" id="tit-carreira" type="button">📊 CARREIRA</button>
@@ -520,6 +531,7 @@
     });
   }
 </script>
+<div id="tut" style="display:none"></div>
 <script type="importmap">{ "imports": { "three": "./libs/three.module.js" } }</script>
 <script type="module" src="src/main.js"></script>
 </body>

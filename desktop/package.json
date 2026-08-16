@@ -18,7 +18,7 @@
     "appId": "dev.augustoscelli.wobblers",
     "productName": "WOBBLERS",
     "directories": { "output": "dist" },
-    "files": ["main.cjs"],
+    "files": ["main.cjs", "build/icon.png"],
     "extraResources": [
       {
         "from": "..",

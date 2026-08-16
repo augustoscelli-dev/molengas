@@ -56,8 +56,10 @@ PULO / ESQUIVA** na direita. Ao abrir, já cai numa luta rápida contra um bot.
 
 ## 🕹️ Menu (offline)
 
-0. **Tela de título:** 🎮 JOGAR · 🌐 JOGAR ONLINE · ❓ COMO JOGAR (**ENTER** pula
-   direto pro jogo; **ESC** volta um passo em qualquer tela).
+0. **Tela de título:** 🎮 JOGAR · 🌐 JOGAR ONLINE · 🎓 TUTORIAL · ❓ COMO JOGAR
+   (**ENTER** pula direto pro jogo; **ESC** volta um passo em qualquer tela).
+   Na primeira vez, faça o **TUTORIAL**: 5 passos jogáveis no DOJO contra um
+   manequim (andar → soco → agarrão → dash → ring-out) e **+50 🪙** no final.
 1. **Escolha o lutador** no palco 3D: J1 com **A/D**, J2 com **←/→** (ou clique no
    card). **Pinte o seu boneco** 🎨: J1 com **W/S**, J2 com **↑/↓** (12 tintas — o
    boneco no palco muda na hora). Confirme com **F** (J1) e **K** (J2). Aperte **C**
