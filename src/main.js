@@ -3120,6 +3120,46 @@ function atualizarSaldoLoja() {
   if ($('tit-moedas')) $('tit-moedas').textContent = loja.moedas;
   if ($('loja-saldo')) $('loja-saldo').textContent = `🪙 ${loja.moedas}`;
 }
+// ---------- CARREIRA 📊 + CONQUISTAS 🏅 (pagam moedas da loja) ----------
+const carreira = (() => {
+  const base = { partidas: 0, vitorias: 0, rounds: 0, socos: 0, acertos: 0, quedas: 0, pendurado: 0, conq: [] };
+  try { return { ...base, ...(JSON.parse(store.get('wobblers_carreira') || '{}') || {}) }; } catch { return base; }
+})();
+const salvarCarreira = () => store.set('wobblers_carreira', JSON.stringify(carreira));
+const CONQUISTAS = [
+  { id: 'v1', nome: 'PRIMEIRA VITÓRIA', desc: 'vença uma partida', premio: 50, ok: (c) => c.vitorias >= 1 },
+  { id: 'v5', nome: 'PENTACAMPEÃO', desc: 'vença 5 partidas', premio: 100, ok: (c) => c.vitorias >= 5 },
+  { id: 'v15', nome: 'LENDA DO RINGUE', desc: 'vença 15 partidas', premio: 250, ok: (c) => c.vitorias >= 15 },
+  { id: 'p10', nome: 'MARATONISTA', desc: 'jogue 10 partidas', premio: 75, ok: (c) => c.partidas >= 10 },
+  { id: 'a100', nome: 'MÃO PESADA', desc: 'acerte 100 socos', premio: 75, ok: (c) => c.acertos >= 100 },
+  { id: 'a500', nome: 'BRITADEIRA', desc: 'acerte 500 socos', premio: 200, ok: (c) => c.acertos >= 500 },
+  { id: 'r25', nome: 'FECHADOR DE ROUNDS', desc: 'vença 25 rounds', premio: 100, ok: (c) => c.rounds >= 25 },
+  { id: 'q50', nome: 'OSSO DURO', desc: 'caia 50 vezes (e volte!)', premio: 60, ok: (c) => c.quedas >= 50 },
+  { id: 'pend60', nome: 'UNHAS DE GATO', desc: 'some 60s pendurado na beirada', premio: 80, ok: (c) => c.pendurado >= 60 },
+];
+function checarConquistas() {
+  for (const q of CONQUISTAS) {
+    if (carreira.conq.includes(q.id) || !q.ok(carreira)) continue;
+    carreira.conq.push(q.id);
+    salvarCarreira();
+    avisoMoedas(`🏅 CONQUISTA: ${q.nome}!`);
+    ganharMoedas(q.premio);
+  }
+}
+// Soma os stats dos HUMANOS da partida na carreira (chamado no fim da partida)
+function somarCarreira(venceu) {
+  for (const l of lutadores) {
+    if (l.cfg.tipo === 'cpu') continue;
+    const s = l.rag.stats;
+    carreira.socos += s.socos; carreira.acertos += s.acertos;
+    carreira.quedas += s.quedas; carreira.pendurado += Math.round(s.pendurado);
+  }
+  carreira.partidas++;
+  if (venceu) carreira.vitorias++;
+  salvarCarreira();
+  checarConquistas();
+}
+
 // Aplica o que já foi comprado: tintas entram na paleta.
 // (Lutadores novos virão dos modelos do Meshy — entram no MENU_SKINS quando chegarem.)
 function aplicarComprasLoja() {
@@ -3661,6 +3701,7 @@ function iniciarSequenciaFinal(winner) {
     ? lutadores.some((l) => timeDe(l) === timeDe(winner) && l.cfg.tipo !== 'cpu')
     : winner.cfg.tipo !== 'cpu';
   if (humanoVenceu) ganharMoedas(20);
+  somarCarreira(humanoVenceu); // 📊 estatísticas de carreira + conquistas 🏅
   if (melhorClip && melhorClip.frames.length > 15) {
     state = 'melhor'; replayT = 0;
     const quem = melhorClip.semAutor ? '' : `de ${melhorClip.autorNome}`;
@@ -3767,7 +3808,7 @@ function handleRounds(now) {
       const humanoVenceu = winner && (MODO_TIMES
         ? lutadores.some((l) => timeDe(l) === timeDe(winner) && l.cfg.tipo !== 'cpu')
         : winner.cfg.tipo !== 'cpu');
-      if (humanoVenceu) ganharMoedas(5);
+      if (humanoVenceu) { ganharMoedas(5); carreira.rounds++; salvarCarreira(); checarConquistas(); }
       updateScore();
       som.torcidaOh();
       pendente = winner;
@@ -4039,10 +4080,12 @@ function mostrarVitoriaOnline(m) {
     `<div class="vit-dica">host aperta F pra reiniciar</div></div>`;
   $('msg').style.display = 'block';
   confete();
-  // 🪙 você venceu online: bônus da loja (1x por partida)
+  // 🪙 você venceu online: bônus da loja + carreira (1x por partida)
   if (!online._premiado && campeao && campeao.s === online.slot) {
     online._premiado = true;
     ganharMoedas(25);
+    carreira.vitorias++; carreira.partidas++;
+    salvarCarreira(); checarConquistas();
   }
 }
 
@@ -4918,9 +4961,31 @@ function montarLoja() {
 $('tit-loja')?.addEventListener('click', () => { montarLoja(); $('loja').style.display = 'flex'; som.selecionar(); });
 $('loja-fechar')?.addEventListener('click', () => { $('loja').style.display = 'none'; });
 atualizarSaldoLoja();
+// ---------- Carreira 📊 (UI) ----------
+function montarCarreira() {
+  const st = $('car-stats'), cq = $('car-conq');
+  if (!st || !cq) return;
+  const linhas = [
+    [carreira.vitorias, 'vitórias'], [carreira.partidas, 'partidas'], [carreira.rounds, 'rounds'],
+    [carreira.acertos, 'socos na cara'], [carreira.quedas, 'tombos'], [carreira.pendurado + 's', 'pendurado'],
+  ];
+  st.innerHTML = linhas.map(([v, n]) => `<div class="car-num"><b>${v}</b><span>${n}</span></div>`).join('');
+  cq.innerHTML = CONQUISTAS.map((q) => {
+    const tenho = carreira.conq.includes(q.id);
+    return `<div class="car-q${tenho ? ' tenho' : ''}"><span class="cq-ico">${tenho ? '🏅' : '🔒'}</span>`
+      + `<div><b>${q.nome}</b><br><small>${q.desc}</small></div>`
+      + `<span class="cq-premio">${tenho ? '✔' : `+${q.premio} 🪙`}</span></div>`;
+  }).join('');
+}
+$('tit-carreira')?.addEventListener('click', () => { montarCarreira(); $('carreira').style.display = 'flex'; som.selecionar(); });
+$('carreira-fechar')?.addEventListener('click', () => { $('carreira').style.display = 'none'; });
 addEventListener('keydown', (e) => {
   if ($('loja') && $('loja').style.display === 'flex') { // loja aberta: só o ESC interessa
     if (e.code === 'Escape') $('loja').style.display = 'none';
+    return;
+  }
+  if ($('carreira') && $('carreira').style.display === 'flex') {
+    if (e.code === 'Escape') $('carreira').style.display = 'none';
     return;
   }
   if ($('ajuda').style.display === 'flex') { // ajuda aberta: só o ESC interessa

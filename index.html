@@ -245,6 +245,22 @@
   .lj-btn:disabled { opacity: .45; cursor: not-allowed; }
   .lj-card.tenho { border-color: #6ee787; }
   .lj-card.tenho .lj-btn { background: linear-gradient(180deg, #8af0b0, #4ec97e); cursor: default; }
+  /* ---------- Carreira 📊 ---------- */
+  #carreira { position: fixed; inset: 0; z-index: 8; display: none; align-items: center;
+    justify-content: center; padding: 18px; font-family: var(--f-ui);
+    background: rgba(10,6,26,.78); backdrop-filter: blur(4px); }
+  .car-num { background: rgba(0,0,0,.28); border: 2px solid rgba(255,255,255,.14);
+    border-radius: 12px; padding: 9px 6px; text-align: center; }
+  .car-num b { display: block; font-family: var(--f-disp); font-size: 20px; color: #ffd94a; }
+  .car-num span { font-size: 11px; color: #b0a6c8; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+  .car-q { display: flex; align-items: center; gap: 10px; background: rgba(0,0,0,.25);
+    border: 2px solid rgba(255,255,255,.12); border-radius: 12px; padding: 8px 14px; font-size: 13.5px; }
+  .car-q.tenho { border-color: #ffd94a; background: rgba(255,217,74,.08); }
+  .car-q .cq-ico { font-size: 20px; }
+  .car-q b { font-family: var(--f-disp); letter-spacing: .3px; }
+  .car-q small { color: #b0a6c8; }
+  .car-q .cq-premio { margin-left: auto; font-weight: 800; color: #ffd94a; white-space: nowrap; }
+  .car-q:not(.tenho) { opacity: .62; }
   .moeda-toast { position: fixed; top: 68px; right: 18px; z-index: 30; pointer-events: none;
     font-family: var(--f-disp); font-size: 17px; color: #4a3608; padding: 9px 18px;
     border-radius: 999px; border: 3px solid #2a1030; background: linear-gradient(180deg, #ffe27a, #ffb03c);
@@ -363,6 +379,7 @@
     <button class="tit-btn" id="tit-online" type="button">🌐 JOGAR ONLINE</button>
     <button class="tit-btn tit-btn-mini" id="tit-ajuda" type="button">❓ COMO JOGAR</button>
     <button class="tit-btn tit-btn-mini" id="tit-loja" type="button">🛒 LOJA &nbsp;·&nbsp; <span id="tit-moedas">0</span> 🪙</button>
+    <button class="tit-btn tit-btn-mini" id="tit-carreira" type="button">📊 CARREIRA</button>
   </div>
   <div class="tit-rodape">ENTER começa &nbsp;·&nbsp; até 4 no mesmo PC &nbsp;·&nbsp; até 20 online</div>
 </div>
@@ -376,6 +393,15 @@
     <div id="loja-tintas" class="lj-grid"></div>
     <div class="lj-tit">🧸 NOVOS LUTADORES <small>— em produção no Meshy 🔜 (guarde suas moedas!)</small></div>
     <button class="tit-btn tit-btn-mini" id="loja-fechar" type="button">FECHAR (ESC)</button>
+  </div>
+</div>
+<div id="carreira" style="display:none">
+  <div class="aj-card" style="max-width:820px">
+    <div class="aj-tit">📊 SUA CARREIRA</div>
+    <div id="car-stats" class="lj-grid" style="grid-template-columns:repeat(auto-fill,minmax(105px,1fr))"></div>
+    <div class="lj-tit">🏅 CONQUISTAS <small>(cada uma paga moedas da loja)</small></div>
+    <div id="car-conq" style="display:flex;flex-direction:column;gap:7px;width:100%"></div>
+    <button class="tit-btn tit-btn-mini" id="carreira-fechar" type="button">FECHAR (ESC)</button>
   </div>
 </div>
 <div id="ajuda" style="display:none">
