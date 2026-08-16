@@ -2098,7 +2098,7 @@ const MAPAS = [
   },
   {
     nome: 'ALTO MAR',
-    desc: 'convés de navio em mar aberto',
+    desc: 'navio a todo vapor, ondas de proa',
     fundoTex: FUNDOS.ceuAberto,
     amb: 'agua',
     semHolofotes: true,
@@ -2110,17 +2110,60 @@ const MAPAS = [
       climaMapa({ ceu: 0xbfd8e8, chao: 0x1c3a4a, fog: 0xc4d6e2, fogNear: 34, fogFar: 95, sol: 0xfff2d8, solInt: 1.4, expo: 1.02 });
       // Convés de madeira (o ringue) + casco + mastro com bandeira
       chaoFixo(m, 5.5, 4, new THREE.MeshStandardMaterial({ map: deckTex, roughness: 0.8 }));
-      const casco = new THREE.Mesh(new THREE.BoxGeometry(12.2, 1.5, 8.9), toonMat(THREE, 0x8a2f24));
-      casco.position.y = -0.78; scene.add(casco); m.meshes.push(casco);
-      const friso = new THREE.Mesh(new THREE.BoxGeometry(12.4, 0.22, 9.1), toonMat(THREE, 0xe8dcc0));
-      friso.position.y = -0.14; scene.add(friso); m.meshes.push(friso);
+      // CASCO de rebocador de verdade: contorno extrudado — popa redonda, proa em
+      // bico. O convés de luta é o meio do navio; cabine e chaminé ficam na proa
+      // (fora do ringue) pra silhueta ser de BARCO sem atrapalhar a briga.
+      const contorno = new THREE.Shape();
+      contorno.moveTo(-5.9, -5.4);                       // bochecha da popa (bombordo)
+      contorno.quadraticCurveTo(0, -8.6, 5.9, -5.4);     // popa arredondada
+      contorno.lineTo(5.9, 4.2);                          // costado
+      contorno.quadraticCurveTo(5.5, 7.6, 0, 10.4);      // proa em bico
+      contorno.quadraticCurveTo(-5.5, 7.6, -5.9, 4.2);
+      contorno.closePath();
+      const geoCasco = new THREE.ExtrudeGeometry(contorno, { depth: 1.7, bevelEnabled: true, bevelSize: 0.35, bevelThickness: 0.3, bevelSegments: 2 });
+      geoCasco.rotateX(-Math.PI / 2); // shape XY -> XZ (y do shape vira -z: proa em -z)
+      const casco = new THREE.Mesh(geoCasco, toonMat(THREE, 0x8a2f24));
+      casco.position.y = -2.16; casco.castShadow = true; // topo ~15cm abaixo do assoalho: vira o passadiço vermelho da borda
+      scene.add(casco); m.meshes.push(casco);
+      const friso = new THREE.Mesh(new THREE.BoxGeometry(11.6, 0.2, 8.4), toonMat(THREE, 0xe8dcc0));
+      friso.position.y = -0.11; scene.add(friso); m.meshes.push(friso);
+      // cabine branca com teto + chaminé na proa
+      const cabine = new THREE.Mesh(new THREE.BoxGeometry(3.5, 1.7, 2.7), toonMat(THREE, 0xf2ede2));
+      cabine.position.set(0, 0.75, -6.1); cabine.castShadow = true;
+      const teto = new THREE.Mesh(new THREE.BoxGeometry(3.9, 0.24, 3.1), toonMat(THREE, 0x8a2f24));
+      teto.position.set(0, 1.72, -6.1);
+      const chamine = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.52, 1.5, 14), toonMat(THREE, 0xcf4a37));
+      chamine.position.set(0, 2.5, -6.4); chamine.rotation.x = -0.12;
+      const bocaCh = new THREE.Mesh(new THREE.CylinderGeometry(0.46, 0.46, 0.24, 14), toonMat(THREE, 0x2b2b33));
+      bocaCh.position.set(0, 3.24, -6.49); bocaCh.rotation.x = -0.12;
+      const boia = new THREE.Mesh(new THREE.TorusGeometry(0.34, 0.11, 10, 20), toonMat(THREE, 0xff6b4a));
+      boia.position.set(0, 0.85, -4.7);
+      for (const o of [cabine, teto, chamine, bocaCh, boia]) { scene.add(o); m.meshes.push(o); }
+      // cordame: mastro -> proa e mastro -> popa (caixinhas fininhas inclinadas)
+      const corda = (z1, y1, z2, y2) => {
+        const L = Math.hypot(z2 - z1, y2 - y1);
+        const c = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.035, L), toonMat(THREE, 0xd8cfb8));
+        c.position.set(0, (y1 + y2) / 2, (z1 + z2) / 2);
+        c.rotation.x = Math.atan2(y2 - y1, z2 - z1);
+        scene.add(c); m.meshes.push(c);
+      };
+      corda(-3.6, 5.3, -9.6, 0.4);
+      corda(-3.6, 5.3, 7.6, 0.3);
+      // fumaça da chaminé escoando pra POPA (vende o navio andando)
+      const fumacas = [];
+      for (let i = 0; i < 7; i++) {
+        const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: texBolinha, color: 0xdedee6, transparent: true, opacity: 0, depthWrite: false }));
+        scene.add(s); m.meshes.push(s);
+        fumacas.push({ s, f: i / 7 });
+      }
       const mastro = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.13, 5.4, 10), toonMat(THREE, 0x5a4632));
       mastro.position.set(0, 2.7, -3.6); mastro.castShadow = true; scene.add(mastro); m.meshes.push(mastro);
       const bandeira = new THREE.Mesh(
         new THREE.PlaneGeometry(1.25, 0.7, 12, 1),
         new THREE.MeshStandardMaterial({ color: 0xff5252, side: THREE.DoubleSide, roughness: 0.85 }),
       );
-      bandeira.position.set(0.65, 5.0, -3.6); scene.add(bandeira); m.meshes.push(bandeira);
+      bandeira.rotation.y = -Math.PI * 0.3; // meio de popa (vento do avanço), meio de frente (câmera vê)
+      bandeira.position.set(0.35, 5.0, -3.2); scene.add(bandeira); m.meshes.push(bandeira);
       const bandBase = bandeira.geometry.attributes.position.array.slice();
       fazerCaixote(m, -2.8, 2.2); fazerCaixote(m, 2.8, -2.2);
       // ---- o mar ----
@@ -2136,27 +2179,31 @@ const MAPAS = [
         },
         vertexShader: `
           uniform float uTempo;
-          varying vec3 vPos; varying vec3 vNrm; varying float vCrista;
-          void gerstner(vec2 d, float k, float a, float q, float w, inout vec3 p, inout vec3 n, inout float cr) {
-            float ph = k * dot(d, p.xz) - w * uTempo;
+          varying vec3 vPos; varying vec3 vNrm; varying float vCrista; varying vec2 vFlow;
+          // NAVIO EM MOVIMENTO: o barco é fixo na física e a ÁGUA corre por ele.
+          // As fases das ondas usam a grade deslocada pela correnteza (vem da proa,
+          // -z, e escoa pra popa, +z) — ilusão de avanço sem mexer em colisor nenhum.
+          void gerstner(vec2 d, float k, float a, float q, float w, vec2 g, inout vec3 p, inout vec3 n, inout float cr) {
+            float ph = k * dot(d, g) - w * uTempo;
             float s = sin(ph), c = cos(ph);
             p.x += q * a * d.x * c; p.z += q * a * d.y * c; p.y += a * s;
             n.x -= d.x * k * a * c; n.z -= d.y * k * a * c; n.y -= q * k * a * s;
             cr += a * s * (0.5 + q);
           }
           void main() {
+            vec2 g = position.xz + vec2(0.0, uTempo * 3.2); // correnteza do avanço
             vec3 p = position; vec3 n = vec3(0.0, 1.0, 0.0); float cr = 0.0;
-            gerstner(normalize(vec2( 1.0,  0.25)), 0.14, 0.42, 0.55, 1.05, p, n, cr);
-            gerstner(normalize(vec2( 0.8, -0.55)), 0.24, 0.26, 0.50, 1.45, p, n, cr);
-            gerstner(normalize(vec2(-0.35, 1.0 )), 0.42, 0.14, 0.45, 1.95, p, n, cr);
-            gerstner(normalize(vec2( 0.95, 0.7 )), 0.75, 0.07, 0.40, 2.70, p, n, cr);
-            gerstner(normalize(vec2(-0.7, -0.9 )), 1.30, 0.035, 0.35, 3.60, p, n, cr);
-            vPos = p; vNrm = normalize(n); vCrista = cr;
+            gerstner(normalize(vec2( 0.2,  1.0 )), 0.14, 0.42, 0.55, 1.05, g, p, n, cr);
+            gerstner(normalize(vec2(-0.45, 1.0 )), 0.24, 0.26, 0.50, 1.45, g, p, n, cr);
+            gerstner(normalize(vec2( 0.75, 0.8 )), 0.42, 0.14, 0.45, 1.95, g, p, n, cr);
+            gerstner(normalize(vec2( 0.95, 0.7 )), 0.75, 0.07, 0.40, 2.70, g, p, n, cr);
+            gerstner(normalize(vec2(-0.7, -0.9 )), 1.30, 0.035, 0.35, 3.60, g, p, n, cr);
+            vPos = p; vNrm = normalize(n); vCrista = cr; vFlow = g;
             gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
           }`,
         fragmentShader: `
           uniform float uTempo; uniform vec3 uSol, uFunda, uRasa, uNevoa;
-          varying vec3 vPos; varying vec3 vNrm; varying float vCrista;
+          varying vec3 vPos; varying vec3 vNrm; varying float vCrista; varying vec2 vFlow;
           // "ruído" por interferência de senos: liso, barato e sem artefato de grade
           float marulho(vec2 p, float t) {
             return 0.5 + 0.25 * sin(p.x * 2.3 + t * 1.1) * sin(p.y * 1.9 - t * 0.8)
@@ -2178,13 +2225,24 @@ const MAPAS = [
             // glint do sol (spec estreito + brilho largo)
             float sr = max(dot(R, uSol), 0.0);
             cor += vec3(1.0, 0.93, 0.75) * (pow(sr, 380.0) * 3.0 + pow(sr, 32.0) * 0.10);
-            // WHITECAPS: crista ALTA com quebra SUAVE (nada de threshold duro — vira listra)
-            float esp = smoothstep(0.8, 1.15, vCrista) * (0.45 + 0.55 * marulho(vPos.xz * 0.7, uTempo));
-            // espuma do CASCO: halo curto e discreto respirando junto do navio
+            // WHITECAPS: crista ALTA com quebra SUAVE, viajando JUNTO da água (vFlow)
+            float esp = smoothstep(0.8, 1.15, vCrista) * (0.45 + 0.55 * marulho(vFlow * 0.7, uTempo));
+            // espuma do CASCO: halo respirando, mais forte na PROA que corta a água (-z)
             vec2 dRect = abs(vPos.xz) - vec2(6.1, 4.45);
             float dCasco = length(max(dRect, 0.0));
-            float anel = smoothstep(0.85, 0.0, dCasco) * (0.55 + 0.25 * sin(dCasco * 5.0 - uTempo * 2.2));
+            float proa = 1.0 + smoothstep(-2.5, -4.4, vPos.z) * 0.9;
+            float anel = smoothstep(0.85, 0.0, dCasco) * (0.55 + 0.25 * sin(dCasco * 5.0 - uTempo * 2.2)) * proa;
             esp = clamp(esp + anel * (0.35 + 0.3 * marulho(vPos.xz * 1.2, uTempo * 1.3)), 0.0, 1.0);
+            // ESTEIRA em V atrás da popa (ângulo de Kelvin ~19°): riscos de espuma
+            // correndo pra trás e bordas do V mais brancas, sumindo com a distância
+            float atras = vPos.z - 4.45;
+            if (atras > 0.0) {
+              float larg = 0.9 + atras * 0.36;
+              float dentro = smoothstep(larg, larg * 0.5, abs(vPos.x)) * smoothstep(0.0, 1.5, atras) * smoothstep(17.0, 4.0, atras);
+              float riscos = 0.5 + 0.5 * sin(vPos.x * 6.0 + atras * 1.4 - uTempo * 5.5);
+              float borda = smoothstep(0.35, 0.0, abs(abs(vPos.x) - larg * 0.82)) * smoothstep(0.0, 1.0, atras) * smoothstep(15.0, 3.0, atras);
+              esp = clamp(esp + dentro * riscos * (0.3 + 0.35 * marulho(vPos.xz * 1.1, uTempo * 1.6)) + borda * 0.45, 0.0, 1.0);
+            }
             cor = mix(cor, vec3(0.9, 0.96, 1.0), esp * 0.55);
             // perspectiva aérea: longe some na névoa do horizonte
             float dist = length(cameraPosition - vPos);
@@ -2208,6 +2266,13 @@ const MAPAS = [
           bp.array[i * 3 + 2] = Math.sin(x * 4.2 - t * 6.5) * 0.09 * (x + 0.625);
         }
         bp.needsUpdate = true;
+        // fumaça sobe da chaminé e escoa pra popa (vento aparente do avanço)
+        for (const f of fumacas) {
+          const k = (t * 0.45 + f.f) % 1; // ciclo de vida 0..1
+          f.s.position.set(Math.sin(t * 1.3 + f.f * 9) * 0.25 + k * 0.8, 3.35 + k * 2.3, -6.5 + k * 5.2);
+          f.s.scale.setScalar(0.35 + k * 1.6);
+          f.s.material.opacity = 0.5 * (1 - k) * Math.min(1, k * 8);
+        }
         if (prox === 0) prox = t + 7 + Math.random() * 4;
         if (fase === 'calmo' && t > prox) {
           fase = 'aviso'; faseAte = t + 1.1;
