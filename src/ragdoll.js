@@ -336,11 +336,20 @@ export class Ragdoll {
       const mx = input.move.x, mz = input.move.z;
       const mlen = Math.hypot(mx, mz);
       if (mlen > 0.01) {
-        this.heading = Math.atan2(mx, mz);
-        const nx = mx / mlen, nz = mz / mlen;
+        let nx = mx / mlen, nz = mz / mlen;
+        // 🧱 CAMBALEIO: com muito dano o boneco anda torto (sway senoidal) —
+        // todo mundo vê de longe quem está quase caindo, e fugir cambaleando é cômico
+        let grogue = 1;
+        if (this.dano >= 2.4) {
+          const s = Math.sin(now * 6.5 + (this._seedCamb ??= Math.random() * 6.3)) * 0.4 * Math.min(1, (this.dano - 2.2) / 1.6);
+          const px = nx - nz * s, pz = nz + nx * s, pl = Math.hypot(px, pz) || 1;
+          nx = px / pl; nz = pz / pl;
+          grogue = 0.9;
+        }
+        this.heading = Math.atan2(nx, nz);
         const speedAlong = pv.x * nx + pv.z * nz;
         if (speedAlong < 3.6) {
-          const tr = 220 * this.controle * (this.buffVel || 1) * (this._carga > 0.1 ? 0.55 : 1);
+          const tr = 220 * grogue * this.controle * (this.buffVel || 1) * (this._carga > 0.1 ? 0.55 : 1);
           pelvis.applyImpulse({ x: nx * tr * dt, y: 0, z: nz * tr * dt }, true);
           this.parts.torso.applyImpulse({ x: nx * tr * 0.4 * dt, y: 0, z: nz * tr * 0.4 * dt }, true);
         }
