@@ -54,8 +54,10 @@ PULO / ESQUIVA** na direita. Ao abrir, já cai numa luta rápida contra um bot.
 
 ## 🕹️ Menu (offline)
 
-1. **Escolha a fantasia:** J1 com **A/D**, J2 com **←/→**. Confirme com **F** (J1)
-   e **K** (J2). Aperte **C** pra adicionar um **bot 🤖**.
+0. **Tela de título:** 🎮 JOGAR · 🌐 JOGAR ONLINE · ❓ COMO JOGAR (**ENTER** pula
+   direto pro jogo; **ESC** volta um passo em qualquer tela).
+1. **Escolha o lutador** no palco 3D: J1 com **A/D**, J2 com **←/→** (ou clique no
+   card). Confirme com **F** (J1) e **K** (J2). Aperte **C** pra adicionar um **bot 🤖**.
 2. **Tela de mapa** (depois de todos confirmarem):
    - **A / D** — troca o **mapa** (são 17!) · **X** sorteia 🎲
    - **N** — modo (Melhor de 5 · Melhor de 3 · Morte Súbita · CAOS ⚔️ · REI DO MORRO 👑 ·

@@ -3022,34 +3022,52 @@ if (PARAMS.get('skins')) {
   ns.forEach((n, i) => { if (Number.isFinite(n) && selCfg[i]) selCfg[i].skin = ((n % SKINS.length) + SKINS.length) % SKINS.length; });
 }
 
-function trocarSkin(i, dir) {
-  const cur = MENU_SKINS.indexOf(selCfg[i].skin);
-  const base = cur < 0 ? 0 : cur;
-  selCfg[i].skin = MENU_SKINS[((base + dir) % MENU_SKINS.length + MENU_SKINS.length) % MENU_SKINS.length];
-  store.set('molengas_skin' + i, selCfg[i].skin);
+function setSkinDireto(i, skinIdx) {
+  selCfg[i].skin = skinIdx;
+  store.set('molengas_skin' + i, skinIdx);
   som.selecionar();
   // lutador em cena? troca ao vivo
   const l = lutadores.find((x) => x.slot === i);
   if (l) {
     destroyVisual(l.meshes);
-    l.meshes = buildVisual(SKINS[selCfg[i].skin], i * 1.9, i);
-    l.cfg.skin = selCfg[i].skin;
+    l.meshes = buildVisual(SKINS[skinIdx], i * 1.9, i);
+    l.cfg.skin = skinIdx;
   }
   atualizarSelecao();
 }
+function trocarSkin(i, dir) {
+  const cur = MENU_SKINS.indexOf(selCfg[i].skin);
+  const base = cur < 0 ? 0 : cur;
+  setSkinDireto(i, MENU_SKINS[((base + dir) % MENU_SKINS.length + MENU_SKINS.length) % MENU_SKINS.length]);
+}
 
+const ROTULO_J = ['P1', 'P2', 'P3', 'P4'];
+const CORES_J = ['#ff5252', '#40a0ff', '#ffd94a', '#7ed957'];
+const CLASSE_SKIN = { jaeger: 'ÁGIL ⚡', kaiju: 'BRUTAMONTES 💪' };
 function atualizarSelecao() {
-  for (let i = 0; i < 4; i++) {
-    const painel = $('sel-p' + i);
-    if (!painel) continue;
-    const c = selCfg[i];
-    painel.classList.toggle('confirmado', c.ativo && c.conf);
-    painel.classList.toggle('vazio', !c.ativo);
-    $('sel-img' + i).src = ASSET(`assets/retratos/${SKINS[c.skin].id}.jpg`);
-    $('sel-img' + i).style.opacity = c.ativo ? 1 : 0.25;
-    $('sel-nome' + i).textContent = c.ativo ? SKINS[c.skin].nome + (c.tipo === 'cpu' ? ' 🤖' : '') : '—';
+  // Cards do elenco (um por fantasia jogável) com os "cursores" dos jogadores em cima
+  MENU_SKINS.forEach((skinIdx, k) => {
+    const img = $('sel-card-img' + k);
+    if (!img) return;
+    const s = SKINS[skinIdx];
+    if (!img.getAttribute('src')) img.src = ASSET(`assets/retratos/${s.id}.jpg`);
+    $('sel-card-nome' + k).textContent = s.nome;
+    $('sel-card-cl' + k).textContent = CLASSE_SKIN[s.id] || '';
+    $('sel-badges' + k).innerHTML = selCfg.map((c, i) => (c.ativo && c.skin === skinIdx)
+      ? `<span class="sel-badge pj${i}${c.conf ? ' conf' : ''}">${c.tipo === 'cpu' ? '🤖' : ROTULO_J[i]}</span>` : '').join('');
+    const card = document.querySelector(`.sel-card[data-k="${k}"]`);
+    if (card) card.classList.toggle('sob', selCfg.some((c) => c.ativo && c.skin === skinIdx));
+  });
+  // Chips de status por jogador (quem entrou, quem já confirmou)
+  if ($('sel-chips')) {
+    $('sel-chips').innerHTML = selCfg.map((c, i) => {
+      if (!c.ativo) return `<span class="sel-chip vazio">🎮 ${ROTULO_J[i]} · aperte A</span>`;
+      return `<span class="sel-chip" style="--cj:${CORES_J[i]}">${c.tipo === 'cpu' ? '🤖 BOT' : ROTULO_J[i]} · ${SKINS[c.skin].nome} ${c.conf ? '✔' : '…'}</span>`;
+    }).join('');
   }
-  $('sel-mapa').style.display = selFase === 'mapa' ? 'block' : 'none';
+  $('selecao').classList.toggle('fase-mapa', selFase === 'mapa');
+  if ($('sel-tit')) $('sel-tit').textContent = selFase === 'mapa' ? 'ARENA & MODO' : 'ESCOLHA SEU LUTADOR';
+  $('sel-mapa').style.display = selFase === 'mapa' ? 'flex' : 'none';
   $('sel-mapa-nome').textContent = MAPAS[mapaIdx].nome;
   if ($('sel-mapa-desc')) $('sel-mapa-desc').textContent = MAPAS[mapaIdx].desc || '';
   if ($('sel-modo-nome')) $('sel-modo-nome').textContent = MODOS[modoIdx].nome;
@@ -3057,6 +3075,19 @@ function atualizarSelecao() {
   if ($('sel-nivel')) $('sel-nivel').textContent = NIVEIS[nivelIdx].nome;
   if ($('sel-modif')) $('sel-modif').textContent = MODIFS[modifIdx].nome;
 }
+// Clicar num card escolhe a fantasia do J1; clicar de novo confirma (bom pra mouse)
+document.querySelectorAll('.sel-card').forEach((card) => {
+  card.addEventListener('click', () => {
+    if (state !== 'selecao' || selFase !== 'skins') return;
+    const skinIdx = MENU_SKINS[parseInt(card.dataset.k, 10)];
+    if (selCfg[0].skin !== skinIdx && !selCfg[0].conf) {
+      setSkinDireto(0, skinIdx);
+    } else if (!selCfg[0].conf) {
+      selCfg[0].conf = true; som.confirmar(); checarFaseMapa();
+    }
+    atualizarSelecao();
+  });
+});
 function checarFaseMapa() {
   const ativos = selCfg.filter((c) => c.ativo);
   if (ativos.length >= 2 && ativos.every((c) => c.conf || c.tipo === 'cpu')) selFase = 'mapa';
@@ -3082,11 +3113,22 @@ function mostrarSelecao() {
     c.conf = false;
     if (c.tipo === 'cpu') { c.ativo = false; c.tipo = 'gp'; }
   }
+  $('titulo').style.display = 'none';
   $('selecao').style.display = 'flex';
+  document.body.classList.add('menu');
+  for (const l of lutadores) l.rag.reset(); // arruma os enfeites no palco
   showMsg('');
   state = 'selecao';
   som.musica('menu');
   atualizarSelecao();
+}
+// Tela de título (cartoon arcade): JOGAR / ONLINE / COMO JOGAR
+function mostrarTitulo() {
+  state = 'titulo';
+  $('titulo').style.display = 'flex';
+  $('selecao').style.display = 'none';
+  document.body.classList.add('menu');
+  som.musica('menu');
 }
 function startIntro(roundN) {
   state = 'intro';
@@ -3103,6 +3145,7 @@ function startIntro(roundN) {
 }
 function iniciarLuta() {
   $('selecao').style.display = 'none';
+  document.body.classList.remove('menu');
   WIN_SCORE = MODOS[modoIdx].vitorias;   // aplica o modo escolhido
   MODO_CAOS = MODOS[modoIdx].caos;
   MODO_MORRO = !!MODOS[modoIdx].morro;
@@ -3211,6 +3254,10 @@ function confete(qtd = 70) {
 // Seleção por teclado
 addEventListener('keydown', (e) => {
   if (state !== 'selecao') return;
+  if (e.code === 'Escape') { // volta um passo: mapa -> skins -> título
+    if (selFase === 'mapa') mostrarSelecao(); else mostrarTitulo();
+    return;
+  }
   if (selFase === 'skins') {
     if (!selCfg[0].conf && e.code === 'KeyA') trocarSkin(0, -1);
     if (!selCfg[0].conf && e.code === 'KeyD') trocarSkin(0, 1);
@@ -3218,6 +3265,7 @@ addEventListener('keydown', (e) => {
     if (!selCfg[1].conf && e.code === 'ArrowLeft') trocarSkin(1, -1);
     if (!selCfg[1].conf && e.code === 'ArrowRight') trocarSkin(1, 1);
     if (!selCfg[1].conf && e.code === 'KeyK') { selCfg[1].conf = true; som.confirmar(); }
+    if (e.code === 'KeyC') addBot(); // dá pra chamar o bot já na escolha
     checarFaseMapa();
   } else {
     if (e.code === 'KeyA') { setMapa(mapaIdx - 1); som.selecionar(); }
@@ -3483,6 +3531,8 @@ let online = null;
 
 function iniciarOnline() {
   $('selecao').style.display = 'none';
+  if ($('titulo')) $('titulo').style.display = 'none';
+  document.body.classList.remove('menu');
   online = { ws: null, slot: null, visuais: new Map(), armasVis: new Map(), powerVis: new Map(), buf: [], msgAtual: null, jaeger: false, forcarGominha: false, melhorPend: null, faseFinal: null, desconectou: false, inputTimer: null, aguardando: false, reconTimer: null, nomes: new Map(), nome: '' };
   online.marcador = new THREE.Sprite(new THREE.SpriteMaterial({ map: voceTex, transparent: true, depthWrite: false, fog: false }));
   online.marcador.scale.setScalar(0.55); online.marcador.visible = false; scene.add(online.marcador);
@@ -4410,7 +4460,13 @@ function frame(t) {
     d.textContent = `t=${simNow.toFixed(1)}s estado=${state} vivos=${vivos().length} yaw0=${yawQ(q)}`;
   }
   if (state === 'selecao') {
-    // Preview 3D: a câmera orbita devagar em torno dos lutadores de enfeite
+    // Palco da seleção: câmera de frente, parada, com um balanço bem leve —
+    // os lutadores de enfeite ficam enquadrados acima dos cards.
+    const sw = Math.sin(t * 0.0004);
+    camera.position.set(sw * 0.45, 1.85, 4.3);
+    camera.lookAt(0, 1.0, 0);
+  } else if (state === 'titulo') {
+    // Atrás do título (opaco) a câmera segue orbitando — evita pulo ao entrar
     const ang = t * 0.00020;
     const cx = midX * 0.6;
     camera.position.set(cx + Math.sin(ang) * 4.6, 2.05, Math.cos(ang) * 4.6 + 0.3);
@@ -4439,8 +4495,19 @@ setMapa(parseInt(PARAMS.get('mapa'), 10) || 0);
 initTouch();
 // Editor ao vivo (tecla ` abre): ajusta câmera, luz, brilho e força em tempo real
 initEditor({ camera, r3, scene, sun, hemi, rim, bloomPass });
-// Botão "JOGAR ONLINE" no menu — funciona com qualquer link (não precisa de ?servidor=1)
-$('btn-online')?.addEventListener('click', () => { if (!online) iniciarOnline(); });
+// Botões da tela de título (JOGAR / ONLINE / COMO JOGAR)
+$('tit-jogar')?.addEventListener('click', () => { mostrarSelecao(); som.confirmar(); });
+$('tit-online')?.addEventListener('click', () => { $('titulo').style.display = 'none'; if (!online) iniciarOnline(); });
+$('tit-ajuda')?.addEventListener('click', () => { $('ajuda').style.display = 'flex'; som.selecionar(); });
+$('ajuda-fechar')?.addEventListener('click', () => { $('ajuda').style.display = 'none'; });
+addEventListener('keydown', (e) => {
+  if ($('ajuda').style.display === 'flex') { // ajuda aberta: só o ESC interessa
+    if (e.code === 'Escape') $('ajuda').style.display = 'none';
+    return;
+  }
+  if (state !== 'titulo') return;
+  if (e.code === 'Enter' || e.code === 'Space' || e.code === 'KeyF') { mostrarSelecao(); som.confirmar(); }
+});
 if (PARAMS.has('servidor')) {
   iniciarOnline();
 } else if (touchAtivo() && !PARAMS.has('direto')) {
@@ -4464,10 +4531,10 @@ if (PARAMS.has('servidor')) {
   updateScore();
   state = 'luta';
 } else {
-  // dois lutadores de enfeite atrás do menu
+  // dois lutadores de enfeite no palco atrás do menu
   montarLutadores([{ ...selCfg[0] }, { ...selCfg[1] }]);
   updateScore();
-  mostrarSelecao();
+  mostrarTitulo();
 }
 
 // ?avancar=N na URL: simula N segundos de física antes do primeiro frame (debug/screenshot)
