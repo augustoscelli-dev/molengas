@@ -419,6 +419,17 @@ function startIntro(roundN) {
   msg = 'ROUND ' + roundN + (decisivo ? ' · 🔥 DECISIVO!' : '');
 }
 function comecarPartida() {
+  // 🗳️ Apura a votação de arena: a mais votada vence; empate sorteia entre as
+  // empatadas; ninguém votou = fica na última escolhida (arenaIdx).
+  const urna = ARENAS_ON.map(() => 0);
+  let teveVoto = false;
+  for (const j of jogadores.values()) if (j.voto != null) { urna[j.voto]++; teveVoto = true; }
+  if (teveVoto) {
+    const max = Math.max(...urna);
+    const top = urna.map((v, i) => [v, i]).filter(([v]) => v === max).map(([, i]) => i);
+    arenaIdx = top[(Math.random() * top.length) | 0];
+    console.log(`votação: [${urna.join(',')}] -> ${ARENAS_ON[arenaIdx].nome}`);
+  }
   // RODÍZIO: sorteia a variante desta partida antes de montar
   arenaAtiva = ARENAS_ON[arenaIdx].id === 'rodizio'
     ? ['classica', 'gelo', 'encolhe', 'abismo'][(Math.random() * 4) | 0]
@@ -627,6 +638,11 @@ setInterval(() => {
       mo: MODOS_SALA[salaModo].nome, cap: capSala(), na: jogadores.size, pt: PONTOS[pontoIdx].n, jg: salaJaeger ? 1 : 0,
       an: (estado === 'lobby' || estado === 'fim') ? ARENAS_ON[arenaIdx].nome : NOME_ARENA[arenaAtiva], as: q2(escalaEncolhe),
       mr: salaMorro ? 1 : 0, tm: salaTimes ? 1 : 0, kg: (salaMorro && estado === 'luta' && morroLider) ? morroLider : undefined,
+      vt: (estado === 'lobby' || estado === 'fim') ? (() => { // 🗳️ urna da arena (só no lobby)
+        const u = ARENAS_ON.map(() => 0);
+        for (const j of js) if (j.voto != null) u[j.voto]++;
+        return u.some((v) => v) ? u : undefined;
+      })() : undefined,
       ah: arenaAtiva === 'abismo' ? [q2(arenaHX), q2(arenaHZ)] : undefined, // dims p/ o cliente desenhar a moldura
       rk: (estado === 'lobby' || estado === 'fim') && rankingNoite.size
         ? [...rankingNoite.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5) : undefined,
@@ -734,12 +750,12 @@ wss.on('connection', (ws) => {
         const j = jogadores.get(ws);
         if (j && j === host() && (estado === 'lobby' || estado === 'fim')) salaJaeger = !salaJaeger;
       } else if (m.t === 'arena') {
+        // 🗳️ VOTAÇÃO: qualquer um aperta B pra ciclar o PRÓPRIO voto de arena.
+        // A mais votada vence quando o host começa (empate = sorteio entre elas).
         const j = jogadores.get(ws);
-        if (j && j === host() && (estado === 'lobby' || estado === 'fim')) {
-          arenaIdx = (arenaIdx + 1) % ARENAS_ON.length;
-          arenaAtiva = ARENAS_ON[arenaIdx].id === 'rodizio' ? 'classica' : ARENAS_ON[arenaIdx].id;
-          montarArena(MODOS_SALA[salaModo].arena); // reaplica atrito/escala da variante
-          console.log('arena ->', ARENAS_ON[arenaIdx].nome);
+        if (j && (estado === 'lobby' || estado === 'fim')) {
+          j.voto = ((j.voto ?? -1) + 1) % ARENAS_ON.length;
+          ws.send(JSON.stringify({ t: 'voto', a: j.voto })); // eco: cliente mostra "seu voto"
         }
       } else if (m.t === 'times') {
         const j = jogadores.get(ws); // só o host, e só fora da luta

@@ -3719,6 +3719,8 @@ function fecharRound() {
 // O servidor roda a física oficial; aqui só mandamos botões e
 // interpolamos os snapshots que chegam (~20Hz) pra 60fps.
 let online = null;
+// Ordem IGUAL ao ARENAS_ON do servidor (índices da votação 🗳️)
+const ARENAS_CLI = ['CLÁSSICA', 'GELO 🧊', 'ENCOLHE 😱', 'ABISMO 🕳️', 'RODÍZIO 🎲'];
 
 function iniciarOnline() {
   $('selecao').style.display = 'none';
@@ -3823,6 +3825,7 @@ function iniciarOnline() {
     if (typeof e.data === 'string') { // oi / cheio / melhor (JSON)
       let m; try { m = JSON.parse(e.data); } catch { return; }
       if (m.t === 'oi') { online.slot = m.slot; online.aguardando = false; }
+      else if (m.t === 'voto') { avisoOnline(`🗳️ seu voto: ${ARENAS_CLI[m.a] || '?'}`); som.selecionar?.(); }
       else if (m.t === 'cheio') { online.aguardando = true; showMsg('SALA CHEIA 😔', 'esperando abrir vaga…'); }
       else if (m.t === 'nomes') online.nomes = new Map(m.ns); // apelidos por slot
       else if (m.t === 'melhor') online.melhorPend = m; // clipe da melhor jogada
@@ -4125,7 +4128,9 @@ function receberSnap(m) {
     const lista = [...online.nomes.values()];
     let quem = lista.length ? `<br>na sala: <b>${lista.slice(0, 8).join('</b> · <b>')}</b>${lista.length > 8 ? ` +${lista.length - 8}` : ''}` : '';
     if (m.rk && m.rk.length) quem += `<br>🏆 placar da noite: ${m.rk.map(([n, v]) => `<b>${n}</b> ${v}`).join(' &nbsp;·&nbsp; ')}`;
-    showMsg('SALA ONLINE 🌐', `${m.mo || ''} — <b>${m.na || 0}/${m.cap || 0}</b> na sala &nbsp;·&nbsp; ${m.pt || ''} &nbsp;·&nbsp; arena: <b>${m.an || 'CLÁSSICA'}</b>${m.mr ? ' &nbsp;·&nbsp; 👑 <b>REI DO MORRO</b>' : ''}${m.tm ? ' &nbsp;·&nbsp; 🔴🔵 <b>TIMES</b> (par x ímpar)' : ''}${quem}<br><b>T</b> troca 🤖↔🦖 &nbsp;·&nbsp; <b>1-4</b> provocam 😂 &nbsp;·&nbsp; host: <b>F</b> começa &nbsp;·&nbsp; <b>M</b> modo &nbsp;·&nbsp; <b>N</b> pontuação &nbsp;·&nbsp; <b>B</b> arena &nbsp;·&nbsp; <b>H</b> 👑 &nbsp;·&nbsp; <b>Y</b> 🔴🔵`);
+    // 🗳️ urna da arena ao vivo (aparece assim que alguém vota no B)
+    if (m.vt) quem += `<br>🗳️ votos de arena: ${m.vt.map((v, i) => v ? `<b>${ARENAS_CLI[i]}</b> ${v}` : '').filter(Boolean).join(' &nbsp;·&nbsp; ')}`;
+    showMsg('SALA ONLINE 🌐', `${m.mo || ''} — <b>${m.na || 0}/${m.cap || 0}</b> na sala &nbsp;·&nbsp; ${m.pt || ''} &nbsp;·&nbsp; arena: <b>${m.an || 'CLÁSSICA'}</b>${m.mr ? ' &nbsp;·&nbsp; 👑 <b>REI DO MORRO</b>' : ''}${m.tm ? ' &nbsp;·&nbsp; 🔴🔵 <b>TIMES</b> (par x ímpar)' : ''}${quem}<br><b>T</b> troca 🤖↔🦖 &nbsp;·&nbsp; <b>B</b> vota arena 🗳️ &nbsp;·&nbsp; <b>1-4</b> provocam 😂 &nbsp;·&nbsp; host: <b>F</b> começa &nbsp;·&nbsp; <b>M</b> modo &nbsp;·&nbsp; <b>N</b> pontuação &nbsp;·&nbsp; <b>H</b> 👑 &nbsp;·&nbsp; <b>Y</b> 🔴🔵`);
     online.msgAtual = '__lobby__'; online._fimMostrado = false; online.faseFinal = null; online.melhorPend = null;
   } else if (m.st === 'fim') {
     if (!online._fimMostrado) {
