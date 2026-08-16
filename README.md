@@ -67,8 +67,10 @@ PULO / ESQUIVA** na direita. Ao abrir, já cai numa luta rápida contra um bot.
    card). **Pinte o seu boneco** 🎨: J1 com **W/S**, J2 com **↑/↓** (12 tintas — o
    boneco no palco muda na hora). Confirme com **F** (J1) e **K** (J2). Aperte **C**
    pra adicionar um **bot 🤖**.
-2. **Tela de arena:** fileira de **cards com foto** de cada mapa (são 20! — no
-   **ABISMO 🕳️** não tem chão, no **JARDIM 🌿** a grama amassa na briga e o **DOJO 🥋** tem sacos de pancada pra treinar) e o
+2. **Tela de arena:** fileira de **cards com foto** de cada mapa (são 21! — no
+   **ABISMO 🕳️** não tem chão, no **JARDIM 🌿** a grama amassa na briga, o **DOJO 🥋**
+   tem sacos de pancada pra treinar e no **ALTO MAR 🌊** você luta num convés de
+   navio em oceano de verdade, com vagalhões que empurram todo mundo) e o
    mapa de verdade montado ao vivo atrás. **A / D** navega · **X** sorteia 🎲 ·
    clique no card também funciona · **F** confirma.
 3. **Tela de modo:** cards dos 6 modos — Melhor de 5 🏆 · Melhor de 3 ⚡ ·

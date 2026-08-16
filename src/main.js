@@ -2096,6 +2096,140 @@ const MAPAS = [
       }
     },
   },
+  {
+    nome: 'ALTO MAR',
+    desc: 'convés de navio em mar aberto',
+    fundoTex: FUNDOS.ceuAberto,
+    amb: 'agua',
+    semHolofotes: true,
+    build(m) {
+      // OCEANO GERSTNER na GPU (receita da skill de oceano espectral, em versão
+      // WebGL/celular): 5 ondas direcionais deslocam os vértices, o fragment faz
+      // Fresnel com céu procedural, glint do sol, whitecaps na crista e espuma
+      // viva ao redor do casco. Horizonte some em névoa (perspectiva aérea).
+      climaMapa({ ceu: 0xbfd8e8, chao: 0x1c3a4a, fog: 0xc4d6e2, fogNear: 34, fogFar: 95, sol: 0xfff2d8, solInt: 1.4, expo: 1.02 });
+      // Convés de madeira (o ringue) + casco + mastro com bandeira
+      chaoFixo(m, 5.5, 4, new THREE.MeshStandardMaterial({ map: deckTex, roughness: 0.8 }));
+      const casco = new THREE.Mesh(new THREE.BoxGeometry(12.2, 1.5, 8.9), toonMat(THREE, 0x8a2f24));
+      casco.position.y = -0.78; scene.add(casco); m.meshes.push(casco);
+      const friso = new THREE.Mesh(new THREE.BoxGeometry(12.4, 0.22, 9.1), toonMat(THREE, 0xe8dcc0));
+      friso.position.y = -0.14; scene.add(friso); m.meshes.push(friso);
+      const mastro = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.13, 5.4, 10), toonMat(THREE, 0x5a4632));
+      mastro.position.set(0, 2.7, -3.6); mastro.castShadow = true; scene.add(mastro); m.meshes.push(mastro);
+      const bandeira = new THREE.Mesh(
+        new THREE.PlaneGeometry(1.25, 0.7, 12, 1),
+        new THREE.MeshStandardMaterial({ color: 0xff5252, side: THREE.DoubleSide, roughness: 0.85 }),
+      );
+      bandeira.position.set(0.65, 5.0, -3.6); scene.add(bandeira); m.meshes.push(bandeira);
+      const bandBase = bandeira.geometry.attributes.position.array.slice();
+      fazerCaixote(m, -2.8, 2.2); fazerCaixote(m, 2.8, -2.2);
+      // ---- o mar ----
+      const geoMar = new THREE.PlaneGeometry(240, 240, 120, 120);
+      geoMar.rotateX(-Math.PI / 2);
+      const matMar = new THREE.ShaderMaterial({
+        uniforms: {
+          uTempo: { value: 0 },
+          uSol: { value: new THREE.Vector3(-0.25, 0.42, -0.87).normalize() }, // na frente da câmera: caminho de brilho no mar
+          uFunda: { value: new THREE.Color(0x06344d).convertSRGBToLinear() },
+          uRasa: { value: new THREE.Color(0x15809e).convertSRGBToLinear() },
+          uNevoa: { value: new THREE.Color(0x9fc0d6).convertSRGBToLinear() },
+        },
+        vertexShader: `
+          uniform float uTempo;
+          varying vec3 vPos; varying vec3 vNrm; varying float vCrista;
+          void gerstner(vec2 d, float k, float a, float q, float w, inout vec3 p, inout vec3 n, inout float cr) {
+            float ph = k * dot(d, p.xz) - w * uTempo;
+            float s = sin(ph), c = cos(ph);
+            p.x += q * a * d.x * c; p.z += q * a * d.y * c; p.y += a * s;
+            n.x -= d.x * k * a * c; n.z -= d.y * k * a * c; n.y -= q * k * a * s;
+            cr += a * s * (0.5 + q);
+          }
+          void main() {
+            vec3 p = position; vec3 n = vec3(0.0, 1.0, 0.0); float cr = 0.0;
+            gerstner(normalize(vec2( 1.0,  0.25)), 0.14, 0.42, 0.55, 1.05, p, n, cr);
+            gerstner(normalize(vec2( 0.8, -0.55)), 0.24, 0.26, 0.50, 1.45, p, n, cr);
+            gerstner(normalize(vec2(-0.35, 1.0 )), 0.42, 0.14, 0.45, 1.95, p, n, cr);
+            gerstner(normalize(vec2( 0.95, 0.7 )), 0.75, 0.07, 0.40, 2.70, p, n, cr);
+            gerstner(normalize(vec2(-0.7, -0.9 )), 1.30, 0.035, 0.35, 3.60, p, n, cr);
+            vPos = p; vNrm = normalize(n); vCrista = cr;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+          }`,
+        fragmentShader: `
+          uniform float uTempo; uniform vec3 uSol, uFunda, uRasa, uNevoa;
+          varying vec3 vPos; varying vec3 vNrm; varying float vCrista;
+          // "ruído" por interferência de senos: liso, barato e sem artefato de grade
+          float marulho(vec2 p, float t) {
+            return 0.5 + 0.25 * sin(p.x * 2.3 + t * 1.1) * sin(p.y * 1.9 - t * 0.8)
+                 + 0.25 * sin(p.x * 4.7 - t * 1.7 + p.y * 3.1);
+          }
+          vec3 ceu(vec3 d) { // céu procedural refletido: horizonte -> zênite azul
+            float up = clamp(d.y, 0.0, 1.0);
+            return mix(vec3(0.52, 0.68, 0.8), vec3(0.1, 0.32, 0.62), pow(up, 0.5));
+          }
+          void main() {
+            vec3 N = normalize(vNrm);
+            vec3 V = normalize(cameraPosition - vPos);
+            // cor da água pela altura da onda (vale escuro, crista viva)
+            vec3 agua = mix(uFunda, uRasa, clamp(vCrista * 0.7 + 0.3, 0.0, 1.0));
+            // Fresnel: só a RASANTE espelha o céu (a água continua sendo água)
+            float fres = pow(1.0 - max(dot(N, V), 0.0), 4.0);
+            vec3 R = reflect(-V, N);
+            vec3 cor = mix(agua, ceu(R), clamp(fres, 0.0, 0.55));
+            // glint do sol (spec estreito + brilho largo)
+            float sr = max(dot(R, uSol), 0.0);
+            cor += vec3(1.0, 0.93, 0.75) * (pow(sr, 380.0) * 3.0 + pow(sr, 32.0) * 0.10);
+            // WHITECAPS: crista ALTA com quebra SUAVE (nada de threshold duro — vira listra)
+            float esp = smoothstep(0.8, 1.15, vCrista) * (0.45 + 0.55 * marulho(vPos.xz * 0.7, uTempo));
+            // espuma do CASCO: halo curto e discreto respirando junto do navio
+            vec2 dRect = abs(vPos.xz) - vec2(6.1, 4.45);
+            float dCasco = length(max(dRect, 0.0));
+            float anel = smoothstep(0.85, 0.0, dCasco) * (0.55 + 0.25 * sin(dCasco * 5.0 - uTempo * 2.2));
+            esp = clamp(esp + anel * (0.35 + 0.3 * marulho(vPos.xz * 1.2, uTempo * 1.3)), 0.0, 1.0);
+            cor = mix(cor, vec3(0.9, 0.96, 1.0), esp * 0.55);
+            // perspectiva aérea: longe some na névoa do horizonte
+            float dist = length(cameraPosition - vPos);
+            cor = mix(cor, uNevoa, smoothstep(40.0, 105.0, dist));
+            gl_FragColor = vec4(cor, 1.0);
+          }`,
+      });
+      const mar = new THREE.Mesh(geoMar, matMar);
+      mar.position.y = -0.55;
+      scene.add(mar); m.meshes.push(mar);
+      m.aguaY = -0.4; // splash de quem cai no mar
+      // ---- BALANÇO DO MAR: vagalhão periódico empurra o convés inteiro ----
+      let prox = 0, fase = 'calmo', faseAte = 0, dirO = { x: 1, z: 0.25 };
+      m.reset = () => { fase = 'calmo'; prox = 0; resetCaixotes(m); };
+      m.update = (t) => {
+        matMar.uniforms.uTempo.value = t;
+        // bandeira tremulando (onda senoidal no plano)
+        const bp = bandeira.geometry.attributes.position;
+        for (let i = 0; i < bp.count; i++) {
+          const x = bandBase[i * 3];
+          bp.array[i * 3 + 2] = Math.sin(x * 4.2 - t * 6.5) * 0.09 * (x + 0.625);
+        }
+        bp.needsUpdate = true;
+        if (prox === 0) prox = t + 7 + Math.random() * 4;
+        if (fase === 'calmo' && t > prox) {
+          fase = 'aviso'; faseAte = t + 1.1;
+          avisoMoedas('🌊 VAGALHÃO À VISTA!'); som.selecionar?.();
+        } else if (fase === 'aviso' && t > faseAte) {
+          fase = 'onda'; faseAte = t + 1.2; trauma = Math.min(1, trauma + 0.3);
+        } else if (fase === 'onda' && t > faseAte) {
+          fase = 'calmo'; prox = t + 8 + Math.random() * 5;
+          const a = Math.random() * Math.PI * 2; dirO = { x: Math.cos(a), z: Math.sin(a) };
+        }
+        if (fase === 'onda') {
+          const dt = 1 / 60, forca = 30;
+          for (const l of lutadores) {
+            if (!l.vivo) continue;
+            l.rag.parts.pelvis.applyImpulse({ x: dirO.x * forca * dt, y: 3 * dt, z: dirO.z * forca * dt }, true);
+            l.rag.parts.torso.applyImpulse({ x: dirO.x * forca * 0.5 * dt, y: 0, z: dirO.z * forca * 0.5 * dt }, true);
+          }
+          for (const [cb] of m._caixotes) cb.applyImpulse({ x: dirO.x * 8 * dt, y: 0, z: dirO.z * 8 * dt }, true);
+        }
+      };
+    },
+  },
 ];
 
 let mapaIdx = 0;
