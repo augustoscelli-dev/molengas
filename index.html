@@ -367,6 +367,11 @@
   /* no menu, o HUD da luta (placar/controles/mapa/toque) fica escondido */
   body.menu #placar, body.menu #controles, body.menu #mapa,
   body.menu #touch, body.menu #touch-esq, body.menu #touch-dir, body.menu #touch-gritos { display: none !important; }
+  /* Letterbox de cinema durante o replay da melhor jogada */
+  body::before, body::after { content: ''; position: fixed; left: 0; right: 0; height: 0;
+    background: #000; z-index: 40; pointer-events: none; transition: height .55s ease; }
+  body::before { top: 0; } body::after { bottom: 0; }
+  body.cine::before, body.cine::after { height: 7vh; }
 </style>
 </head>
 <body>

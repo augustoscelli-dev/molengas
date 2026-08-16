@@ -14,6 +14,7 @@ import { RenderPass } from '../libs/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from '../libs/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from '../libs/jsm/postprocessing/OutputPass.js';
 import { SMAAPass } from '../libs/jsm/postprocessing/SMAAPass.js';
+import { ShaderPass } from '../libs/jsm/postprocessing/ShaderPass.js';
 import { RoomEnvironment } from '../libs/jsm/environments/RoomEnvironment.js';
 
 await RAPIER.init();
@@ -157,7 +158,7 @@ if (PARAMS.has('env')) {
 // ?nobloom desliga (fallback). Composer renderiza a cena, aplica bloom e faz a
 // saída (tonemap ACES + sRGB) no OutputPass.
 const USA_BLOOM = !PARAMS.has('nobloom');
-let composer = null, bloomPass = null, smaaPass = null;
+let composer = null, bloomPass = null, smaaPass = null, gradePass = null;
 if (USA_BLOOM) {
   composer = new EffectComposer(r3);
   composer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -166,6 +167,27 @@ if (USA_BLOOM) {
   bloomPass = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.5, 0.4, 0.9); // força, raio, limiar
   composer.addPass(bloomPass);
   composer.addPass(new OutputPass());
+  // Grade de cor "pôster" DEPOIS do tone map (display-referred): saturação,
+  // um S de contraste, calor sutil e vignette. ?nogrande desliga só o grade.
+  if (!PARAMS.has('nogrande')) {
+    gradePass = new ShaderPass({
+      uniforms: { tDiffuse: { value: null }, forca: { value: 1 } },
+      vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragmentShader: `
+        uniform sampler2D tDiffuse; uniform float forca; varying vec2 vUv;
+        void main() {
+          vec4 c = texture2D(tDiffuse, vUv);
+          float l = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
+          c.rgb = mix(vec3(l), c.rgb, mix(1.0, 1.14, forca));            // saturação
+          c.rgb = (c.rgb - 0.5) * mix(1.0, 1.055, forca) + 0.5 + 0.006 * forca; // contraste
+          c.rgb *= mix(vec3(1.0), vec3(1.02, 1.0, 0.985), forca);        // calor sutil
+          vec2 q = vUv - 0.5;
+          c.rgb *= 1.0 - dot(q, q) * 0.40 * forca;                       // vignette
+          gl_FragColor = c;
+        }`,
+    });
+    composer.addPass(gradePass);
+  }
   smaaPass = new SMAAPass(innerWidth, innerHeight); // anti-serrilhado (bordas limpas)
   composer.addPass(smaaPass);
 }
@@ -1917,20 +1939,60 @@ const MAPAS = [
         return t;
       })();
       chaoFixo(m, 5.5, 4, new THREE.MeshStandardMaterial({ map: texGrama, roughness: 0.95 }));
-      const N = 900;
-      const geoL = new THREE.PlaneGeometry(0.055, 0.3); geoL.translate(0, 0.15, 0);
+      // 2600 lâminas AFILADAS (afunilam e inclinam pra ponta — receita da
+      // campina estilizada), vento no VERTEX SHADER (CPU não recompõe matriz
+      // nenhuma pra balançar) e gradiente raiz-escura/ponta-clara no fragment.
+      const N = 2600;
+      const geoL = (() => {
+        const pos = [], nor = [], uv = [], idx = [];
+        const SEG = 3, H = 0.34, W = 0.05;
+        for (let s = 0; s <= SEG; s++) {
+          const t = s / SEG, afila = Math.pow(1 - t, 1.3), inclina = Math.pow(t, 1.8) * 0.09;
+          for (const lado of [-1, 1]) {
+            pos.push(lado * W * (0.06 + 0.94 * afila), t * H, inclina);
+            nor.push(0, 0.25, 1); uv.push(lado < 0 ? 0 : 1, t);
+          }
+        }
+        for (let s = 0; s < SEG; s++) { const r = s * 2; idx.push(r, r + 1, r + 2, r + 1, r + 3, r + 2); }
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+        g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+        g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+        g.setIndex(idx); g.computeBoundingSphere();
+        return g;
+      })();
       const matL = new THREE.MeshStandardMaterial({ color: 0xffffff, side: THREE.DoubleSide, roughness: 0.9 });
+      matL.userData.uTempo = { value: 0 };
+      matL.onBeforeCompile = (sh) => {
+        sh.uniforms.uTempo = matL.userData.uTempo;
+        sh.vertexShader = sh.vertexShader
+          .replace('#include <common>', '#include <common>\nuniform float uTempo; varying float vAltura;')
+          .replace('#include <begin_vertex>', `#include <begin_vertex>
+            vAltura = uv.y;
+            #ifdef USE_INSTANCING
+              vec2 pRaiz = (instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xz;
+              float fase = dot(pRaiz, vec2(1.7, 2.3));
+              float dobra = sin(uTempo * 1.7 + fase) * 0.12 + sin(uTempo * 3.9 + fase * 1.7) * 0.035;
+              transformed.x += dobra * uv.y * uv.y;
+            #endif`)
+        sh.fragmentShader = sh.fragmentShader
+          .replace('#include <common>', '#include <common>\nvarying float vAltura;')
+          .replace('#include <color_fragment>', '#include <color_fragment>\n  diffuseColor.rgb *= mix(0.45, 1.28, vAltura);');
+      };
       const inst = new THREE.InstancedMesh(geoL, matL, N);
       scene.add(inst); m.meshes.push(inst);
       const laminas = [];
       const cor = new THREE.Color();
+      const M4 = new THREE.Matrix4(), Q4 = new THREE.Quaternion(), E4 = new THREE.Euler(), V4 = new THREE.Vector3(), S4 = new THREE.Vector3();
       for (let i = 0; i < N; i++) {
-        laminas.push({ x: (Math.random() * 2 - 1) * 5.2, z: (Math.random() * 2 - 1) * 3.7, f: Math.random() * 6.3, rot: Math.random() * 6.3, alt: 1 });
-        inst.setColorAt(i, cor.setHSL(0.28 + Math.random() * 0.07, 0.55, 0.3 + Math.random() * 0.14));
+        const d = { x: (Math.random() * 2 - 1) * 5.2, z: (Math.random() * 2 - 1) * 3.7, rot: Math.random() * 6.3, esc: 0.75 + Math.random() * 0.55, alt: 1, vis: 0 };
+        laminas.push(d);
+        inst.setColorAt(i, cor.setHSL(0.26 + Math.random() * 0.09, 0.55, 0.3 + Math.random() * 0.14));
       }
       if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
-      const M4 = new THREE.Matrix4(), Q4 = new THREE.Quaternion(), E4 = new THREE.Euler(), V4 = new THREE.Vector3(), S4 = new THREE.Vector3();
       m.update = (t) => {
+        matL.userData.uTempo.value = t;
+        let mudou = false;
         for (let i = 0; i < N; i++) {
           const d = laminas[i];
           let alvo = 1;
@@ -1940,12 +2002,13 @@ const MAPAS = [
             if (ax * ax + az * az < 0.32 && pp.y < 1.3) { alvo = 0.16; break; }
           }
           d.alt += (alvo - d.alt) * (alvo < d.alt ? 0.5 : 0.018); // amassa rápido, levanta devagar
-          E4.set(Math.sin(t * 1.7 + d.f) * 0.17 * d.alt, d.rot, 0);
-          Q4.setFromEuler(E4);
-          M4.compose(V4.set(d.x, 0, d.z), Q4, S4.set(1, Math.max(0.12, d.alt), 1));
+          if (Math.abs(d.alt - d.vis) < 0.01) continue; // parada: matriz fica como está
+          d.vis = d.alt; mudou = true;
+          E4.set(0, d.rot, 0); Q4.setFromEuler(E4);
+          M4.compose(V4.set(d.x, 0, d.z), Q4, S4.set(d.esc, Math.max(0.12, d.alt) * d.esc, d.esc));
           inst.setMatrixAt(i, M4);
         }
-        inst.instanceMatrix.needsUpdate = true;
+        if (mudou) inst.instanceMatrix.needsUpdate = true;
       };
       // borboletas passeando 🦋
       const bors = [];
@@ -4711,6 +4774,7 @@ let trauma = 0;
 let hitStop = 0; // freeze-frame: congela a física por alguns ms no impacto (peso)
 let proxArmaEm = 0; // cronômetro do próximo drop de arma
 const camPos = new THREE.Vector3(0, 6, 10);
+const _v3cam = new THREE.Vector3(); // rascunho da câmera de replay
 
 function frame(t) {
   requestAnimationFrame(frame);
@@ -5149,12 +5213,33 @@ function frame(t) {
     camPos.set(midX * 0.6, 1.9, 3.6);
     camera.position.copy(camPos);
     camera.lookAt(midX * 0.6, 1.05, 0);
+  } else if (!online && (state === 'replay' || state === 'melhor')) {
+    // CÂMERA DIRIGIDA no replay: órbita lenta na altura do ombro + dolly-in,
+    // lente mais fechada (fov abaixo) e letterbox — cara de cinema.
+    const ct = replayT;
+    const ang = -0.85 + ct * 0.22;
+    const raio = Math.max(3.4, 5.6 - ct * 0.45) + spread * 0.3;
+    camPos.lerp(_v3cam.set(
+      midX * 0.6 + Math.sin(ang) * raio,
+      1.5 + ct * 0.14 + spread * 0.08,
+      midZ * 0.3 + Math.cos(ang) * raio,
+    ), 0.09);
+    camera.position.copy(camPos);
+    camera.lookAt(midX * 0.6, 0.95, midZ * 0.3);
   } else {
     const target = new THREE.Vector3(midX * 0.6, 3.9 + spread * 0.3, 6.6 + spread * 0.55);
     camPos.lerp(target, 0.05);
     camera.position.copy(camPos);
     camera.lookAt(midX * 0.6, 0.8, midZ * 0.3);
   }
+  // Lente: fecha pra 46° nas tomadas de replay, volta pra 55° no resto
+  const cine = !online && (state === 'replay' || state === 'melhor');
+  const fovAlvo = cine ? 46 : 55;
+  if (Math.abs(camera.fov - fovAlvo) > 0.05) {
+    camera.fov += (fovAlvo - camera.fov) * 0.07;
+    camera.updateProjectionMatrix();
+  }
+  document.body.classList.toggle('cine', cine);
   const shake = trauma * trauma * 0.26 * (AJUSTES.shake || 1);
   camera.position.x += Math.sin(t * 0.061) * shake;
   camera.position.y += Math.cos(t * 0.047) * shake * 0.7;
