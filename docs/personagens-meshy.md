@@ -77,3 +77,27 @@ background
 
 > O Retexture do **Jaeger** e do **Kaiju** (pra tirá-los do cinza) continua
 > sendo o passo nº 1 — prompts em `docs/retexture-meshy.md`.
+
+---
+
+## 🛶 CENÁRIO: Drakkar do ALTO MAR (não precisa de rigging!)
+
+Barco viking da arena ALTO MAR — substitui as peças procedurais; o oceano,
+a esteira e o vagalhão continuam do jogo. Exportar GLB, ~30-60k tris, estilo
+Stylized/Cartoon, convés central PLANO e LIVRE (é o ringue).
+
+**Prompt:**
+
+    Stylized cartoon viking longship, low-poly game asset. Long narrow wooden
+    hull with visible overlapping plank strakes in dark walnut brown, both bow
+    and stern sweeping upward in elegant curves, carved wooden dragon head on
+    the bow prow. Row of round painted shields (red, yellow, blue, purple)
+    with metal bosses mounted along both sides of the hull. Single tall
+    central mast with a furled dark red sail rolled on the horizontal yard,
+    rope rigging lines fanning from masthead to bow and stern. Wide flat open
+    deck with rowing benches. Chunky exaggerated cartoon proportions,
+    hand-painted style textures, clean silhouette. Empty ship, no people, no
+    weapons, no water, no base.
+
+**Negative:** realistic, photorealistic, people, crew, water, ocean, waves,
+text, flags with symbols, modern elements, blurry textures, thin fragile parts
