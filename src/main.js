@@ -4693,7 +4693,16 @@ initTouch();
 // Editor ao vivo (tecla ` abre): ajusta câmera, luz, brilho e força em tempo real
 initEditor({ camera, r3, scene, sun, hemi, rim, bloomPass });
 // Botões da tela de título (JOGAR / ONLINE / COMO JOGAR)
-$('tit-jogar')?.addEventListener('click', () => { mostrarSelecao(); som.confirmar(); });
+// Rodapé do título no celular fala de toque (não de ENTER/teclado)
+if (touchAtivo()) {
+  const rd = document.querySelector('.tit-rodape');
+  if (rd) rd.textContent = 'toque em JOGAR pra brigar já · online até 20 jogadores';
+}
+// No celular o menu completo é por teclado, então JOGAR vira luta rápida vs bot
+$('tit-jogar')?.addEventListener('click', () => {
+  if (touchAtivo()) { lutaRapidaTouch(); som.confirmar(); return; }
+  mostrarSelecao(); som.confirmar();
+});
 $('tit-online')?.addEventListener('click', () => { $('titulo').style.display = 'none'; if (!online) iniciarOnline(); });
 $('tit-ajuda')?.addEventListener('click', () => { $('ajuda').style.display = 'flex'; som.selecionar(); });
 $('ajuda-fechar')?.addEventListener('click', () => { $('ajuda').style.display = 'none'; });
@@ -4705,16 +4714,20 @@ addEventListener('keydown', (e) => {
   if (state !== 'titulo') return;
   if (e.code === 'Enter' || e.code === 'Space' || e.code === 'KeyF') { mostrarSelecao(); som.confirmar(); }
 });
-if (PARAMS.has('servidor')) {
-  iniciarOnline();
-} else if (touchAtivo() && !PARAMS.has('direto')) {
-  // Celular: pula o menu (que é por teclado) e já cai numa luta contra um bot.
+// Celular: JOGAR no título cai direto numa luta rápida contra um bot
+function lutaRapidaTouch() {
+  $('titulo').style.display = 'none';
   $('selecao').style.display = 'none';
+  document.body.classList.remove('menu');
   const configs = [{ ...selCfg[0], tipo: 'kb1' }, { tipo: 'cpu', skin: selCfg[1].skin }];
   montarLutadores(configs);
   mapa.reset?.(true);
   updateScore();
+  som.musica(MAPAS[mapaIdx].trilha || 'luta');
   startIntro(1);
+}
+if (PARAMS.has('servidor')) {
+  iniciarOnline();
 } else if (PARAMS.has('direto')) {
   // dev: pula a seleção; ?bots=N adiciona N bots
   $('selecao').style.display = 'none';

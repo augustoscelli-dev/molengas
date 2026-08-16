@@ -308,8 +308,9 @@
     box-shadow: 0 0 0 3px rgba(255,217,74,.35), 0 14px 30px rgba(0,0,0,.5); }
   .sel-extras { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
   .sel-extras b { color: #ffd94a; }
-  /* no menu, o HUD da luta (placar/controles/mapa) fica escondido */
-  body.menu #placar, body.menu #controles, body.menu #mapa { display: none; }
+  /* no menu, o HUD da luta (placar/controles/mapa/toque) fica escondido */
+  body.menu #placar, body.menu #controles, body.menu #mapa,
+  body.menu #touch, body.menu #touch-esq, body.menu #touch-dir, body.menu #touch-gritos { display: none !important; }
 </style>
 </head>
 <body>
