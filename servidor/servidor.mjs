@@ -760,7 +760,9 @@ function mensagem(ws, dados) {
         // A mais votada vence quando o host começa (empate = sorteio entre elas).
         const j = jogadores.get(ws);
         if (j && (estado === 'lobby' || estado === 'fim')) {
-          j.voto = ((j.voto ?? -1) + 1) % ARENAS_ON.length;
+          // clique no card do lobby manda o índice direto (m.a); a tecla B cicla
+          j.voto = Number.isInteger(m.a) && m.a >= 0 && m.a < ARENAS_ON.length
+            ? m.a : ((j.voto ?? -1) + 1) % ARENAS_ON.length;
           ws.send(JSON.stringify({ t: 'voto', a: j.voto })); // eco: cliente mostra "seu voto"
         }
       } else if (m.t === 'times') {
@@ -819,7 +821,14 @@ function destruir() {
   console.log(`🚪 sala ${codigo} fechou (vazia)`);
 }
 console.log(`🆕 sala ${codigo} aberta (${publica ? 'pública' : 'privada, só com código'})`);
-return { codigo, publica, mensagem, tchau, destruir, _podeFechar, temVaga: () => slotsLivres().length > 0 };
+// resumo pro navegador de salas (tela de escolha estilo server browser)
+function info() {
+  return {
+    cd: codigo, na: jogadores.size, cap: capSala(), st: estado === 'lobby' ? 'no lobby' : (estado === 'fim' ? 'pós-jogo' : 'em luta'),
+    an: NOME_ARENA[arenaAtiva] || 'CLÁSSICA', mo: MODOS_SALA[salaModo].nome,
+  };
+}
+return { codigo, publica, mensagem, tchau, destruir, _podeFechar, info, temVaga: () => slotsLivres().length > 0 };
 }
 
 // ---------- HTTP (serve o jogo) + WebSocket ----------
@@ -831,6 +840,12 @@ const MIME = {
 const http = createServer(async (req, res) => {
   try {
     let caminho = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+    if (caminho === '/salas') { // navegador de salas: só as PÚBLICAS aparecem
+      const lista = [...salas.values()].filter((s) => s.publica).map((s) => s.info());
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      res.end(JSON.stringify({ salas: lista, max: MAX_SALAS, total: salas.size }));
+      return;
+    }
     if (caminho === '/') caminho = '/index.html';
     const alvo = normalize(join(RAIZ, caminho));
     if (!alvo.startsWith(normalize(RAIZ + sep))) { res.writeHead(403); res.end(); return; }

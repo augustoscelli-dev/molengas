@@ -4188,6 +4188,9 @@ function iniciarOnline() {
   online = { ws: null, slot: null, visuais: new Map(), armasVis: new Map(), powerVis: new Map(), buf: [], msgAtual: null, jaeger: false, forcarGominha: false, melhorPend: null, faseFinal: null, desconectou: false, inputTimer: null, aguardando: false, reconTimer: null, nomes: new Map(), nome: '' };
   online.marcador = new THREE.Sprite(new THREE.SpriteMaterial({ map: voceTex, transparent: true, depthWrite: false, fog: false }));
   online.marcador.scale.setScalar(0.55); online.marcador.visible = false; scene.add(online.marcador);
+  // votação clicável do lobby (os cards são re-renderizados a cada snapshot,
+  // então o clique vai por atributo onclick -> este hook global)
+  window._votarArena = (i) => { if (online?.ws?.readyState === 1) online.ws.send(JSON.stringify({ t: 'arena', a: i })); };
   pedirApelido(); // pergunta o apelido (1x, fica salvo) e só então conecta
 
   // Telinha de apelido: input + entrar. Salva em localStorage pra próxima vez.
@@ -4259,9 +4262,33 @@ function iniciarOnline() {
         <input id="sala-cod" maxlength="4" placeholder="CÓDIGO" autocomplete="off" style="width:120px;padding:12px;border-radius:14px;border:2px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:#fff;font:800 20px 'Fredoka',sans-serif;text-align:center;letter-spacing:4px;text-transform:uppercase;outline:none">
         <button id="sala-entrar" type="button" style="border:0;border-radius:999px;cursor:pointer;padding:12px 22px;font:800 16px 'Titan One','Fredoka',sans-serif;color:#fff;background:linear-gradient(180deg,#7a6cff,#5546d6);box-shadow:0 4px 0 #38309c">ENTRAR</button>
       </div>
-      <div style="font-size:13px;color:#b0a6c8;max-width:340px;text-align:center">🎲 cai numa sala pública com vaga &nbsp;·&nbsp; 🔑 cria uma sala só sua com código de 4 letras pros amigos</div>`;
+      <div style="font-size:13px;color:#b0a6c8;max-width:340px;text-align:center">🎲 cai numa sala pública com vaga &nbsp;·&nbsp; 🔑 cria uma sala só sua com código de 4 letras pros amigos</div>
+      <div id="sala-lista" style="width:min(88vw,430px);max-height:30vh;overflow:auto;display:flex;flex-direction:column;gap:6px"></div>`;
     document.body.appendChild(ov);
-    const ir = (sala) => { online.salaDesejo = sala; ov.remove(); conectarWS(); som.confirmar?.(); };
+    // Navegador de salas (estilo server browser): lista ao vivo das públicas
+    const lista = ov.querySelector('#sala-lista');
+    const linha = `display:flex;align-items:center;gap:10px;padding:9px 14px;border-radius:12px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14);font:600 14px 'Fredoka',sans-serif;color:#fff`;
+    async function listarSalas() {
+      try {
+        const r = await fetch('/salas', { cache: 'no-store' });
+        const d = await r.json();
+        if (!ov.isConnected) return;
+        const assinatura = JSON.stringify(d.salas);
+        if (assinatura === lista._assinatura) return; // nada mudou: não re-renderiza (senão o clique escapa)
+        lista._assinatura = assinatura;
+        lista.innerHTML = d.salas.length
+          ? `<div style="font-size:12px;letter-spacing:2px;color:#b0a6c8;text-align:center">SALAS ABERTAS</div>` + d.salas.map((s) =>
+            `<div style="${linha}"><b style="letter-spacing:2px">${s.cd}</b>` +
+            `<span style="opacity:.85">👥 ${s.na}/${s.cap}</span><span style="opacity:.7">${s.st}</span>` +
+            `<span style="opacity:.7;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${s.an}</span>` +
+            `<button data-sala="${s.cd}" type="button" style="border:0;border-radius:999px;cursor:pointer;padding:7px 16px;font:800 13px 'Titan One','Fredoka',sans-serif;color:#08201c;background:linear-gradient(180deg,#55e6c6,#16b79b)">ENTRAR</button></div>`).join('')
+          : `<div style="font-size:13px;color:#b0a6c8;text-align:center">nenhuma sala aberta agora — crie a primeira! 🥊</div>`;
+        for (const b of lista.querySelectorAll('[data-sala]')) b.addEventListener('click', () => ir(b.dataset.sala));
+      } catch {}
+    }
+    listarSalas();
+    const listaTimer = setInterval(() => { if (ov.isConnected) listarSalas(); else clearInterval(listaTimer); }, 2500);
+    const ir = (sala) => { online.salaDesejo = sala; ov.remove(); clearInterval(listaTimer); conectarWS(); som.confirmar?.(); };
     ov.querySelector('#sala-agora').addEventListener('click', () => ir(''));
     ov.querySelector('#sala-nova').addEventListener('click', () => ir('NOVA'));
     const cod = ov.querySelector('#sala-cod');
@@ -4333,7 +4360,7 @@ function iniciarOnline() {
         online.desconectou = true; online.tk = null;
         showMsg('SALA NÃO ENCONTRADA 😕', 'confere o código com quem criou (ou a sala já fechou) — recarrega a página');
       }
-      else if (m.t === 'voto') { avisoOnline(`🗳️ seu voto: ${ARENAS_CLI[m.a] || '?'}`); som.selecionar?.(); }
+      else if (m.t === 'voto') { online.meuVoto = m.a; avisoOnline(`🗳️ seu voto: ${ARENAS_CLI[m.a] || '?'}`); som.selecionar?.(); }
       else if (m.t === 'cheio') { online.aguardando = true; showMsg('SALA CHEIA 😔', 'esperando abrir vaga…'); }
       else if (m.t === 'nomes') online.nomes = new Map(m.ns); // apelidos por slot
       else if (m.t === 'melhor') online.melhorPend = m; // clipe da melhor jogada
@@ -4639,14 +4666,35 @@ function receberSnap(m) {
   if (touchAtivo() && $('online-acoes')) $('online-acoes').style.display = (m.st === 'lobby' || m.st === 'fim') ? 'flex' : 'none';
   if ($('compartilhar')) $('compartilhar').style.display = (m.st === 'lobby' || m.st === 'fim') ? 'flex' : 'none';
   if (m.st === 'lobby') {
-    // lista de quem tá na sala (até 8 nomes; depois "+N") + ranking da noite
+    // LOBBY estilo sala de espera: fileira de retratos de quem tá na sala
+    // (⭐ host, 📵 caído esperando reconexão) + votação de arena CLICÁVEL.
     const lista = [...online.nomes.values()];
     let quem = m.cd ? `<br>🔑 código da sala: <b style="letter-spacing:3px;font-size:1.2em">${m.cd}</b> — fala pros amigos entrarem${online.publica ? ' (sala pública)' : ''}` : '';
+    if (m.pl && m.pl.length) {
+      const hostSlot = Math.min(...m.pl.map((p) => p.s));
+      quem += `<br><span style="display:inline-flex;gap:10px;flex-wrap:wrap;justify-content:center;margin:6px 0 2px">` + m.pl.map((pl) => {
+        const nm = SKINS[pl.sk % SKINS.length];
+        const apelido = online.nomes.get(pl.s) || `J${pl.s + 1}`;
+        const off = pl.of ? 'filter:grayscale(1);opacity:.45;' : '';
+        const eu = pl.s === online.slot ? 'outline:3px solid #ffd94a;' : '';
+        return `<span style="display:inline-flex;flex-direction:column;align-items:center;gap:2px;max-width:64px">` +
+          `<img class="retrato" style="width:44px;height:44px;border-radius:10px;${off}${eu}" src="${ASSET(`assets/retratos/${nm.id}.jpg`)}" onerror="this.style.display='none'">` +
+          `<span style="font-size:11px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:64px">${pl.s === hostSlot ? '⭐' : ''}${pl.of ? '📵' : ''}${apelido}</span></span>`;
+      }).join('') + `</span>`;
+    }
     quem += lista.length ? `<br>na sala: <b>${lista.slice(0, 8).join('</b> · <b>')}</b>${lista.length > 8 ? ` +${lista.length - 8}` : ''}` : '';
     if (m.rk && m.rk.length) quem += `<br>🏆 placar da noite: ${m.rk.map(([n, v]) => `<b>${n}</b> ${v}`).join(' &nbsp;·&nbsp; ')}`;
-    // 🗳️ urna da arena ao vivo (aparece assim que alguém vota no B)
-    if (m.vt) quem += `<br>🗳️ votos de arena: ${m.vt.map((v, i) => v ? `<b>${ARENAS_CLI[i]}</b> ${v}` : '').filter(Boolean).join(' &nbsp;·&nbsp; ')}`;
-    showMsg('SALA ONLINE 🌐', `${m.mo || ''} — <b>${m.na || 0}/${m.cap || 0}</b> na sala &nbsp;·&nbsp; ${m.pt || ''} &nbsp;·&nbsp; arena: <b>${m.an || 'CLÁSSICA'}</b>${m.mr ? ' &nbsp;·&nbsp; 👑 <b>REI DO MORRO</b>' : ''}${m.tm ? ' &nbsp;·&nbsp; 🔴🔵 <b>TIMES</b> (par x ímpar)' : ''}${quem}<br><b>T</b> troca 🤖↔🦖 &nbsp;·&nbsp; <b>B</b> vota arena 🗳️ &nbsp;·&nbsp; <b>1-4</b> provocam 😂 &nbsp;·&nbsp; host: <b>F</b> começa &nbsp;·&nbsp; <b>M</b> modo &nbsp;·&nbsp; <b>N</b> pontuação &nbsp;·&nbsp; <b>H</b> 👑 &nbsp;·&nbsp; <b>Y</b> 🔴🔵`);
+    // 🗳️ votação de arena clicável (cada card mostra a contagem ao vivo)
+    quem += `<br><span style="display:inline-flex;gap:7px;flex-wrap:wrap;justify-content:center;margin-top:5px">` + ARENAS_CLI.map((nomeA, i) => {
+      const votos = (m.vt && m.vt[i]) || 0;
+      const meu = online.meuVoto === i;
+      return `<button type="button" onclick="window._votarArena(${i})" style="border:0;border-radius:999px;cursor:pointer;padding:7px 13px;font:700 12.5px 'Fredoka',sans-serif;` +
+        `color:${meu ? '#08201c' : '#fff'};background:${meu ? 'linear-gradient(180deg,#ffd94a,#ffb52e)' : 'rgba(255,255,255,.12)'};border:1px solid rgba(255,255,255,.22)">` +
+        `${nomeA}${votos ? ` · <b>${votos}</b>` : ''}</button>`;
+    }).join('') + `</span>`;
+    const lobbyHTML = `${m.mo || ''} — <b>${m.na || 0}/${m.cap || 0}</b> na sala &nbsp;·&nbsp; ${m.pt || ''} &nbsp;·&nbsp; arena: <b>${m.an || 'CLÁSSICA'}</b>${m.mr ? ' &nbsp;·&nbsp; 👑 <b>REI DO MORRO</b>' : ''}${m.tm ? ' &nbsp;·&nbsp; 🔴🔵 <b>TIMES</b> (par x ímpar)' : ''}${quem}<br><b>T</b> troca 🤖↔🦖 &nbsp;·&nbsp; <b>B</b> vota arena 🗳️ &nbsp;·&nbsp; <b>1-4</b> provocam 😂 &nbsp;·&nbsp; host: <b>F</b> começa &nbsp;·&nbsp; <b>M</b> modo &nbsp;·&nbsp; <b>N</b> pontuação &nbsp;·&nbsp; <b>H</b> 👑 &nbsp;·&nbsp; <b>Y</b> 🔴🔵`;
+    // só re-renderiza quando o conteúdo MUDA — senão o innerHTML a 15Hz engole o clique nos cards de voto
+    if (lobbyHTML !== online._lobbyHTML) { online._lobbyHTML = lobbyHTML; showMsg('SALA ONLINE 🌐', lobbyHTML); }
     online.msgAtual = '__lobby__'; online._fimMostrado = false; online._premiado = false; online.faseFinal = null; online.melhorPend = null;
   } else if (m.st === 'fim') {
     if (!online._fimMostrado) {
@@ -4661,7 +4709,7 @@ function receberSnap(m) {
       }
     }
   } else {
-    online._fimMostrado = false; online.faseFinal = null; online.melhorPend = null; // novo round/partida
+    online._fimMostrado = false; online.faseFinal = null; online.melhorPend = null; online._lobbyHTML = null; // novo round/partida
     if (m.msg !== online.msgAtual) { online.msgAtual = m.msg; showMsg(m.msg); }
   }
   for (const evn of m.ev) {

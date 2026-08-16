@@ -128,10 +128,14 @@ De tempos em tempos caem coisas na arena (mais rápido no modo **CAOS**):
    abre esse endereço no navegador do seu aparelho (PC ou celular).
 3. Ao entrar você digita seu **apelido**, **pinta seu boneco** 🎨 e escolhe a
    **sala**: 🎲 **JOGAR AGORA** (cai numa sala pública com vaga), 🔑 **CRIAR
-   SALA** (sala privada com **código de 4 letras** pros amigos) ou digita um
-   código. O lobby mostra o código, e o botão **copiar link** já leva o amigo
-   direto pra sua sala. São até **12 salas simultâneas**, cada uma com sua
-   própria física — salas vazias fecham sozinhas.
+   SALA** (sala privada com **código de 4 letras** pros amigos), digita um
+   código — ou escolhe direto na lista de **SALAS ABERTAS** (mostra jogadores,
+   estado e arena de cada sala, ao vivo). O lobby mostra o código, e o botão
+   **copiar link** já leva o amigo direto pra sua sala. São até **12 salas
+   simultâneas**, cada uma com sua própria física — vazias fecham sozinhas.
+   No lobby você vê os **retratos** de quem tá na sala (⭐ host, 📵 caiu e
+   pode voltar) e **vota na arena clicando nos cards** 🗳️ — a contagem sobe
+   ao vivo pra todo mundo.
 4. **Lobby** — **qualquer um** aperta **T** pra trocar seu lutador (🤖 robô ↔ 🦖
    monstro). O **host** (1º a entrar) escolhe e começa:
    - **F** — começa a partida
