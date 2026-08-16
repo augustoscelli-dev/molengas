@@ -2109,7 +2109,19 @@ const MAPAS = [
       // viva ao redor do casco. Horizonte some em névoa (perspectiva aérea).
       climaMapa({ ceu: 0xbfd8e8, chao: 0x1c3a4a, fog: 0xc4d6e2, fogNear: 34, fogFar: 95, sol: 0xfff2d8, solInt: 1.4, expo: 1.02 });
       // Convés de madeira (o ringue) + casco + mastro com bandeira
-      chaoFixo(m, 5.5, 4, new THREE.MeshStandardMaterial({ map: deckTex, roughness: 0.8 }));
+      // A LUTA É NO CONVÉS DO NAVIO: chão físico do tamanho do interior do
+      // drakkar; o tablado visual some quando o GLB carrega (vira o chão do barco).
+      chaoFixo(m, 5.6, 3.1, new THREE.MeshStandardMaterial({ map: deckTex, roughness: 0.8 }));
+      // AMURADAS: colisores invisíveis na altura da cintura — empurrão fraco
+      // esbarra na borda, golpe forte joga POR CIMA; as pontas ficam abertas.
+      for (const lado of [-1, 1]) {
+        const rb = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, 0.5, lado * 3.35));
+        world.createCollider(RAPIER.ColliderDesc.cuboid(5.7, 0.5, 0.18).setCollisionGroups(GROUND_GROUPS), rb);
+        m.bodies.push(rb);
+      }
+      // Todas as peças do barco PROCEDURAL vivem num grupo: quando o drakkar do
+      // Meshy (assets/modelos/drakkar.glb) carrega, o grupo some e o GLB assume.
+      const barco = new THREE.Group();
       // CASCO de rebocador de verdade: contorno extrudado — popa redonda, proa em
       // bico. O convés de luta é o meio do navio; cabine e chaminé ficam na proa
       // (fora do ringue) pra silhueta ser de BARCO sem atrapalhar a briga.
@@ -2125,9 +2137,9 @@ const MAPAS = [
       const madeira = 0x3d2b1d, madeiraClara = 0x5a4028;
       const casco = new THREE.Mesh(geoCasco, toonMat(THREE, madeira));
       casco.position.y = -2.16; casco.castShadow = true; // topo logo abaixo do assoalho: vira o passadiço
-      scene.add(casco); m.meshes.push(casco);
+      barco.add(casco);
       const friso = new THREE.Mesh(new THREE.BoxGeometry(11.6, 0.2, 8.4), toonMat(THREE, madeiraClara));
-      friso.position.y = -0.11; scene.add(friso); m.meshes.push(friso);
+      friso.position.y = -0.11; barco.add(friso);
       // proa e popa ERGUIDAS em curva — corrente de segmentos numa bézier no
       // plano z-y (a assinatura do drakkar), com botão de madeira no topo
       const ponta = (dir) => { // dir -1 = proa, +1 = popa
@@ -2144,12 +2156,12 @@ const MAPAS = [
           seg.position.set(0, (a.y + b.y) / 2, (a.z + b.z) / 2);
           seg.rotation.x = Math.atan2(b.y - a.y, b.z - a.z);
           seg.castShadow = true;
-          scene.add(seg); m.meshes.push(seg);
+          barco.add(seg);
         }
         const topo = bez(1);
         const bola = new THREE.Mesh(new THREE.SphereGeometry(0.36, 10, 10), toonMat(THREE, madeiraClara));
         bola.position.set(0, topo.y + 0.15, topo.z);
-        scene.add(bola); m.meshes.push(bola);
+        barco.add(bola);
       };
       ponta(-1); ponta(1);
       // fileira de ESCUDOS redondos acompanhando a CURVA do costado
@@ -2164,7 +2176,7 @@ const MAPAS = [
           esc.position.set(x, 0.12, z);
           const umbo = new THREE.Mesh(new THREE.SphereGeometry(0.13, 8, 8), toonMat(THREE, 0xd8d8e2));
           umbo.position.set(x + lado * 0.12, 0.12, z);
-          scene.add(esc, umbo); m.meshes.push(esc, umbo);
+          barco.add(esc, umbo);
         }
       }
       // bancos de remador na proa e na popa (quebram o vazio do convés escuro)
@@ -2172,7 +2184,7 @@ const MAPAS = [
         const w = larguraEm(zb) * 2 - 0.9;
         const banco = new THREE.Mesh(new THREE.BoxGeometry(w, 0.2, 0.6), toonMat(THREE, madeiraClara));
         banco.position.set(0, 0.18, zb); banco.castShadow = true;
-        scene.add(banco); m.meshes.push(banco);
+        barco.add(banco);
       }
       // cordame: LEQUE de estais do topo do mastro pros dois extremos (foto de drakkar)
       const corda = (z1, y1, z2, y2) => {
@@ -2180,7 +2192,7 @@ const MAPAS = [
         const c = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, L), toonMat(THREE, 0x8a7a5c));
         c.position.set(0, (y1 + y2) / 2, (z1 + z2) / 2);
         c.rotation.x = Math.atan2(y2 - y1, z2 - z1);
-        scene.add(c); m.meshes.push(c);
+        barco.add(c);
       };
       for (const z of [-9.6, -8.2, -6.6, -5.0]) corda(-3.6, 6.6, z, 0.5);
       for (const z of [1.2, 3.4, 5.6, 7.8, 9.4]) corda(-3.6, 6.6, z, 0.4);
@@ -2192,15 +2204,47 @@ const MAPAS = [
       const amarra1 = new THREE.Mesh(new THREE.TorusGeometry(0.33, 0.05, 6, 12), toonMat(THREE, 0x8a7a5c));
       amarra1.rotation.y = Math.PI / 2; amarra1.position.set(-2.2, 4.95, -3.6);
       const amarra2 = amarra1.clone(); amarra2.position.x = 2.2;
-      for (const o of [verga, velaRolo, amarra1, amarra2]) { scene.add(o); m.meshes.push(o); }
+      for (const o of [verga, velaRolo, amarra1, amarra2]) barco.add(o);
+      scene.add(barco); m.meshes.push(barco);
+      // DRAKKAR do Meshy: carrega por cima do procedural (que vira fallback).
+      // O export 'generate' vem sem material — aplica madeira toon; quando vier
+      // o export TEXTURIZADO, os materiais do arquivo são respeitados.
+      new GLTFLoader().load(ASSET('assets/modelos/drakkar.glb'), (g) => {
+        if (m._dead) return; // trocou de mapa antes de carregar
+        const navio = g.scene;
+        let temTex = false;
+        navio.traverse((o) => { if (o.isMesh && o.material && o.material.map) temTex = true; });
+        const matMadeira = new THREE.MeshStandardMaterial({ color: 0x4a3320, roughness: 0.82 });
+        navio.traverse((o) => {
+          if (!o.isMesh) return;
+          // o export do Meshy vem SEM normais — sem isto, material liso vira NaN
+          // no sombreamento e o bloom espalha o NaN pra tela inteira (tela preta)
+          if (!o.geometry.attributes.normal) o.geometry.computeVertexNormals();
+          if (!temTex) o.material = matMadeira;
+          o.castShadow = true; o.receiveShadow = true;
+        });
+        // Navio DE LADO (dragão numa ponta da tela, espiral na outra) e a LUTA
+        // NO CONVÉS DELE: escala XZ encaixa o interior no chão físico, e o Y é
+        // achatado separadamente pra amurada ficar na ALTURA DA CINTURA (medidas
+        // do histograma de vértices: convés interno -0.535, amurada -0.27).
+        const cx1 = new THREE.Box3().setFromObject(navio);
+        const tam = new THREE.Vector3(); cx1.getSize(tam);
+        const escXZ = 8.2 / tam.z;
+        const escY = 3.8; // 0.265 * 3.8 ≈ 1.0m de amurada acima do convés
+        navio.scale.set(escXZ, escY, escXZ);
+        navio.position.y = 0.535 * escY - 0.04; // convés interno vira o chão (y≈0)
+        m._deck.visible = false; if (m._base) m._base.visible = false; // o barco É o chão
+        barco.visible = false;
+        scene.add(navio); m.meshes.push(navio);
+      }, undefined, () => {}); // sem o arquivo, fica o barco procedural
       const mastro = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.16, 7.2, 10), toonMat(THREE, 0x4a3626));
-      mastro.position.set(0, 3.6, -3.6); mastro.castShadow = true; scene.add(mastro); m.meshes.push(mastro);
+      mastro.position.set(0, 3.6, -3.6); mastro.castShadow = true; barco.add(mastro);
       const bandeira = new THREE.Mesh(
         new THREE.PlaneGeometry(1.25, 0.7, 12, 1),
         new THREE.MeshStandardMaterial({ color: 0xff5252, side: THREE.DoubleSide, roughness: 0.85 }),
       );
       bandeira.rotation.y = -Math.PI * 0.3; // meio de popa (vento do avanço), meio de frente (câmera vê)
-      bandeira.position.set(0.35, 6.95, -3.2); scene.add(bandeira); m.meshes.push(bandeira);
+      bandeira.position.set(0.35, 6.95, -3.2); barco.add(bandeira);
       const bandBase = bandeira.geometry.attributes.position.array.slice();
       fazerCaixote(m, -2.8, 2.2); fazerCaixote(m, 2.8, -2.2);
       // ---- o mar ----
@@ -2228,7 +2272,7 @@ const MAPAS = [
             cr += a * s * (0.5 + q);
           }
           void main() {
-            vec2 g = position.xz + vec2(0.0, uTempo * 3.2); // correnteza do avanço
+            vec2 g = position.xz + vec2(uTempo * 3.2, 0.0); // correnteza do avanço (navio de lado: eixo X)
             vec3 p = position; vec3 n = vec3(0.0, 1.0, 0.0); float cr = 0.0;
             gerstner(normalize(vec2( 0.2,  1.0 )), 0.14, 0.42, 0.55, 1.05, g, p, n, cr);
             gerstner(normalize(vec2(-0.45, 1.0 )), 0.24, 0.26, 0.50, 1.45, g, p, n, cr);
@@ -2264,20 +2308,19 @@ const MAPAS = [
             cor += vec3(1.0, 0.93, 0.75) * (pow(sr, 380.0) * 3.0 + pow(sr, 32.0) * 0.10);
             // WHITECAPS: crista ALTA com quebra SUAVE, viajando JUNTO da água (vFlow)
             float esp = smoothstep(0.8, 1.15, vCrista) * (0.45 + 0.55 * marulho(vFlow * 0.7, uTempo));
-            // espuma do CASCO: halo respirando, mais forte na PROA que corta a água (-z)
-            vec2 dRect = abs(vPos.xz) - vec2(6.1, 4.45);
-            float dCasco = length(max(dRect, 0.0));
-            float proa = 1.0 + smoothstep(-2.5, -4.4, vPos.z) * 0.9;
+            // espuma do CASCO: halo elíptico (planta do drakkar), mais forte na PROA (-x)
+            float dEl = length(vPos.xz / vec2(8.3, 4.2)); // planta do drakkar centrado
+            float dCasco = max(dEl - 1.0, 0.0) * 6.0;
+            float proa = 1.0 + smoothstep(-6.0, -9.5, vPos.x) * 0.9;
             float anel = smoothstep(0.85, 0.0, dCasco) * (0.55 + 0.25 * sin(dCasco * 5.0 - uTempo * 2.2)) * proa;
             esp = clamp(esp + anel * (0.35 + 0.3 * marulho(vPos.xz * 1.2, uTempo * 1.3)), 0.0, 1.0);
-            // ESTEIRA em V atrás da popa (ângulo de Kelvin ~19°): riscos de espuma
-            // correndo pra trás e bordas do V mais brancas, sumindo com a distância
-            float atras = vPos.z - 4.45;
+            // ESTEIRA em V atrás da popa (+x), ângulo de Kelvin ~19°
+            float atras = vPos.x - 7.8;
             if (atras > 0.0) {
               float larg = 0.9 + atras * 0.36;
-              float dentro = smoothstep(larg, larg * 0.5, abs(vPos.x)) * smoothstep(0.0, 1.5, atras) * smoothstep(17.0, 4.0, atras);
-              float riscos = 0.5 + 0.5 * sin(vPos.x * 6.0 + atras * 1.4 - uTempo * 5.5);
-              float borda = smoothstep(0.35, 0.0, abs(abs(vPos.x) - larg * 0.82)) * smoothstep(0.0, 1.0, atras) * smoothstep(15.0, 3.0, atras);
+              float dentro = smoothstep(larg, larg * 0.5, abs(vPos.z)) * smoothstep(0.0, 1.5, atras) * smoothstep(17.0, 4.0, atras);
+              float riscos = 0.5 + 0.5 * sin(vPos.z * 6.0 + atras * 1.4 - uTempo * 5.5);
+              float borda = smoothstep(0.35, 0.0, abs(abs(vPos.z) - larg * 0.82)) * smoothstep(0.0, 1.0, atras) * smoothstep(15.0, 3.0, atras);
               esp = clamp(esp + dentro * riscos * (0.3 + 0.35 * marulho(vPos.xz * 1.1, uTempo * 1.6)) + borda * 0.45, 0.0, 1.0);
             }
             cor = mix(cor, vec3(0.9, 0.96, 1.0), esp * 0.55);
