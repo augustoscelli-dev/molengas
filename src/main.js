@@ -4095,7 +4095,8 @@ function receberSnap(m) {
       const pos = { x, y, z };
       burstEstrelas(pos);
       powFx(pos);
-      som.acerto();
+      som.acerto(1 + (evn[5] || 0) * 0.15); // dano da vítima engorda o som
+      if (evn[4] != null) som.vozDor(VOZES[evn[4] % VOZES.length]); // timbre de quem apanhou
       trauma = Math.min(1, trauma + 0.5);
     } else if (tipo === 'soco') som.soco();
     else if (tipo === 'pulo') som.pulo();
@@ -4103,7 +4104,7 @@ function receberSnap(m) {
     else if (tipo === 'dash') som.arremesso();
     else if (tipo === 'lutem') { som.lutem(); som.musica('luta'); }
     else if (tipo === 'ponto') { som.ponto(); som.torcidaOh(); }
-    else if (tipo === 'queda') som.queda();
+    else if (tipo === 'queda') { som.queda(); if (evn[1] != null) som.vozChoro(VOZES[evn[1] % VOZES.length]); }
     else if (tipo === 'vitoria') { som.vitoria(); som.musica('menu'); }
     else if (tipo === 'bolada') som.bolada();
     else if (tipo === 'power') { const pos = { x: evn[1], y: evn[2], z: evn[3] }; powFx(pos); burstEstrelas(pos); som.ponto?.(); }

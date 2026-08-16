@@ -466,7 +466,7 @@ function rounds() {
       if (j.vivo && j.rag.parts.pelvis.translation().y < -8) {
         j.vivo = false;
         j.rag.stats.quedas++;
-        ev('queda');
+        ev('queda', j.slot); // slot: chorinho com o timbre do caído
         cairam.push(j);
         refazerRivais();
       }
@@ -560,7 +560,7 @@ setInterval(() => {
     if (r.lastHitLandedAt > 0 && r.lastHitLandedAt > (r._evHit ?? -1)) {
       r._evHit = r.lastHitLandedAt;
       const hp = r.parts.head.translation();
-      ev('hit', q(hp.x), q(hp.y), q(hp.z));
+      ev('hit', q(hp.x), q(hp.y), q(hp.z), j.slot, q2(r.dano)); // slot+dano: voz e peso do som no cliente
     }
     if (r.lastJumpAt > (r._evPulo ?? -1)) { r._evPulo = r.lastJumpAt; ev('pulo'); }
     if (r.lastDashAt > (r._evDash ?? -1)) { r._evDash = r.lastDashAt; ev('dash'); }
