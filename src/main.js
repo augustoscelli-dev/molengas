@@ -2113,57 +2113,94 @@ const MAPAS = [
       // CASCO de rebocador de verdade: contorno extrudado — popa redonda, proa em
       // bico. O convés de luta é o meio do navio; cabine e chaminé ficam na proa
       // (fora do ringue) pra silhueta ser de BARCO sem atrapalhar a briga.
+      // DRAKKAR: casco longo em bico nos DOIS extremos, madeira escura
       const contorno = new THREE.Shape();
-      contorno.moveTo(-5.9, -5.4);                       // bochecha da popa (bombordo)
-      contorno.quadraticCurveTo(0, -8.6, 5.9, -5.4);     // popa arredondada
-      contorno.lineTo(5.9, 4.2);                          // costado
-      contorno.quadraticCurveTo(5.5, 7.6, 0, 10.4);      // proa em bico
-      contorno.quadraticCurveTo(-5.5, 7.6, -5.9, 4.2);
-      contorno.closePath();
+      contorno.moveTo(0, -11.0);                          // popa em bico
+      contorno.quadraticCurveTo(5.7, -6.4, 5.95, 0);      // costado
+      contorno.quadraticCurveTo(5.7, 6.4, 0, 11.0);       // proa em bico
+      contorno.quadraticCurveTo(-5.7, 6.4, -5.95, 0);
+      contorno.quadraticCurveTo(-5.7, -6.4, 0, -11.0);
       const geoCasco = new THREE.ExtrudeGeometry(contorno, { depth: 1.7, bevelEnabled: true, bevelSize: 0.35, bevelThickness: 0.3, bevelSegments: 2 });
       geoCasco.rotateX(-Math.PI / 2); // shape XY -> XZ (y do shape vira -z: proa em -z)
-      const casco = new THREE.Mesh(geoCasco, toonMat(THREE, 0x8a2f24));
-      casco.position.y = -2.16; casco.castShadow = true; // topo ~15cm abaixo do assoalho: vira o passadiço vermelho da borda
+      const madeira = 0x3d2b1d, madeiraClara = 0x5a4028;
+      const casco = new THREE.Mesh(geoCasco, toonMat(THREE, madeira));
+      casco.position.y = -2.16; casco.castShadow = true; // topo logo abaixo do assoalho: vira o passadiço
       scene.add(casco); m.meshes.push(casco);
-      const friso = new THREE.Mesh(new THREE.BoxGeometry(11.6, 0.2, 8.4), toonMat(THREE, 0xe8dcc0));
+      const friso = new THREE.Mesh(new THREE.BoxGeometry(11.6, 0.2, 8.4), toonMat(THREE, madeiraClara));
       friso.position.y = -0.11; scene.add(friso); m.meshes.push(friso);
-      // cabine branca com teto + chaminé na proa
-      const cabine = new THREE.Mesh(new THREE.BoxGeometry(3.5, 1.7, 2.7), toonMat(THREE, 0xf2ede2));
-      cabine.position.set(0, 0.75, -6.1); cabine.castShadow = true;
-      const teto = new THREE.Mesh(new THREE.BoxGeometry(3.9, 0.24, 3.1), toonMat(THREE, 0x8a2f24));
-      teto.position.set(0, 1.72, -6.1);
-      const chamine = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.52, 1.5, 14), toonMat(THREE, 0xcf4a37));
-      chamine.position.set(0, 2.5, -6.4); chamine.rotation.x = -0.12;
-      const bocaCh = new THREE.Mesh(new THREE.CylinderGeometry(0.46, 0.46, 0.24, 14), toonMat(THREE, 0x2b2b33));
-      bocaCh.position.set(0, 3.24, -6.49); bocaCh.rotation.x = -0.12;
-      const boia = new THREE.Mesh(new THREE.TorusGeometry(0.34, 0.11, 10, 20), toonMat(THREE, 0xff6b4a));
-      boia.position.set(0, 0.85, -4.7);
-      for (const o of [cabine, teto, chamine, bocaCh, boia]) { scene.add(o); m.meshes.push(o); }
-      // cordame: mastro -> proa e mastro -> popa (caixinhas fininhas inclinadas)
+      // proa e popa ERGUIDAS em curva — corrente de segmentos numa bézier no
+      // plano z-y (a assinatura do drakkar), com botão de madeira no topo
+      const ponta = (dir) => { // dir -1 = proa, +1 = popa
+        const P0 = { z: dir * 8.4, y: -0.6 }, P1 = { z: dir * 11.8, y: 0.9 }, P2 = { z: dir * 10.4, y: 3.3 };
+        const bez = (t) => ({
+          z: (1 - t) * (1 - t) * P0.z + 2 * (1 - t) * t * P1.z + t * t * P2.z,
+          y: (1 - t) * (1 - t) * P0.y + 2 * (1 - t) * t * P1.y + t * t * P2.y,
+        });
+        for (let i = 0; i < 7; i++) {
+          const a = bez(i / 7), b = bez((i + 1) / 7);
+          const L = Math.hypot(b.z - a.z, b.y - a.y) * 1.15;
+          const g = 0.62 - i * 0.05; // afina subindo
+          const seg = new THREE.Mesh(new THREE.BoxGeometry(g, 0.42, L), toonMat(THREE, madeira));
+          seg.position.set(0, (a.y + b.y) / 2, (a.z + b.z) / 2);
+          seg.rotation.x = Math.atan2(b.y - a.y, b.z - a.z);
+          seg.castShadow = true;
+          scene.add(seg); m.meshes.push(seg);
+        }
+        const topo = bez(1);
+        const bola = new THREE.Mesh(new THREE.SphereGeometry(0.36, 10, 10), toonMat(THREE, madeiraClara));
+        bola.position.set(0, topo.y + 0.15, topo.z);
+        scene.add(bola); m.meshes.push(bola);
+      };
+      ponta(-1); ponta(1);
+      // fileira de ESCUDOS redondos acompanhando a CURVA do costado
+      const coresEscudo = [0xb3372c, 0xd9a441, 0x4a6b8a, 0x8a5fb0];
+      const larguraEm = (z) => 5.95 * Math.sqrt(Math.max(0, 1 - (z / 10.6) ** 2)); // meia-boca do casco
+      for (let lado = -1; lado <= 1; lado += 2) {
+        for (let i = 0; i < 7; i++) {
+          const z = -4.8 + i * 1.6;
+          const x = lado * (larguraEm(z) - 0.1);
+          const esc = new THREE.Mesh(new THREE.CylinderGeometry(0.52, 0.52, 0.12, 16), toonMat(THREE, coresEscudo[(i + (lado > 0 ? 2 : 0)) % coresEscudo.length]));
+          esc.rotation.z = Math.PI / 2; // disco de frente pro mar
+          esc.position.set(x, 0.12, z);
+          const umbo = new THREE.Mesh(new THREE.SphereGeometry(0.13, 8, 8), toonMat(THREE, 0xd8d8e2));
+          umbo.position.set(x + lado * 0.12, 0.12, z);
+          scene.add(esc, umbo); m.meshes.push(esc, umbo);
+        }
+      }
+      // bancos de remador na proa e na popa (quebram o vazio do convés escuro)
+      for (const zb of [-5.5, -6.7, -7.9, 5.5, 6.7, 7.9]) {
+        const w = larguraEm(zb) * 2 - 0.9;
+        const banco = new THREE.Mesh(new THREE.BoxGeometry(w, 0.2, 0.6), toonMat(THREE, madeiraClara));
+        banco.position.set(0, 0.18, zb); banco.castShadow = true;
+        scene.add(banco); m.meshes.push(banco);
+      }
+      // cordame: LEQUE de estais do topo do mastro pros dois extremos (foto de drakkar)
       const corda = (z1, y1, z2, y2) => {
         const L = Math.hypot(z2 - z1, y2 - y1);
-        const c = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.035, L), toonMat(THREE, 0xd8cfb8));
+        const c = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, L), toonMat(THREE, 0x8a7a5c));
         c.position.set(0, (y1 + y2) / 2, (z1 + z2) / 2);
         c.rotation.x = Math.atan2(y2 - y1, z2 - z1);
         scene.add(c); m.meshes.push(c);
       };
-      corda(-3.6, 5.3, -9.6, 0.4);
-      corda(-3.6, 5.3, 7.6, 0.3);
-      // fumaça da chaminé escoando pra POPA (vende o navio andando)
-      const fumacas = [];
-      for (let i = 0; i < 7; i++) {
-        const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: texBolinha, color: 0xdedee6, transparent: true, opacity: 0, depthWrite: false }));
-        scene.add(s); m.meshes.push(s);
-        fumacas.push({ s, f: i / 7 });
-      }
-      const mastro = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.13, 5.4, 10), toonMat(THREE, 0x5a4632));
-      mastro.position.set(0, 2.7, -3.6); mastro.castShadow = true; scene.add(mastro); m.meshes.push(mastro);
+      for (const z of [-9.6, -8.2, -6.6, -5.0]) corda(-3.6, 6.6, z, 0.5);
+      for (const z of [1.2, 3.4, 5.6, 7.8, 9.4]) corda(-3.6, 6.6, z, 0.4);
+      // VELA VERMELHA ENROLADA na verga (como no porto: recolhida, prontinha)
+      const verga = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 7.6, 8), toonMat(THREE, madeiraClara));
+      verga.rotation.z = Math.PI / 2; verga.position.set(0, 5.3, -3.6);
+      const velaRolo = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 7.0, 10), toonMat(THREE, 0xb3372c));
+      velaRolo.rotation.z = Math.PI / 2; velaRolo.position.set(0, 4.95, -3.6);
+      const amarra1 = new THREE.Mesh(new THREE.TorusGeometry(0.33, 0.05, 6, 12), toonMat(THREE, 0x8a7a5c));
+      amarra1.rotation.y = Math.PI / 2; amarra1.position.set(-2.2, 4.95, -3.6);
+      const amarra2 = amarra1.clone(); amarra2.position.x = 2.2;
+      for (const o of [verga, velaRolo, amarra1, amarra2]) { scene.add(o); m.meshes.push(o); }
+      const mastro = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.16, 7.2, 10), toonMat(THREE, 0x4a3626));
+      mastro.position.set(0, 3.6, -3.6); mastro.castShadow = true; scene.add(mastro); m.meshes.push(mastro);
       const bandeira = new THREE.Mesh(
         new THREE.PlaneGeometry(1.25, 0.7, 12, 1),
         new THREE.MeshStandardMaterial({ color: 0xff5252, side: THREE.DoubleSide, roughness: 0.85 }),
       );
       bandeira.rotation.y = -Math.PI * 0.3; // meio de popa (vento do avanço), meio de frente (câmera vê)
-      bandeira.position.set(0.35, 5.0, -3.2); scene.add(bandeira); m.meshes.push(bandeira);
+      bandeira.position.set(0.35, 6.95, -3.2); scene.add(bandeira); m.meshes.push(bandeira);
       const bandBase = bandeira.geometry.attributes.position.array.slice();
       fazerCaixote(m, -2.8, 2.2); fazerCaixote(m, 2.8, -2.2);
       // ---- o mar ----
@@ -2266,13 +2303,6 @@ const MAPAS = [
           bp.array[i * 3 + 2] = Math.sin(x * 4.2 - t * 6.5) * 0.09 * (x + 0.625);
         }
         bp.needsUpdate = true;
-        // fumaça sobe da chaminé e escoa pra popa (vento aparente do avanço)
-        for (const f of fumacas) {
-          const k = (t * 0.45 + f.f) % 1; // ciclo de vida 0..1
-          f.s.position.set(Math.sin(t * 1.3 + f.f * 9) * 0.25 + k * 0.8, 3.35 + k * 2.3, -6.5 + k * 5.2);
-          f.s.scale.setScalar(0.35 + k * 1.6);
-          f.s.material.opacity = 0.5 * (1 - k) * Math.min(1, k * 8);
-        }
         if (prox === 0) prox = t + 7 + Math.random() * 4;
         if (fase === 'calmo' && t > prox) {
           fase = 'aviso'; faseAte = t + 1.1;
