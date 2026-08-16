@@ -9,13 +9,13 @@ let erros = [];
 const ok = (m) => console.log('  ✅ ' + m);
 const falha = (m) => { erros.push(m); console.log('  ❌ ' + m); };
 
-function mkCli(skin, tk) {
-  const c = { slot: null, last: null, cheio: false, tk: null };
+function mkCli(skin, tk, sala) {
+  const c = { slot: null, last: null, cheio: false, tk: null, cd: null, s404: false };
   c.ws = new WebSocket(URL); c.ws.binaryType = 'arraybuffer';
   c.ready = new Promise((res) => { c._res = res; });
-  c.ws.on('open', () => c.ws.send(JSON.stringify({ t: 'entrar', skin, tk: tk || undefined })));
+  c.ws.on('open', () => c.ws.send(JSON.stringify({ t: 'entrar', skin, tk: tk || undefined, sala: sala || undefined })));
   c.ws.on('message', (d) => {
-    if (Buffer.isBuffer(d) && d.length && d[0] === 0x7b) { try { const m = JSON.parse(d.toString()); if (m.t === 'oi') { c.slot = m.slot; c.tk = m.tk || null; c._res(); } else if (m.t === 'cheio') { c.cheio = true; c._res(); } } catch {} return; }
+    if (Buffer.isBuffer(d) && d.length && d[0] === 0x7b) { try { const m = JSON.parse(d.toString()); if (m.t === 'oi') { c.slot = m.slot; c.tk = m.tk || null; c.cd = m.cd || null; c._res(); } else if (m.t === 'cheio') { c.cheio = true; c._res(); } else if (m.t === 'sala404') { c.s404 = true; c._res(); } } catch {} return; }
     if (d instanceof ArrayBuffer) { try { const dv = new DataView(d); const jl = dv.getUint32(0, true); c.last = JSON.parse(new TextDecoder().decode(new Uint8Array(d, 4, jl))); } catch {} }
   });
   c.send = (o) => { if (c.ws.readyState === 1) c.ws.send(JSON.stringify(o)); };
@@ -114,6 +114,29 @@ async function main() {
     E1b.ws.close();
   }
   E2.ws.close(); E3.ws.close();
+  await sleep(500);
+
+  // ---- F) multi-salas: isolamento, código e JOGAR AGORA ----
+  console.log('F) multi-salas: privada com código, isolamento e quick play');
+  const F_pub = mkCli(0); // quick play -> sala pública
+  await Promise.race([F_pub.ready, sleep(1500)]);
+  const F_priv = mkCli(1, null, 'NOVA'); // cria sala privada
+  await Promise.race([F_priv.ready, sleep(1500)]);
+  if (F_priv.cd && F_priv.cd.length === 4 && F_priv.cd !== F_pub.cd) ok(`sala privada criada com código ${F_priv.cd} (pública: ${F_pub.cd})`);
+  else falha(`código estranho: priv=${F_priv.cd} pub=${F_pub.cd}`);
+  const F_am = mkCli(2, null, F_priv.cd); // amigo entra com o código
+  await Promise.race([F_am.ready, sleep(1500)]);
+  if (F_am.cd === F_priv.cd) ok('amigo entrou na MESMA sala pelo código'); else falha(`amigo caiu em ${F_am.cd}`);
+  await sleep(700);
+  if (F_priv.last?.na === 2 && F_pub.last?.na === 1) ok(`isolamento ok: privada com 2, pública com 1`);
+  else falha(`vazou gente entre salas (priv na=${F_priv.last?.na}, pub na=${F_pub.last?.na})`);
+  const F_qp = mkCli(3); // JOGAR AGORA de novo -> cai na pública (tem vaga), NUNCA na privada
+  await Promise.race([F_qp.ready, sleep(1500)]);
+  if (F_qp.cd === F_pub.cd) ok('JOGAR AGORA caiu na sala pública com vaga'); else falha(`quick play caiu em ${F_qp.cd}`);
+  const F_404 = mkCli(4, null, 'ZZZZ'); // código inexistente
+  await Promise.race([F_404.ready, sleep(1500)]);
+  if (F_404.s404) ok("código inexistente recebe 'sala404'"); else falha('sala404 não veio');
+  for (const c of [F_pub, F_priv, F_am, F_qp]) c.ws.close();
   await sleep(300);
   console.log('\n=== RESUMO ===');
   if (erros.length === 0) console.log('🎉 REGRESSÃO PASSOU');

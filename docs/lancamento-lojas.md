@@ -18,6 +18,23 @@ npm run dist         # gera o instalador da SUA plataforma (dist/)
 - No **Linux** gera `.AppImage`; no **macOS**, `.dmg`.
 - Cada plataforma builda no próprio sistema (padrão do electron-builder).
 
+## 🌍 Servidor público (online pela internet, sem LAN)
+
+O servidor agora é **multi-salas** (JOGAR AGORA + salas privadas com código),
+então UM servidor na nuvem atende todo mundo:
+
+1. Alugue um VPS barato (Hetzner/DigitalOcean/Contabo, ~US$ 5-8/mês, 2 vCPU).
+2. Node 20+, clone o repositório, `cd servidor && npm install`.
+3. Rode com auto-restart: `npx pm2 start servidor.mjs --name wobblers && npx pm2 save`.
+4. Libere a porta 8877 no firewall — jogadores entram por `http://SEU_IP:8877`.
+5. (Opcional, bonito) domínio + HTTPS com Caddy: `caddy reverse-proxy --from
+   wobblers.seudominio.com --to localhost:8877` (o wss:// já funciona sozinho).
+
+Cada sala roda a própria física: 2 vCPU seguram ~4-6 salas cheias; o teto
+`MAX_SALAS = 12` protege a CPU e salas vazias fecham sozinhas após 60s.
+Matchmaking por fila/região só vale a pena com massa de jogadores — o caminho
+na Steam é lobby de amigos via steamworks.js (relay da Valve, zero servidor).
+
 ## 🎮 Steam — alcançável AGORA
 
 O caminho realista e barato:

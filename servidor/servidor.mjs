@@ -19,6 +19,19 @@ await RAPIER.init();
 
 const PORTA = process.env.PORT || 8877; // nuvem (Railway/Fly/Render) injeta PORT; LAN usa 8877
 const AUTO = process.argv.includes('--auto');
+const rankingNoite = new Map(); // nome -> vitórias na sessão (o "placar da noite")
+// O placar sobrevive a restart do servidor (arquivo ao lado do servidor.mjs)
+const ARQ_PLACAR = fileURLToPath(new URL('./placar-noite.json', import.meta.url));
+try {
+  for (const [n, v] of Object.entries(JSON.parse(readFileSync(ARQ_PLACAR, 'utf8')))) rankingNoite.set(n, v);
+  if (rankingNoite.size) console.log(`placar da noite recarregado (${rankingNoite.size} nomes)`);
+} catch { /* primeira noite: sem arquivo ainda */ }
+function salvarPlacar() {
+  writeFile(ARQ_PLACAR, JSON.stringify(Object.fromEntries(rankingNoite)), () => {});
+}
+
+// ---------- SALA: uma partida/lobby isolado (multi-salas por código) ----------
+function criarSala(codigo, publica) {
 const PONTOS = [{ n: 'Melhor de 5', v: 5 }, { n: 'Melhor de 3', v: 3 }, { n: 'Morte Súbita', v: 1 }];
 let pontoIdx = 0;
 const winScore = () => PONTOS[pontoIdx].v;
@@ -389,16 +402,6 @@ function refazerRivais() {
 function host() { return [...jogadores.values()].sort((a, b) => a.slot - b.slot)[0] ?? null; }
 
 // ---------- Rounds ----------
-const rankingNoite = new Map(); // nome -> vitórias na sessão (o "placar da noite")
-// O placar sobrevive a restart do servidor (arquivo ao lado do servidor.mjs)
-const ARQ_PLACAR = fileURLToPath(new URL('./placar-noite.json', import.meta.url));
-try {
-  for (const [n, v] of Object.entries(JSON.parse(readFileSync(ARQ_PLACAR, 'utf8')))) rankingNoite.set(n, v);
-  if (rankingNoite.size) console.log(`placar da noite recarregado (${rankingNoite.size} nomes)`);
-} catch { /* primeira noite: sem arquivo ainda */ }
-function salvarPlacar() {
-  writeFile(ARQ_PLACAR, JSON.stringify(Object.fromEntries(rankingNoite)), () => {});
-}
 let estado = 'lobby'; // lobby | intro | luta | ponto | fim
 let estadoAte = 0;
 let introStep = 0;
@@ -555,7 +558,7 @@ function enviarMelhor() {
   for (const j of jogadores.values()) if (j.ws.readyState === 1) j.ws.send(pkt);
 }
 
-setInterval(() => {
+const _tick = setInterval(() => {
   now += DT;
   tick++;
   // carência de reconexão vencida (30s): agora sim remove o jogador caído
@@ -647,7 +650,7 @@ setInterval(() => {
     // Metadados (leves) em JSON; as poses dos jogadores vão em Int16 binário depois.
     const meta = {
       t: 's', st: estado, msg,
-      mo: MODOS_SALA[salaModo].nome, cap: capSala(), na: jogadores.size, pt: PONTOS[pontoIdx].n, jg: salaJaeger ? 1 : 0,
+      mo: MODOS_SALA[salaModo].nome, cap: capSala(), na: jogadores.size, pt: PONTOS[pontoIdx].n, jg: salaJaeger ? 1 : 0, cd: codigo,
       an: (estado === 'lobby' || estado === 'fim') ? ARENAS_ON[arenaIdx].nome : NOME_ARENA[arenaAtiva], as: q2(escalaEncolhe),
       mr: salaMorro ? 1 : 0, tm: salaTimes ? 1 : 0, kg: (salaMorro && estado === 'luta' && morroLider) ? morroLider : undefined,
       vt: (estado === 'lobby' || estado === 'fim') ? (() => { // 🗳️ urna da arena (só no lobby)
@@ -690,30 +693,7 @@ setInterval(() => {
   }
 }, 1000 / 60);
 
-// ---------- HTTP (serve o jogo) + WebSocket ----------
-const RAIZ = fileURLToPath(new URL('..', import.meta.url));
-const MIME = {
-  '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.mjs': 'text/javascript',
-  '.json': 'application/json', '.jpg': 'image/jpeg', '.png': 'image/png', '.svg': 'image/svg+xml',
-};
-const http = createServer(async (req, res) => {
-  try {
-    let caminho = decodeURIComponent(new URL(req.url, 'http://x').pathname);
-    if (caminho === '/') caminho = '/index.html';
-    const alvo = normalize(join(RAIZ, caminho));
-    if (!alvo.startsWith(normalize(RAIZ + sep))) { res.writeHead(403); res.end(); return; }
-    const corpo = await readFile(alvo);
-    res.writeHead(200, { 'Content-Type': MIME[extname(alvo)] ?? 'application/octet-stream' });
-    res.end(corpo);
-  } catch {
-    res.writeHead(404);
-    res.end('não achei');
-  }
-});
-const wss = new WebSocketServer({ server: http });
-
-wss.on('connection', (ws) => {
-  ws.on('message', (dados) => {
+function mensagem(ws, dados) {
     // Anti-flood: um cliente legítimo manda ~60 inputs/s; acima de 120/s o
     // excesso é simplesmente ignorado (não derruba nem pune quem tá no limite).
     const agoraMs = Date.now();
@@ -732,7 +712,7 @@ wss.on('connection', (ws) => {
             jogadores.delete(wsVelho);
             j.ws = ws; j._offAt = 0; j.input = { ...IDLE };
             jogadores.set(ws, j);
-            ws.send(JSON.stringify({ t: 'oi', slot: j.slot, tk: j.tk }));
+            ws.send(JSON.stringify({ t: 'oi', slot: j.slot, tk: j.tk, cd: codigo, pb: publica ? 1 : 0 }));
             enviarNomes();
             console.log(`↩ ${j.nome} reconectou no slot ${j.slot}`);
             return;
@@ -740,7 +720,7 @@ wss.on('connection', (ws) => {
         }
         const j = criarJogador(ws, m.skin, m.kaiju, m.nome, m.cor, m.mat);
         if (!j) { ws.send(JSON.stringify({ t: 'cheio' })); ws.close(); return; }
-        ws.send(JSON.stringify({ t: 'oi', slot: j.slot, tk: j.tk }));
+        ws.send(JSON.stringify({ t: 'oi', slot: j.slot, tk: j.tk, cd: codigo, pb: publica ? 1 : 0 }));
         enviarNomes();
         console.log(`+ ${j.nome} entrou (${jogadores.size} na sala)`);
       } else if (m.t === 'lutador') {
@@ -804,8 +784,8 @@ wss.on('connection', (ws) => {
     } catch (e) {
       console.error('erro ao tratar mensagem do cliente:', e && e.message);
     }
-  });
-  ws.on('close', () => {
+}
+function tchau(ws) {
     const j = jogadores.get(ws);
     // CARÊNCIA de reconexão: no meio da partida com 2+ ainda conectados, o boneco
     // fica 30s esperando o dono voltar (Wi-Fi piscou). No lobby/fim, ou se a sala
@@ -820,7 +800,88 @@ wss.on('connection', (ws) => {
     removerJogador(ws);
     enviarNomes();
     console.log(`- jogador saiu (${jogadores.size} na sala)`);
+}
+
+
+// ---------- Ciclo de vida da sala ----------
+let _vaziaDesde = 0;
+function _podeFechar() { // vazia há 60s? o roteador destrói
+  if (jogadores.size === 0) {
+    if (!_vaziaDesde) _vaziaDesde = Date.now();
+    return Date.now() - _vaziaDesde > 60000;
+  }
+  _vaziaDesde = 0;
+  return false;
+}
+function destruir() {
+  clearInterval(_tick);
+  try { world.free(); } catch {}
+  console.log(`🚪 sala ${codigo} fechou (vazia)`);
+}
+console.log(`🆕 sala ${codigo} aberta (${publica ? 'pública' : 'privada, só com código'})`);
+return { codigo, publica, mensagem, tchau, destruir, _podeFechar, temVaga: () => slotsLivres().length > 0 };
+}
+
+// ---------- HTTP (serve o jogo) + WebSocket ----------
+const RAIZ = fileURLToPath(new URL('..', import.meta.url));
+const MIME = {
+  '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.mjs': 'text/javascript',
+  '.json': 'application/json', '.jpg': 'image/jpeg', '.png': 'image/png', '.svg': 'image/svg+xml',
+};
+const http = createServer(async (req, res) => {
+  try {
+    let caminho = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+    if (caminho === '/') caminho = '/index.html';
+    const alvo = normalize(join(RAIZ, caminho));
+    if (!alvo.startsWith(normalize(RAIZ + sep))) { res.writeHead(403); res.end(); return; }
+    const corpo = await readFile(alvo);
+    res.writeHead(200, { 'Content-Type': MIME[extname(alvo)] ?? 'application/octet-stream' });
+    res.end(corpo);
+  } catch {
+    res.writeHead(404);
+    res.end('não achei');
+  }
+});
+const wss = new WebSocketServer({ server: http });
+
+
+// ---------- Multi-salas: roteador ----------
+// Cada sala roda física própria (CPU!) — teto de segurança e autodestruição.
+const salas = new Map(); // código -> sala
+const MAX_SALAS = 12;
+function gerarCodigo() {
+  const A = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // sem I/O/0/1 (confundem no ditado)
+  let c;
+  do { c = Array.from({ length: 4 }, () => A[Math.floor(Math.random() * A.length)]).join(''); } while (salas.has(c));
+  return c;
+}
+function obterSala(m) {
+  const desejo = typeof m.sala === 'string' ? m.sala.trim().toUpperCase() : '';
+  if (desejo === 'NOVA') { // criar sala privada pra chamar os amigos
+    if (salas.size >= MAX_SALAS) return 'cheio';
+    const s = criarSala(gerarCodigo(), false); salas.set(s.codigo, s); return s;
+  }
+  if (desejo) return salas.get(desejo) || 'sala404'; // entrar com código
+  for (const s of salas.values()) if (s.publica && s.temVaga()) return s; // JOGAR AGORA
+  if (salas.size >= MAX_SALAS) return 'cheio';
+  const s = criarSala(gerarCodigo(), true); salas.set(s.codigo, s); return s;
+}
+setInterval(() => { // salas vazias fecham e devolvem a CPU
+  for (const [cod, s] of [...salas.entries()]) if (s._podeFechar()) { s.destruir(); salas.delete(cod); }
+}, 5000);
+
+wss.on('connection', (ws) => {
+  ws.on('message', (dados) => {
+    if (ws._sala) { ws._sala.mensagem(ws, dados); return; }
+    // 1ª mensagem tem que ser 'entrar': escolhe a sala (código, NOVA ou jogar agora)
+    let m; try { m = JSON.parse(dados); } catch { return; }
+    if (!m || m.t !== 'entrar') return;
+    const sala = obterSala(m);
+    if (typeof sala === 'string') { try { ws.send(JSON.stringify({ t: sala })); } catch {} ws.close(); return; }
+    ws._sala = sala;
+    sala.mensagem(ws, dados);
   });
+  ws.on('close', () => ws._sala?.tchau(ws));
 });
 
 // Rede de segurança: um erro inesperado não deve derrubar o servidor pra todos.
@@ -834,6 +895,6 @@ http.listen(PORTA, () => {
   for (const ip of ips) console.log(`  http://${ip}:${PORTA}/?servidor=1`);
   console.log(`  (neste PC: http://localhost:${PORTA}/?servidor=1)`);
   console.log(`Modos: Normal (até 8) e LOUCURA (até 20). Host aperta M pra trocar, F pra começar.`);
-  console.log(`Modo inicial: ${MODOS_SALA[salaModo].nome}`);
+  console.log(`Multi-salas: até ${MAX_SALAS} salas (JOGAR AGORA, criar sala privada ou entrar com código).`);
   if (AUTO) console.log('modo --auto: a luta começa sozinha com 2 jogadores');
 });

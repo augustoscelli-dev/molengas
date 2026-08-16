@@ -119,14 +119,19 @@ De tempos em tempos caem coisas na arena (mais rápido no modo **CAOS**):
 
 ---
 
-## 🌐 Online (LAN — mesma rede)
+## 🌐 Online (LAN ou servidor público)
 
 1. No PC que vai hospedar, rode **`servidor-online.bat`** (na 1ª vez ele instala
-   as dependências sozinho).
+   as dependências sozinho). Pra jogar **pela internet**, rode o mesmo servidor
+   num VPS (guia em `docs/lancamento-lojas.md`).
 2. Ele mostra um endereço tipo `http://192.168.x.x:8877/?servidor=1`. Cada jogador
-   abre esse endereço no navegador do seu aparelho (PC ou celular, na mesma rede).
-3. Ao entrar você digita seu **apelido** e **pinta seu boneco** 🎨 na paleta
-   (aparece sobre o boneco, no placar, e todo mundo vê a sua cor).
+   abre esse endereço no navegador do seu aparelho (PC ou celular).
+3. Ao entrar você digita seu **apelido**, **pinta seu boneco** 🎨 e escolhe a
+   **sala**: 🎲 **JOGAR AGORA** (cai numa sala pública com vaga), 🔑 **CRIAR
+   SALA** (sala privada com **código de 4 letras** pros amigos) ou digita um
+   código. O lobby mostra o código, e o botão **copiar link** já leva o amigo
+   direto pra sua sala. São até **12 salas simultâneas**, cada uma com sua
+   própria física — salas vazias fecham sozinhas.
 4. **Lobby** — **qualquer um** aperta **T** pra trocar seu lutador (🤖 robô ↔ 🦖
    monstro). O **host** (1º a entrar) escolhe e começa:
    - **F** — começa a partida

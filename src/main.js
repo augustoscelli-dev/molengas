@@ -4192,6 +4192,8 @@ function iniciarOnline() {
 
   // Telinha de apelido: input + entrar. Salva em localStorage pra próxima vez.
   function pedirApelido() {
+    // ?sala=XXXX (link do amigo) ou ?sala=nova entram direto nessa sala
+    if (PARAMS.get('sala')) online.salaDesejo = PARAMS.get('sala').toUpperCase();
     if (PARAMS.has('nome')) { // ?nome=X pula a telinha (links diretos e testes)
       online.nome = (PARAMS.get('nome') || '').slice(0, 12);
       online.corIdx = lerCorIdx('wobblers_corOn'); // tinta salva vale mesmo pulando a telinha
@@ -4236,10 +4238,36 @@ function iniciarOnline() {
       online.nome = n;
       if (n) store.set('wobblers_nome', n);
       ov.remove();
-      conectarWS(); // conecta (e reconecta sozinho enquanto espera vaga)
+      if (online.salaDesejo) conectarWS(); // veio por link com sala: entra direto
+      else escolherSala(); // senão: JOGAR AGORA / criar sala / código
     };
     ov.querySelector('#apelido-ok').addEventListener('click', confirmar);
     inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') confirmar(); e.stopPropagation(); });
+  }
+
+  // Telinha de sala: quick play, sala privada pros amigos, ou entrar com código
+  function escolherSala() {
+    const ov = document.createElement('div');
+    ov.id = 'sala-ov';
+    ov.style.cssText = `position:fixed;inset:0;z-index:40;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:rgba(11,8,26,.88);backdrop-filter:blur(4px);font-family:'Fredoka',system-ui,sans-serif;`;
+    const btn = (grad, sombra) => `border:0;border-radius:999px;cursor:pointer;padding:14px 34px;font:800 19px 'Titan One','Fredoka',sans-serif;color:#08201c;background:${grad};box-shadow:0 5px 0 ${sombra};min-width:min(78vw,300px)`;
+    ov.innerHTML = `
+      <div style="font-family:'Titan One','Fredoka',sans-serif;font-size:clamp(24px,5.5vw,36px);color:#ffd94a;text-shadow:0 3px 0 rgba(0,0,0,.4)">JOGAR ONLINE</div>
+      <button id="sala-agora" type="button" style="${btn('linear-gradient(180deg,#55e6c6,#16b79b)', '#0c8a74')}">🎲 JOGAR AGORA</button>
+      <button id="sala-nova" type="button" style="${btn('linear-gradient(180deg,#ffd94a,#ffb52e)', '#b57a0c')}">🔑 CRIAR SALA (amigos)</button>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input id="sala-cod" maxlength="4" placeholder="CÓDIGO" autocomplete="off" style="width:120px;padding:12px;border-radius:14px;border:2px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:#fff;font:800 20px 'Fredoka',sans-serif;text-align:center;letter-spacing:4px;text-transform:uppercase;outline:none">
+        <button id="sala-entrar" type="button" style="border:0;border-radius:999px;cursor:pointer;padding:12px 22px;font:800 16px 'Titan One','Fredoka',sans-serif;color:#fff;background:linear-gradient(180deg,#7a6cff,#5546d6);box-shadow:0 4px 0 #38309c">ENTRAR</button>
+      </div>
+      <div style="font-size:13px;color:#b0a6c8;max-width:340px;text-align:center">🎲 cai numa sala pública com vaga &nbsp;·&nbsp; 🔑 cria uma sala só sua com código de 4 letras pros amigos</div>`;
+    document.body.appendChild(ov);
+    const ir = (sala) => { online.salaDesejo = sala; ov.remove(); conectarWS(); som.confirmar?.(); };
+    ov.querySelector('#sala-agora').addEventListener('click', () => ir(''));
+    ov.querySelector('#sala-nova').addEventListener('click', () => ir('NOVA'));
+    const cod = ov.querySelector('#sala-cod');
+    const entrarCod = () => { const c = cod.value.trim().toUpperCase(); if (c.length === 4) ir(c); else cod.focus(); };
+    ov.querySelector('#sala-entrar').addEventListener('click', entrarCod);
+    cod.addEventListener('keydown', (e) => { if (e.key === 'Enter') entrarCod(); e.stopPropagation(); });
   }
 
   function conectarWS() {
@@ -4252,7 +4280,8 @@ function iniciarOnline() {
   online.ws = ws; online.desconectou = false;
   ws.addEventListener('open', () => {
     const entC = PALETA[online.corIdx ?? 0]; // tinta escolhida (pode ser especial da loja)
-    ws.send(JSON.stringify({ t: 'entrar', skin: selCfg[0].skin, kaiju: selCfg[0].skin === IDX_KAIJU, nome: online.nome, cor: corDe(entC) ?? undefined, mat: (entC && entC.id) || undefined, tk: online.tk || undefined }));
+    // reconexão volta pra MESMA sala (salaCod); entrada nova usa o que foi escolhido na telinha
+    ws.send(JSON.stringify({ t: 'entrar', skin: selCfg[0].skin, kaiju: selCfg[0].skin === IDX_KAIJU, nome: online.nome, cor: corDe(entC) ?? undefined, mat: (entC && entC.id) || undefined, tk: online.tk || undefined, sala: online.salaCod || online.salaDesejo || undefined }));
     showMsg('NA SALA! 🌐', 'quando todos entrarem, o host (1º jogador) aperta F');
     online.inputTimer = setInterval(() => {
       if (ws.readyState !== 1) return;
@@ -4297,7 +4326,12 @@ function iniciarOnline() {
         const voltou = online.reconN > 0;
         online.slot = m.slot; online.aguardando = false;
         online.tk = m.tk || online.tk; online.reconN = 0;
+        online.salaCod = m.cd || online.salaCod; online.publica = !!m.pb;
         if (voltou) { avisoOnline('🔌 RECONECTOU — de volta no seu boneco!'); showMsg(''); }
+      }
+      else if (m.t === 'sala404') {
+        online.desconectou = true; online.tk = null;
+        showMsg('SALA NÃO ENCONTRADA 😕', 'confere o código com quem criou (ou a sala já fechou) — recarrega a página');
       }
       else if (m.t === 'voto') { avisoOnline(`🗳️ seu voto: ${ARENAS_CLI[m.a] || '?'}`); som.selecionar?.(); }
       else if (m.t === 'cheio') { online.aguardando = true; showMsg('SALA CHEIA 😔', 'esperando abrir vaga…'); }
@@ -4341,14 +4375,17 @@ function iniciarOnline() {
       });
     }
   }
-  // "Copiar link" pra o host chamar a galera (o link já leva direto pro online)
+  // "Copiar link" pra o host chamar a galera — inclui o código da sala, então o
+  // amigo clica e cai DIRETO na sala certa (nem telinha de escolha aparece)
   if ($('cp-btn') && $('cp-link')) {
-    const linkOnline = `${location.origin}${location.pathname}?servidor=1`;
-    $('cp-link').textContent = linkOnline.replace(/^https?:\/\//, '');
+    const linkOnline = () => `${location.origin}${location.pathname}?servidor=1${online.salaCod ? `&sala=${online.salaCod}` : ''}`;
+    const atualizarLink = () => { $('cp-link').textContent = linkOnline().replace(/^https?:\/\//, ''); };
+    atualizarLink();
+    online._linkTimer = setInterval(atualizarLink, 2000); // pega o código quando o 'oi' chegar
     $('cp-btn').addEventListener('click', async () => {
-      try { await navigator.clipboard.writeText(linkOnline); }
+      try { await navigator.clipboard.writeText(linkOnline()); }
       catch {
-        const ta = document.createElement('textarea'); ta.value = linkOnline;
+        const ta = document.createElement('textarea'); ta.value = linkOnline();
         ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta);
         ta.select(); try { document.execCommand('copy'); } catch {} ta.remove();
       }
@@ -4604,7 +4641,8 @@ function receberSnap(m) {
   if (m.st === 'lobby') {
     // lista de quem tá na sala (até 8 nomes; depois "+N") + ranking da noite
     const lista = [...online.nomes.values()];
-    let quem = lista.length ? `<br>na sala: <b>${lista.slice(0, 8).join('</b> · <b>')}</b>${lista.length > 8 ? ` +${lista.length - 8}` : ''}` : '';
+    let quem = m.cd ? `<br>🔑 código da sala: <b style="letter-spacing:3px;font-size:1.2em">${m.cd}</b> — fala pros amigos entrarem${online.publica ? ' (sala pública)' : ''}` : '';
+    quem += lista.length ? `<br>na sala: <b>${lista.slice(0, 8).join('</b> · <b>')}</b>${lista.length > 8 ? ` +${lista.length - 8}` : ''}` : '';
     if (m.rk && m.rk.length) quem += `<br>🏆 placar da noite: ${m.rk.map(([n, v]) => `<b>${n}</b> ${v}`).join(' &nbsp;·&nbsp; ')}`;
     // 🗳️ urna da arena ao vivo (aparece assim que alguém vota no B)
     if (m.vt) quem += `<br>🗳️ votos de arena: ${m.vt.map((v, i) => v ? `<b>${ARENAS_CLI[i]}</b> ${v}` : '').filter(Boolean).join(' &nbsp;·&nbsp; ')}`;
