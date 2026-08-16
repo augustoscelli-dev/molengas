@@ -1021,6 +1021,7 @@ const MAPAS = [
     nome: 'GELO',
     desc: 'escorrega que é uma beleza',
     fundoTex: FUNDOS.aurora,
+    amb: 'neve',
     build(m) {
       climaMapa({ ceu: 0xd8f0ff, chao: 0x1c3a4a, fog: 0x16283a, sol: 0xcfe8ff, solInt: 1.35, expo: 1.05 }); // frio azulado
       // Pista escorregadia: atrito quase zero + tração reduzida
@@ -1291,6 +1292,7 @@ const MAPAS = [
     nome: 'RIO',
     desc: 'luta à beira da lagoa',
     fundo: 'assets/fundo-rio.png',
+    amb: 'agua',
     build(m) {
       // Atmosfera de pôr-do-sol (casa com a pintura do fundo): luz dourada,
       // rim quente, neblina de haze que funde o morro 3D no fundo 2D.
@@ -1514,6 +1516,7 @@ const MAPAS = [
     nome: 'VENDAVAL',
     desc: 'rajadas empurram todo mundo',
     fundoTex: FUNDOS.tempestade,
+    amb: 'vento',
     build(m) {
       chaoFixo(m, 5.5, 4, new THREE.MeshStandardMaterial({ map: deckTex, roughness: 0.85 }));
       // céu de tempestade
@@ -1594,6 +1597,7 @@ const MAPAS = [
     nome: 'CHÃO QUENTE',
     desc: 'placas esquentam e caem',
     fundoTex: FUNDOS.vulcao,
+    amb: 'lava',
     build(m) {
       // Placas esquentam (ficam vermelhas) e caem — leia o aviso e sai de cima!
       hemi.color.setHex(0xffc8a0); hemi.groundColor.setHex(0x50201a); hemi.intensity = 0.95;
@@ -1833,6 +1837,7 @@ function setMapa(idx) {
   mapa.semSoco = !!MAPAS[mapaIdx].semSoco;
   if (MAPAS[mapaIdx].fundoTex) setFundoTex(MAPAS[mapaIdx].fundoTex());
   else setFundo(MAPAS[mapaIdx].fundo ?? 'assets/fundo.jpg');
+  som.ambiente(MAPAS[mapaIdx].amb || null); // camada sonora da arena (vento/lava/neve/água)
   for (const l of lutadores) {
     l.rag.props = mapa.props;
     l.rag.controle = mapa.controle ?? 1;
@@ -2606,7 +2611,15 @@ function botInput(l) {
     if (util < best) { best = util; alvo = a; dAlvo = d; }
   }
   const ap = alvo.rag.parts.pelvis.translation();
-  let dx = ap.x - me.x, dz = ap.z - me.z;
+  // Antecipação: bots melhores perseguem onde o alvo VAI estar (interceptação),
+  // não onde ele está. O ponto previsto fica preso dentro da arena — prever
+  // rumo à borda seria isca fácil pra puxar o bot pro abismo.
+  const av = alvo.rag.parts.pelvis.linvel();
+  const lead = Math.min(0.55, dAlvo * 0.14) * (1 - Math.min(0.85, nv.mira));
+  let px = ap.x + av.x * lead, pz = ap.z + av.z * lead;
+  const pR = Math.hypot(px, pz);
+  if (pR > 3.2) { px *= 3.2 / pR; pz *= 3.2 / pR; }
+  let dx = px - me.x, dz = pz - me.z;
   // Ofensiva de ring-out: se o alvo está perto da beirada, o bot busca o lado de DENTRO
   // dele (entre o alvo e o centro) pra que o soco jogue o alvo pra fora da arena.
   const apR = Math.hypot(ap.x, ap.z);

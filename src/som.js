@@ -31,6 +31,7 @@ export function initSom() {
   src.connect(lp).connect(g).connect(master);
   src.start();
   musicaAplicar(); // se a música foi pedida antes do som ligar, começa agora
+  ambienteAplicar(); // idem pro ambiente da arena
 }
 
 function getNoise() {
@@ -46,6 +47,51 @@ function pronto() {
   if (!ctx) return false;
   if (ctx.state === 'suspended') ctx.resume();
   return true;
+}
+
+// ---------- Ambiente por arena (camada de ruído contínua, retunada por mapa) ----------
+// Tipos: vento (uivo com rajadas), lava (ronco grave), neve (sussurro agudo),
+// agua (marulho lento). null desliga. Tudo com rampas suaves — nada estala.
+let amb = null;      // { src, filtro, ganho, lfo, lfoG }
+let ambTipo = null;
+const AMBIENTES = {
+  vento: { tipo: 'bandpass', freq: 620, vol: 0.10, lfoHz: 0.35, lfoProf: 0.06 },
+  lava:  { tipo: 'lowpass',  freq: 150, vol: 0.13, lfoHz: 0.18, lfoProf: 0.05 },
+  neve:  { tipo: 'highpass', freq: 2600, vol: 0.035, lfoHz: 0.1, lfoProf: 0.012 },
+  agua:  { tipo: 'lowpass',  freq: 480, vol: 0.09, lfoHz: 0.22, lfoProf: 0.05 },
+};
+function ambiente(tipo) {
+  ambTipo = AMBIENTES[tipo] ? tipo : null;
+  if (!ctx) return; // som ainda não ligou: initSom/ambienteAplicar pega depois
+  ambienteAplicar();
+}
+function ambienteAplicar() {
+  if (!ctx) return;
+  if (!amb) { // cria a cadeia 1x e deixa rodando com ganho 0
+    const src = ctx.createBufferSource();
+    src.buffer = getNoise(); src.loop = true;
+    const filtro = ctx.createBiquadFilter();
+    const ganho = ctx.createGain(); ganho.gain.value = 0;
+    const lfo = ctx.createOscillator(); lfo.frequency.value = 0.3;
+    const lfoG = ctx.createGain(); lfoG.gain.value = 0;
+    lfo.connect(lfoG).connect(ganho.gain);
+    src.connect(filtro).connect(ganho).connect(master);
+    lfo.start(); src.start();
+    amb = { src, filtro, ganho, lfo, lfoG };
+  }
+  const t = ctx.currentTime, a = AMBIENTES[ambTipo];
+  amb.ganho.gain.cancelScheduledValues(t);
+  amb.lfoG.gain.cancelScheduledValues(t);
+  if (!a) {
+    amb.ganho.gain.setTargetAtTime(0, t, 0.5);
+    amb.lfoG.gain.setTargetAtTime(0, t, 0.5);
+    return;
+  }
+  amb.filtro.type = a.tipo;
+  amb.filtro.frequency.setTargetAtTime(a.freq, t, 0.5);
+  amb.lfo.frequency.setTargetAtTime(a.lfoHz, t, 0.5);
+  amb.ganho.gain.setTargetAtTime(a.vol, t, 0.8);
+  amb.lfoG.gain.setTargetAtTime(a.lfoProf, t, 0.8);
 }
 
 // Oscilador com envelope e glissando opcional
@@ -138,6 +184,7 @@ function voz(fa, fb, dur, pitch = 1, type = 'sawtooth', vol = 0.16) {
 
 export const som = {
   musica,
+  ambiente,
   vozSoco(p = 1) { voz(150, 95, 0.14, p); },
   vozDor(p = 1) { voz(520, 240, 0.28, p, 'square', 0.12); },
   vozUe(p = 1) { voz(300, 560, 0.35, p, 'triangle', 0.18); },
