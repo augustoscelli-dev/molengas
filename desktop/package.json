@@ -30,6 +30,7 @@
           "assets/**",
           "servidor/**",
           "!servidor/placar-noite.json",
+          "!assets/modelos/jaeger.glb",
           "!**/*.md"
         ]
       }
