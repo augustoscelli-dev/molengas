@@ -2566,7 +2566,7 @@ function montarLutadores(configs) {
     });
     rag.props = mapa.props;
     rag.controle = mapa.controle ?? 1;
-    const meshes = buildVisual(SKINS[cfg.skin], i * 1.9, i);
+    const meshes = buildVisual(corSkin(SKINS[cfg.skin], PALETA[cfg.corIdx || 0]), i * 1.9, i);
     aplicarClasse(rag, meshes);
     return { rag, meshes, cfg, slot: i, vivo: true, score: 0 };
   });
@@ -3074,11 +3074,16 @@ const lerSkin = (k, padrao) => {
   const v = parseInt(store.get(k), 10);
   return MENU_SKINS.includes(v) ? v : padrao; // só aceita as fantasias jogáveis
 };
+// 🎨 Tinta do boneco: cada jogador pinta o seu. null = cor original da fantasia.
+const PALETA = [null, 0xff5252, 0xff9a3c, 0xffd94a, 0x7ed957, 0x2fbfa4, 0x66e0ff, 0x4a7dff, 0xc77dff, 0xff5a99, 0xf2f2f2, 0x30303c];
+const corSkin = (skin, cor) => (cor == null ? skin : { ...skin, cores: { ...skin.cores, torso: cor, barriga: undefined } });
+const cssCor = (c) => '#' + c.toString(16).padStart(6, '0');
+const lerCorIdx = (k) => { const v = parseInt(store.get(k), 10); return v >= 0 && v < PALETA.length ? v : 0; };
 const selCfg = [
-  { tipo: 'kb1', ativo: true, conf: false, skin: lerSkin('molengas_skin0', IDX_JAEGER) },
-  { tipo: 'kb2', ativo: true, conf: false, skin: lerSkin('molengas_skin1', IDX_KAIJU) },
-  { tipo: 'gp', gp: 2, ativo: false, conf: false, skin: IDX_JAEGER },
-  { tipo: 'gp', gp: 3, ativo: false, conf: false, skin: IDX_KAIJU },
+  { tipo: 'kb1', ativo: true, conf: false, skin: lerSkin('molengas_skin0', IDX_JAEGER), corIdx: lerCorIdx('wobblers_cor0') },
+  { tipo: 'kb2', ativo: true, conf: false, skin: lerSkin('molengas_skin1', IDX_KAIJU), corIdx: lerCorIdx('wobblers_cor1') },
+  { tipo: 'gp', gp: 2, ativo: false, conf: false, skin: IDX_JAEGER, corIdx: 0 },
+  { tipo: 'gp', gp: 3, ativo: false, conf: false, skin: IDX_KAIJU, corIdx: 0 },
 ];
 let selFase = 'skins'; // skins | mapa
 // ?skins=a,b força as fantasias (debug/screenshot)
@@ -3091,12 +3096,24 @@ function setSkinDireto(i, skinIdx) {
   selCfg[i].skin = skinIdx;
   store.set('molengas_skin' + i, skinIdx);
   som.selecionar();
-  // lutador em cena? troca ao vivo
+  // lutador em cena? troca ao vivo (com a tinta escolhida)
   const l = lutadores.find((x) => x.slot === i);
   if (l) {
     destroyVisual(l.meshes);
-    l.meshes = buildVisual(SKINS[skinIdx], i * 1.9, i);
+    l.meshes = buildVisual(corSkin(SKINS[skinIdx], PALETA[selCfg[i].corIdx || 0]), i * 1.9, i);
     l.cfg.skin = skinIdx;
+  }
+  atualizarSelecao();
+}
+// 🎨 Pinta o boneco do jogador i (cicla a paleta; o enfeite no palco troca na hora)
+function trocarCor(i, dir) {
+  selCfg[i].corIdx = ((selCfg[i].corIdx || 0) + dir + PALETA.length) % PALETA.length;
+  store.set('wobblers_cor' + i, selCfg[i].corIdx);
+  som.selecionar();
+  const l = lutadores.find((x) => x.slot === i);
+  if (l) {
+    destroyVisual(l.meshes);
+    l.meshes = buildVisual(corSkin(SKINS[selCfg[i].skin], PALETA[selCfg[i].corIdx]), i * 1.9, i);
   }
   atualizarSelecao();
 }
@@ -3123,11 +3140,15 @@ function atualizarSelecao() {
     const card = document.querySelector(`.sel-card[data-k="${k}"]`);
     if (card) card.classList.toggle('sob', selCfg.some((c) => c.ativo && c.skin === skinIdx));
   });
-  // Chips de status por jogador (quem entrou, quem já confirmou)
+  // Chips de status por jogador (quem entrou, quem já confirmou, e a tinta 🎨)
   if ($('sel-chips')) {
     $('sel-chips').innerHTML = selCfg.map((c, i) => {
       if (!c.ativo) return `<span class="sel-chip vazio">🎮 ${ROTULO_J[i]} · aperte A</span>`;
-      return `<span class="sel-chip" style="--cj:${CORES_J[i]}">${c.tipo === 'cpu' ? '🤖 BOT' : ROTULO_J[i]} · ${SKINS[c.skin].nome} ${c.conf ? '✔' : '…'}</span>`;
+      const cor = PALETA[c.corIdx || 0];
+      const bola = cor != null
+        ? `<i style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${cssCor(cor)};border:1px solid rgba(0,0,0,.4);vertical-align:-1px;margin-right:2px"></i>`
+        : '';
+      return `<span class="sel-chip" style="--cj:${CORES_J[i]}">${c.tipo === 'cpu' ? '🤖 BOT' : ROTULO_J[i]} · ${bola}${SKINS[c.skin].nome} ${c.conf ? '✔' : '…'}</span>`;
     }).join('');
   }
   $('selecao').classList.toggle('fase-mapa', selFase === 'mapa');
@@ -3136,13 +3157,22 @@ function atualizarSelecao() {
     $('sel-tit').textContent = selFase === 'mapa' ? 'ESCOLHA A ARENA'
       : selFase === 'modo' ? 'MODO DE JOGO' : 'ESCOLHA SEU LUTADOR';
   }
-  // grade de mapas: marca o selecionado e centraliza ele na fileira
+  // Carrossel coverflow: o selecionado gigante no centro, vizinhos inclinados
+  // espiando dos lados (deslocamento circular pra A/D dar a volta suave)
   const mg = $('mapa-grid');
   if (mg && selFase === 'mapa') {
+    const N = MAPAS.length;
     mg.querySelectorAll('.mapa-card').forEach((c) => {
-      const sel = parseInt(c.dataset.i, 10) === mapaIdx;
-      c.classList.toggle('sel', sel);
-      if (sel) mg.scrollTo({ left: c.offsetLeft - mg.clientWidth / 2 + c.clientWidth / 2, behavior: 'smooth' });
+      const i = parseInt(c.dataset.i, 10);
+      let off = ((i - mapaIdx) % N + N) % N;
+      if (off > N / 2) off -= N;
+      const longe = Math.abs(off) > 3;
+      c.style.opacity = longe ? '0' : String(1 - Math.abs(off) * 0.16);
+      c.style.pointerEvents = longe ? 'none' : 'auto';
+      c.style.zIndex = String(30 - Math.abs(off));
+      c.style.transform = `translate(calc(-50% + ${off * 58}%), -50%) rotateY(${-off * 16}deg) `
+        + `scale(${off === 0 ? 1 : Math.max(0.5, 0.66 - (Math.abs(off) - 1) * 0.06)})`;
+      c.classList.toggle('sel', off === 0);
     });
   }
   const og = $('modo-grid');
@@ -3376,9 +3406,13 @@ addEventListener('keydown', (e) => {
   if (selFase === 'skins') {
     if (!selCfg[0].conf && e.code === 'KeyA') trocarSkin(0, -1);
     if (!selCfg[0].conf && e.code === 'KeyD') trocarSkin(0, 1);
+    if (!selCfg[0].conf && e.code === 'KeyW') trocarCor(0, 1);   // 🎨 J1 pinta
+    if (!selCfg[0].conf && e.code === 'KeyS') trocarCor(0, -1);
     if (!selCfg[0].conf && e.code === 'KeyF') { selCfg[0].conf = true; som.confirmar(); }
     if (!selCfg[1].conf && e.code === 'ArrowLeft') trocarSkin(1, -1);
     if (!selCfg[1].conf && e.code === 'ArrowRight') trocarSkin(1, 1);
+    if (!selCfg[1].conf && e.code === 'ArrowUp') trocarCor(1, 1); // 🎨 J2 pinta
+    if (!selCfg[1].conf && e.code === 'ArrowDown') trocarCor(1, -1);
     if (!selCfg[1].conf && e.code === 'KeyK') { selCfg[1].conf = true; som.confirmar(); }
     if (e.code === 'KeyC') addBot(); // dá pra chamar o bot já na escolha
     checarFaseMapa();
@@ -3699,6 +3733,7 @@ function iniciarOnline() {
   function pedirApelido() {
     if (PARAMS.has('nome')) { // ?nome=X pula a telinha (links diretos e testes)
       online.nome = (PARAMS.get('nome') || '').slice(0, 12);
+      online.corIdx = lerCorIdx('wobblers_corOn'); // tinta salva vale mesmo pulando a telinha
       conectarWS();
       return;
     }
@@ -3709,9 +3744,28 @@ function iniciarOnline() {
     ov.innerHTML = `
       <div style="font-family:'Titan One','Fredoka',sans-serif;font-size:clamp(26px,6vw,40px);color:#ffd94a;text-shadow:0 3px 0 rgba(0,0,0,.4)">SEU APELIDO</div>
       <input id="apelido-in" maxlength="12" placeholder="ex.: Guto" autocomplete="off" style="width:min(78vw,300px);padding:13px 18px;border-radius:14px;border:2px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:#fff;font:700 20px 'Fredoka',sans-serif;text-align:center;outline:none">
+      <div style="font-size:13px;color:#b0a6c8;margin-bottom:-6px">🎨 pinte seu boneco</div>
+      <div id="apelido-cores" style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;max-width:340px"></div>
       <button id="apelido-ok" type="button" style="border:0;border-radius:999px;cursor:pointer;padding:13px 40px;font:800 18px 'Titan One','Fredoka',sans-serif;color:#08201c;background:linear-gradient(180deg,#55e6c6,#16b79b);box-shadow:0 5px 0 #0c8a74">ENTRAR NA SALA</button>
       <div style="font-size:13px;color:#b0a6c8">aparece sobre o seu boneco e no placar</div>`;
     document.body.appendChild(ov);
+    // 🎨 paleta de tintas (a 1ª bolinha é a cor original da fantasia)
+    online.corIdx = lerCorIdx('wobblers_corOn');
+    const caixa = ov.querySelector('#apelido-cores');
+    const pintarSel = () => caixa.querySelectorAll('button').forEach((b, i) => {
+      b.style.outline = i === online.corIdx ? '3px solid #fff' : 'none';
+      b.style.transform = i === online.corIdx ? 'scale(1.18)' : 'none';
+    });
+    PALETA.forEach((cor, i) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.title = cor == null ? 'cor original' : cssCor(cor);
+      b.style.cssText = `width:28px;height:28px;border-radius:50%;cursor:pointer;border:2px solid rgba(0,0,0,.45);`
+        + (cor == null ? 'background:conic-gradient(#ff5252,#ffd94a,#7ed957,#66e0ff,#c77dff,#ff5252);' : `background:${cssCor(cor)};`);
+      b.addEventListener('click', () => { online.corIdx = i; store.set('wobblers_corOn', i); pintarSel(); som.selecionar?.(); });
+      caixa.appendChild(b);
+    });
+    pintarSel();
     const inp = ov.querySelector('#apelido-in');
     inp.value = salvo; inp.focus();
     const confirmar = () => {
@@ -3734,7 +3788,7 @@ function iniciarOnline() {
   ws.binaryType = 'arraybuffer'; // snapshots vêm em binário (poses Int16)
   online.ws = ws; online.desconectou = false;
   ws.addEventListener('open', () => {
-    ws.send(JSON.stringify({ t: 'entrar', skin: selCfg[0].skin, kaiju: selCfg[0].skin === IDX_KAIJU, nome: online.nome }));
+    ws.send(JSON.stringify({ t: 'entrar', skin: selCfg[0].skin, kaiju: selCfg[0].skin === IDX_KAIJU, nome: online.nome, cor: PALETA[online.corIdx ?? 0] ?? undefined }));
     showMsg('NA SALA! 🌐', 'quando todos entrarem, o host (1º jogador) aperta F');
     online.inputTimer = setInterval(() => {
       if (ws.readyState !== 1) return;
@@ -3986,13 +4040,13 @@ function receberSnap(m) {
   }
   for (const pl of m.pl) {
     let v = online.visuais.get(pl.s);
-    if (!v || v.skin !== pl.sk) {
+    if (!v || v.skin !== pl.sk || v.cor !== pl.cr) {
       if (v) { destroyVisual(v.meshes); if (v.anelT) { scene.remove(v.anelT); v.anelT = null; } }
       // online usa .modeloHint (não .modelo): o modelo segue a fantasia escolhida
       // quando o estilo 'j' está ligado, mas o fallback de performance ainda manda.
       const base = SKINS[pl.sk % SKINS.length];
-      const skOn = { ...base, modelo: undefined, modeloHint: base.modelo };
-      v = { skin: pl.sk, meshes: buildVisual(skOn, pl.s * 1.9, pl.s) };
+      const skOn = corSkin({ ...base, modelo: undefined, modeloHint: base.modelo }, pl.cr ?? null); // 🎨 tinta do jogador
+      v = { skin: pl.sk, cor: pl.cr, meshes: buildVisual(skOn, pl.s * 1.9, pl.s) };
       online.visuais.set(pl.s, v);
     }
     garantirNomeSprite(v, pl.s); // plaquinha com o apelido sobre a cabeça
