@@ -56,10 +56,13 @@ PULO / ESQUIVA** na direita. Ao abrir, já cai numa luta rápida contra um bot.
 
 ## 🕹️ Menu (offline)
 
-0. **Tela de título:** 🎮 JOGAR · 🌐 JOGAR ONLINE · 🎓 TUTORIAL · ❓ COMO JOGAR
-   (**ENTER** pula direto pro jogo; **ESC** volta um passo em qualquer tela).
+0. **Tela de título:** 🎮 JOGAR · 🌐 JOGAR ONLINE · 🏆 TORNEIO · 🎓 TUTORIAL ·
+   ❓ COMO JOGAR (**ENTER** pula direto pro jogo; **ESC** volta um passo).
    Na primeira vez, faça o **TUTORIAL**: 5 passos jogáveis no DOJO contra um
    manequim (andar → soco → agarrão → dash → ring-out) e **+50 🪙** no final.
+   No **TORNEIO** 🏆, 4/6/8 pessoas revezam o teclado num mata-mata com árvore
+   de chaves: cada luta é 1×1 (🔴 WASD × 🔵 setas), arena sorteada, final
+   melhor de 3 — e o campeão leva +40 🪙.
 1. **Escolha o lutador** no palco 3D: J1 com **A/D**, J2 com **←/→** (ou clique no
    card). **Pinte o seu boneco** 🎨: J1 com **W/S**, J2 com **↑/↓** (12 tintas — o
    boneco no palco muda na hora). Confirme com **F** (J1) e **K** (J2). Aperte **C**
@@ -80,8 +83,11 @@ PULO / ESQUIVA** na direita. Ao abrir, já cai numa luta rápida contra um bot.
 
 ## 🛒 Loja (moedas de brincadeira)
 
-Jogando você ganha moedas: **+5** por round vencido, **+20** por partida e
-**+25** vencendo online. Na **LOJA** (botão na tela de título) dá pra comprar:
+Jogando você ganha moedas: **+5** por round vencido, **+10 a +30** por partida
+(cresce com o tamanho do modo), **+8** de consolação quando perde, **+25**
+vencendo online, **+50** no tutorial e **+40** sendo campeão do torneio
+(detalhes e simulação em `docs/economia.md`). Na **LOJA** (botão na tela de
+título) dá pra comprar:
 
 - **Tintas especiais** 🎨 — OURO, CROMADO, NEON (brilha!) e SOMBRA, com material
   de verdade (metal/brilho). Entram no ciclo de pintura e **valem online**.
@@ -137,6 +143,9 @@ De tempos em tempos caem coisas na arena (mais rápido no modo **CAOS**):
    - **1-4** — provocações 😂💀😱❤️ · **T** troca seu lutador
    - No **celular** esses viram **botões na tela**.
 5. Uma **seta "VOCÊ"** fica sobre o seu boneco pra você se achar no meio da bagunça.
+
+> **Caiu o Wi-Fi?** Relaxa: o servidor **segura seu boneco por 30s** e o jogo
+> reconecta sozinho — você volta no mesmo slot, com a mesma pontuação.
 
 > **Sala cheia?** Se você abrir o link e a sala estiver lotada (ex.: chegou
 > antes do host abrir o modo **até 20**), você fica numa **sala de espera** e

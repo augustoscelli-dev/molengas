@@ -3999,11 +3999,17 @@ function iniciarSequenciaFinal(winner) {
   finalWinner = winner;
   som.vitoria();
   som.vozYay(VOZES[winner.slot]);
-  // 🪙 partida fechada por gente de verdade: bônus da loja
+  // 🪙 partida fechada por gente de verdade: bônus da loja. O prêmio ESCALA com
+  // o tamanho do modo (5 + 5×pontos) — morte súbita paga 10, melhor de 5 paga 30 —
+  // senão farmar partida de 1 round vira a jogada esperta. Perdeu mas jogou: +8 de
+  // consolação (derrota nunca é zero). No TORNEIO só o campeão é premiado (+40).
   const humanoVenceu = MODO_TIMES
     ? lutadores.some((l) => timeDe(l) === timeDe(winner) && l.cfg.tipo !== 'cpu')
     : winner.cfg.tipo !== 'cpu';
-  if (humanoVenceu) ganharMoedas(20);
+  if (!torneio) {
+    if (humanoVenceu) ganharMoedas(5 + 5 * WIN_SCORE);
+    else if (lutadores.some((l) => l.cfg.tipo !== 'cpu')) ganharMoedas(8);
+  }
   somarCarreira(humanoVenceu); // 📊 estatísticas de carreira + conquistas 🏅
   if (melhorClip && melhorClip.frames.length > 15) {
     state = 'melhor'; replayT = 0;
@@ -4129,7 +4135,7 @@ function handleRounds(now) {
       const humanoVenceu = winner && (MODO_TIMES
         ? lutadores.some((l) => timeDe(l) === timeDe(winner) && l.cfg.tipo !== 'cpu')
         : winner.cfg.tipo !== 'cpu');
-      if (humanoVenceu) { ganharMoedas(5); carreira.rounds++; salvarCarreira(); checarConquistas(); }
+      if (humanoVenceu && !torneio) { ganharMoedas(5); carreira.rounds++; salvarCarreira(); checarConquistas(); }
       updateScore();
       som.torcidaOh();
       pendente = winner;
@@ -5505,6 +5511,7 @@ function torneioRegistrarVencedor(l) {
   torneio.atual.M.w = l.cfg._tid;
   torneio.atual = null;
   torneioResolverByes();
+  if (torneio.campeao != null) ganharMoedas(40); // 🏆 prêmio único do torneio
 }
 function torneioCancelar() {
   torneio = null;
