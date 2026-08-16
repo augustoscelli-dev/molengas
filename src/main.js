@@ -2954,7 +2954,36 @@ function puffFx(pos) {
     });
   }
 }
+// 💧 Anéis de ondulação na água (estilo água anime): expandem e somem
+const ondas = [];
+function ondaAgua(x, z, y, esc = 1, atraso = 0) {
+  const m = new THREE.Mesh(
+    new THREE.RingGeometry(0.18, 0.24, 40),
+    new THREE.MeshBasicMaterial({ color: 0xdffaff, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false }),
+  );
+  m.rotation.x = -Math.PI / 2;
+  m.position.set(x, y + 0.03, z);
+  m.visible = false;
+  scene.add(m);
+  ondas.push({ m, t: -atraso, esc });
+}
+function updateOndas(dt) {
+  for (let i = ondas.length - 1; i >= 0; i--) {
+    const o = ondas[i];
+    o.t += dt;
+    if (o.t < 0) continue; // ainda esperando a vez (anéis em sequência)
+    o.m.visible = true;
+    const k = 1 + o.t * 3.4 * o.esc;
+    o.m.scale.set(k, k, 1);
+    o.m.material.opacity = Math.max(0, 0.8 * (1 - o.t / 0.9));
+    if (o.t > 0.9) {
+      scene.remove(o.m); o.m.geometry.dispose(); o.m.material.dispose();
+      ondas.splice(i, 1);
+    }
+  }
+}
 function updateEfeitos(dt) {
+  updateOndas(dt);
   for (let i = efeitos.length - 1; i >= 0; i--) {
     const e = efeitos[i];
     e.vida -= dt;
@@ -3341,6 +3370,7 @@ function addBot() {
 }
 function mostrarSelecao() {
   if (morroVis) { scene.remove(morroVis); morroVis = null; }
+  if (telao) telao.m.visible = false;
   limparAneisTime();
   for (const l of lutadores) l._anelTime = null;
   world.gravity = { x: 0, y: -9.81, z: 0 }; // desfaz modificador de festa no menu
@@ -3412,9 +3442,48 @@ function iniciarLuta() {
   startIntro(1);
 }
 
+// 📺 Telão holográfico: placar ciano flutuando sobre a arena (offline)
+let telao = null;
+function garantirTelao() {
+  if (telao) return;
+  const cv = document.createElement('canvas'); cv.width = 512; cv.height = 160;
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+  const m = new THREE.Mesh(
+    new THREE.PlaneGeometry(4.6, 1.44),
+    new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false, fog: false }),
+  );
+  m.position.set(0, 3.7, -5.2);
+  m.rotation.x = 0.15; // levemente inclinado pra câmera (que olha de cima)
+  scene.add(m);
+  telao = { cv, tex, m };
+}
+function desenharTelao() {
+  if (!telao || !lutadores.length) return;
+  const g = telao.cv.getContext('2d');
+  g.clearRect(0, 0, 512, 160);
+  g.fillStyle = 'rgba(6,24,44,0.72)'; g.fillRect(0, 0, 512, 160); // vidro escuro (legível em céu claro)
+  g.fillStyle = 'rgba(40,220,255,0.08)'; g.fillRect(0, 0, 512, 160);
+  g.strokeStyle = 'rgba(80,230,255,0.9)'; g.lineWidth = 3; g.strokeRect(4, 4, 504, 152);
+  g.fillStyle = 'rgba(80,230,255,0.06)'; // scanlines de holograma
+  for (let y = 8; y < 160; y += 8) g.fillRect(0, y, 512, 3);
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  const n = lutadores.length, w = 512 / n;
+  lutadores.forEach((l, i) => {
+    const x = w * i + w / 2;
+    g.font = "800 46px 'Titan One','Fredoka',sans-serif";
+    g.fillStyle = '#bff3ff';
+    g.fillText(String(l.score), x, 60);
+    g.font = "700 19px 'Fredoka',sans-serif";
+    g.fillStyle = 'rgba(160,240,255,0.9)';
+    g.fillText(SKINS[l.cfg.skin].nome.slice(0, 10), x, 114);
+    if (i < n - 1) { g.strokeStyle = 'rgba(80,230,255,0.3)'; g.beginPath(); g.moveTo(w * (i + 1), 20); g.lineTo(w * (i + 1), 140); g.stroke(); }
+  });
+  telao.tex.needsUpdate = true;
+}
 function updateScore() {
   const placar = $('placar');
   if (!lutadores.length) { placar.innerHTML = ''; return; }
+  if (!online) { garantirTelao(); desenharTelao(); } // visibilidade é por frame (updateHudBarras)
   placar.innerHTML = lutadores.map((l, i) => {
     const s = SKINS[l.cfg.skin];
     return `<div class="pcard" data-i="${i}">`
@@ -3436,6 +3505,10 @@ function updateScore() {
 }
 // Atualiza as barras de nocaute (dano) e fôlego a cada frame.
 function updateHudBarras(now) {
+  if (telao) { // telão só durante a partida offline, com tremeluz de holograma
+    telao.m.visible = !online && ['luta', 'intro', 'ponto', 'replay', 'fim'].includes(state);
+    if (telao.m.visible) telao.m.material.opacity = 0.78 + Math.sin(now * 9) * 0.07;
+  }
   for (const l of lutadores) {
     if (!l._hudKO) continue;
     const ko = Math.min(1, l.rag.dano / 4);
@@ -4731,7 +4804,16 @@ function frame(t) {
         l._naAgua = true;
         puffFx({ x: py.x, y: mapa.aguaY + 0.1, z: py.z });
         puffFx({ x: py.x + 0.3, y: mapa.aguaY + 0.25, z: py.z });
+        // 💧 mergulhou: três anéis anime em sequência
+        ondaAgua(py.x, py.z, mapa.aguaY, 1.5);
+        ondaAgua(py.x, py.z, mapa.aguaY, 1.1, 0.14);
+        ondaAgua(py.x, py.z, mapa.aguaY, 0.8, 0.3);
         som.queda?.(); trauma = Math.min(1, trauma + 0.3);
+      }
+      // nadando perto da superfície: mini-ondulações periódicas
+      if (l._naAgua && py.y > mapa.aguaY - 1.6 && simNow > (l._ondaCd ?? 0)) {
+        l._ondaCd = simNow + 0.3;
+        ondaAgua(py.x, py.z, mapa.aguaY, 0.55);
       }
     }
   }
@@ -4790,8 +4872,18 @@ function frame(t) {
     }
     if (p.lastPunchStartAt > (p._sSoco ?? -1)) {
       p._sSoco = p.lastPunchStartAt;
-      if ((p._cargaGolpe || 0) > 0.5) { som.bolada(); trauma = Math.min(1, trauma + 0.35); } // SOCÃO: baque pesado
-      else som.soco();
+      if ((p._cargaGolpe || 0) > 0.5) { // SOCÃO: baque pesado + 💨 speed lines
+        som.bolada(); trauma = Math.min(1, trauma + 0.35);
+        const hp = p.parts.torso.translation();
+        const dx = Math.sin(p.heading), dz = Math.cos(p.heading);
+        for (let i = 0; i < 10; i++) {
+          const esp = (Math.random() - 0.5) * 1.6;
+          spawnFx(starTex, { x: hp.x + dx * 0.4, y: hp.y + (Math.random() - 0.5) * 0.5, z: hp.z + dz * 0.4 }, {
+            escala: 0.15, vida: 0.24, cor: 0xffffff, giro: 2,
+            vx: dx * (6 + Math.random() * 4) - dz * esp, vy: (Math.random() - 0.5), vz: dz * (6 + Math.random() * 4) + dx * esp,
+          });
+        }
+      } else som.soco();
       som.vozSoco(VOZES[l.slot]);
     }
     // 🛡️ escudo ativo: bolhas azuis orbitando o tronco; estouro azul quando bloqueia
@@ -4831,6 +4923,12 @@ function frame(t) {
       if (!lt || Math.hypot(tp.x - lt.x, tp.y - lt.y, tp.z - lt.z) > 0.16) {
         trailFx(tp, emEsq ? 0x66e0ff : 0xffe08a);
         p._trailPos = { x: tp.x, y: tp.y, z: tp.z };
+      }
+      if (emDash) { // 🔥 labaredas subindo atrás da investida
+        spawnFx(texBolinha, { x: tp.x, y: tp.y - 0.15, z: tp.z }, {
+          escala: 0.15, vida: 0.3, cor: [0xff7a2f, 0xffd94a, 0xff4020][(Math.random() * 3) | 0],
+          vx: (Math.random() - 0.5) * 1.4, vy: 1.6 + Math.random() * 1.2, vz: (Math.random() - 0.5) * 1.4,
+        });
       }
     } else if (p._trailPos) { p._trailPos = null; }
     if (p.lastGrabAt > (p._sGarra ?? -1)) {
