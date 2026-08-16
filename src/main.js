@@ -569,7 +569,7 @@ for (const d of Object.values(ARMAS_DEF)) if (d.glb) preloadArmaGLB(d);
 
 // Índice de tipo de arma no protocolo online (espelha ARMA_TIPOS do servidor)
 const ARMA_TIPOS_CLI = ['bastao', 'cano', 'martelo', 'laser', 'bomba'];
-const POWER_TIPOS_CLI = ['cura', 'vel', 'forca']; // espelha POWER_TIPOS do servidor
+const POWER_TIPOS_CLI = ['cura', 'vel', 'forca', 'escudo']; // espelha POWER_TIPOS do servidor
 // Só o mesh de uma arma (usado no online, que recebe a arma pronta do servidor)
 function armaMeshDe(tipo) {
   const def = ARMAS_DEF[tipo] || ARMAS_DEF.bastao;
@@ -1086,7 +1086,13 @@ const MAPAS = [
         RAPIER.JointData.revolute({ x: 0, y: 0.62, z: 0 }, { x: -1.95, y: 0, z: 0 }, { x: 0, y: 1, z: 0 }),
         poste, braco, true,
       );
-      if (eixo.configureMotorVelocity) eixo.configureMotorVelocity(1.15, 260);
+      if (eixo.configureMotorVelocity) eixo.configureMotorVelocity(0.7, 260);
+      // o braço ACELERA ao longo do round: começa manso, vira um liquidificador
+      let t0m = -1;
+      m.update = (t) => {
+        if (t0m < 0) t0m = t;
+        if (eixo.configureMotorVelocity) eixo.configureMotorVelocity(Math.min(2.4, 0.7 + (t - t0m) * 0.05), 260);
+      };
       m.bodies.push(poste, braco);
       m.props.push(braco);
       const posteMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.16, 1.25, 12), toonMat(THREE, 0x8a4f9e));
@@ -1108,6 +1114,7 @@ const MAPAS = [
       m.meshes.push(bracoGrupo);
       m.syncPairs.push([braco, bracoGrupo]);
       m.reset = () => {
+        t0m = -1; // velocidade volta ao manso a cada round
         braco.setTranslation({ x: 1.95, y: 0.62, z: 0 }, true);
         braco.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true);
         braco.setLinvel({ x: 0, y: 0, z: 0 }, true);
@@ -1693,6 +1700,38 @@ const MAPAS = [
         rim.intensity += (alvo.rim - rim.intensity) * k;
         r3.toneMappingExposure += (alvo.expo - r3.toneMappingExposure) * k;
       };
+    },
+  },
+  {
+    nome: 'PALANQUE',
+    desc: 'suba no centro — quem tá em cima manda',
+    build(m) {
+      climaMapa({ ceu: 0xffe8c8, chao: 0x3a2c18, fog: 0x2c2010, sol: 0xffd894, solInt: 1.5 }); // fim de tarde dourado
+      chaoFixo(m, 5.5, 4, new THREE.MeshStandardMaterial({ map: deckTex, roughness: 0.85 }));
+      // palanque central elevado + 2 rampas (a física adora um morro de verdade)
+      const matPal = new THREE.MeshStandardMaterial({ map: deckTex, roughness: 0.8, color: 0xffe2b8 });
+      const palco = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, 0.25, 0));
+      world.createCollider(RAPIER.ColliderDesc.cuboid(1.5, 0.25, 1.25).setFriction(0.85).setCollisionGroups(GROUND_GROUPS), palco);
+      m.bodies.push(palco);
+      const palcoMesh = new THREE.Mesh(new THREE.BoxGeometry(3, 0.5, 2.5), matPal);
+      palcoMesh.position.y = 0.25; palcoMesh.receiveShadow = true; palcoMesh.castShadow = true;
+      scene.add(palcoMesh); m.meshes.push(palcoMesh);
+      // rampas dos dois lados (rotação leve — o ragdoll sobe andando)
+      const ang = Math.atan2(0.5, 1.5);
+      for (const lado of [-1, 1]) {
+        const rx = lado * (1.5 + 0.72);
+        const rot = { x: 0, y: 0, z: Math.sin((-lado * ang) / 2), w: Math.cos((-lado * ang) / 2) };
+        const rampa = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(rx, 0.22, 0).setRotation(rot));
+        world.createCollider(RAPIER.ColliderDesc.cuboid(0.85, 0.06, 1.25).setFriction(0.9).setCollisionGroups(GROUND_GROUPS), rampa);
+        m.bodies.push(rampa);
+        const rampaMesh = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.12, 2.5), new THREE.MeshStandardMaterial({ map: deckTex, roughness: 0.85, color: 0xd8c098 }));
+        rampaMesh.position.set(rx, 0.22, 0);
+        rampaMesh.rotation.z = -lado * ang;
+        rampaMesh.receiveShadow = true; rampaMesh.castShadow = true;
+        scene.add(rampaMesh); m.meshes.push(rampaMesh);
+      }
+      fazerCaixote(m, 0, 3.2); fazerCaixote(m, 0, -3.2);
+      m.reset = () => resetCaixotes(m);
     },
   },
   {
@@ -2842,6 +2881,7 @@ const POWERDEF = {
   cura:  { emoji: '❤️', cor: 0xff5a6a, aplica: (rag) => { rag.dano = 0; rag.folego = 1; } },
   vel:   { emoji: '⚡', cor: 0xffe04a, aplica: (rag, now) => { rag.buffVel = 1.6; rag.buffVelAte = now + 6; } },
   forca: { emoji: '💪', cor: 0xff9a3c, aplica: (rag, now) => { rag.buffForca = 1.8; rag.buffForcaAte = now + 6; } },
+  escudo: { emoji: '🛡️', cor: 0x6ec8ff, aplica: (rag) => { rag.escudo = 1; } },
 };
 for (const k in POWERDEF) POWERDEF[k].tex = texPower(POWERDEF[k].emoji, POWERDEF[k].cor);
 const powerups = [];
@@ -3678,6 +3718,10 @@ function receberSnap(m) {
       online.visuais.set(pl.s, v);
     }
     garantirNomeSprite(v, pl.s); // plaquinha com o apelido sobre a cabeça
+    if (pl.es && Math.random() < 0.35 && v.meshes.torso) { // 🛡️ escudo: bolhas azuis
+      const tp = v.meshes.torso.position;
+      spawnFx(texBolinha, { x: tp.x, y: tp.y, z: tp.z }, { escala: 0.12, vida: 0.4, cor: 0x6ec8ff, vy: 0.5 });
+    }
   }
   for (const [s, v] of online.visuais) {
     if (!m.pl.some((p) => p.s === s)) {
@@ -3784,6 +3828,10 @@ function receberSnap(m) {
       som.bolada?.(); trauma = 1;
     } else if (tipo === 'grito') { // [_, slot, idx] — provocação: balão de emoji sobre a cabeça
       mostrarGrito(evn[1], evn[2]);
+    } else if (tipo === 'escudo') { // [_, x,y,z] — golpe bloqueado pelo escudo
+      const pos = { x: evn[1], y: evn[2], z: evn[3] };
+      for (let i = 0; i < 10; i++) { const a = (i / 10) * Math.PI * 2; spawnFx(texBolinha, pos, { escala: 0.16, vida: 0.4, cor: 0x8fd8ff, vx: Math.cos(a) * 2.4, vy: 1, vz: Math.sin(a) * 2.4 }); }
+      som.esquiva?.();
     }
   }
 }
@@ -4215,6 +4263,18 @@ function frame(t) {
       if ((p._cargaGolpe || 0) > 0.5) { som.bolada(); trauma = Math.min(1, trauma + 0.35); } // SOCÃO: baque pesado
       else som.soco();
       som.vozSoco(VOZES[l.slot]);
+    }
+    // 🛡️ escudo ativo: bolhas azuis orbitando o tronco; estouro azul quando bloqueia
+    if (p.escudo > 0 && simNow > (l._escFxAt ?? 0)) {
+      l._escFxAt = simNow + 0.14;
+      const tp = p.parts.torso.translation();
+      spawnFx(texBolinha, tp, { escala: 0.12, vida: 0.4, cor: 0x6ec8ff, dx: Math.sin(simNow * 4) * 0.3, dz: Math.cos(simNow * 4) * 0.3, vy: 0.5 });
+    }
+    if (p.lastEscudoAt > (p._sEsc ?? -1)) {
+      p._sEsc = p.lastEscudoAt;
+      const tp = p.parts.torso.translation();
+      for (let i = 0; i < 10; i++) { const a = (i / 10) * Math.PI * 2; spawnFx(texBolinha, tp, { escala: 0.16, vida: 0.4, cor: 0x8fd8ff, vx: Math.cos(a) * 2.4, vy: 1, vz: Math.sin(a) * 2.4 }); }
+      som.esquiva?.(); trauma = Math.min(1, trauma + 0.2);
     }
     // SOCÃO carregando: faíscas douradas crescendo nos punhos
     if ((p._carga || 0) > 0.15 && simNow > (l._cargaFxAt ?? 0)) {

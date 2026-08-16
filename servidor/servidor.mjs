@@ -267,11 +267,12 @@ function tickArmas() {
 }
 
 // ---------- Power-ups (pontos flutuantes; pega por proximidade) ----------
-const POWER_TIPOS = ['cura', 'vel', 'forca'];
+const POWER_TIPOS = ['cura', 'vel', 'forca', 'escudo'];
 const aplicarPower = {
   cura: (rag) => { rag.dano = 0; rag.folego = 1; },
   vel: (rag) => { rag.buffVel = 1.6; rag.buffVelAte = now + 6; },
   forca: (rag) => { rag.buffForca = 1.8; rag.buffForcaAte = now + 6; },
+  escudo: (rag) => { rag.escudo = 1; },
 };
 let powerups = [];
 let proxPowerEm = 0, proxPowerId = 1;
@@ -509,6 +510,7 @@ setInterval(() => {
     if (r.lastDashAt > (r._evDash ?? -1)) { r._evDash = r.lastDashAt; ev('dash'); }
     if (r.lastEsquivaAt > (r._evEsq ?? -1)) { r._evEsq = r.lastEsquivaAt; ev('esquiva'); }
     if (r.lastKnockdownAt > (r._evKO ?? -1)) { r._evKO = r.lastKnockdownAt; if (estado === 'luta') considerarHighlightS(j, 'ko', false); }
+    if (r.lastEscudoAt > (r._evEsc2 ?? -1)) { r._evEsc2 = r.lastEscudoAt; const tp = r.parts.torso.translation(); ev('escudo', q(tp.x), q(tp.y), q(tp.z)); }
   }
   world.step(filaEventos, hooks); // hook = filtro de contato por dono (sem auto-colisão)
   if (estado === 'luta') {
@@ -570,7 +572,7 @@ setInterval(() => {
       rk: (estado === 'lobby' || estado === 'fim') && rankingNoite.size
         ? [...rankingNoite.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5) : undefined,
       ev: eventos.splice(0),
-      pl: js.map((j) => ({ s: j.slot, sk: j.skin, v: j.vivo ? 1 : 0, at: j.rag.isStunned(now) ? 1 : 0, sc: j.score, d: Math.round(j.rag.dano * 10) / 10 })),
+      pl: js.map((j) => ({ s: j.slot, sk: j.skin, v: j.vivo ? 1 : 0, at: j.rag.isStunned(now) ? 1 : 0, sc: j.score, d: Math.round(j.rag.dano * 10) / 10, es: j.rag.escudo ? 1 : undefined })),
       pr: props.map((b) => { const tr = b.translation(), ro = b.rotation(); return [q(tr.x), q(tr.y), q(tr.z), q(ro.x), q(ro.y), q(ro.z), q(ro.w)]; }),
       wp: armas.map((a) => { const tr = a.body.translation(), ro = a.body.rotation(); return { id: a.id, ti: ARMA_TIPOS.indexOf(a.tipo), q: a.quente ? 1 : 0, p: [q(tr.x), q(tr.y), q(tr.z), q(ro.x), q(ro.y), q(ro.z), q(ro.w)] }; }),
       pu: powerups.map((p) => ({ id: p.id, ti: POWER_TIPOS.indexOf(p.tipo), p: [q(p.x), q(p.y), q(p.z)] })),

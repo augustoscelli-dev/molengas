@@ -57,7 +57,7 @@ PULO / ESQUIVA** na direita. Ao abrir, já cai numa luta rápida contra um bot.
 1. **Escolha a fantasia:** J1 com **A/D**, J2 com **←/→**. Confirme com **F** (J1)
    e **K** (J2). Aperte **C** pra adicionar um **bot 🤖**.
 2. **Tela de mapa** (depois de todos confirmarem):
-   - **A / D** — troca o **mapa** (são 16!) · **X** sorteia 🎲
+   - **A / D** — troca o **mapa** (são 17!) · **X** sorteia 🎲
    - **N** — modo (Melhor de 5 · Melhor de 3 · Morte Súbita · CAOS ⚔️ · REI DO MORRO 👑)
    - **G** — modificador de festa (LUA 🌙 · TURBO ⚡ · FORTÕES 💪)
    - **V** — **dificuldade** dos bots (Fácil · Médio · Difícil)
@@ -85,6 +85,7 @@ De tempos em tempos caem coisas na arena (mais rápido no modo **CAOS**):
 | ❤️ Cura | Zera o dano acumulado |
 | ⚡ Velocidade | Mais rápido por alguns segundos |
 | 💪 Força | Soco mais forte por alguns segundos |
+| 🛡️ Escudo | Absorve **um golpe inteiro** e some |
 
 ---
 

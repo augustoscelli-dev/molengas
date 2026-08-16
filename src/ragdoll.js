@@ -96,6 +96,7 @@ export class Ragdoll {
     this.controle = 1; // 0..1 — mapas de gelo reduzem a tração
     this.forcaSoco = 1; // multiplicador de força do soco (Kaiju bate mais forte)
     this.resistencia = 1; // aguenta mais tranco: reduz knockback e acúmulo de dano
+    this.escudo = 0; this.lastEscudoAt = -10;  // power-up escudo 🛡️: absorve o próximo golpe
     this.buffVel = 1; this.buffVelAte = 0;     // power-up de velocidade (temporário)
     this.buffForca = 1; this.buffForcaAte = 0; // power-up de força (temporário)
     this.dano = 0; // nocaute acumulativo: apanhar seguido atordoa mais
@@ -537,6 +538,12 @@ export class Ragdoll {
               const tp = tb.translation();
               const d = Math.hypot(tip[0] - tp.x, tip[1] - tp.y, tip[2] - tp.z);
               if (d < alc) {
+                if (rival.escudo > 0) { // 🛡️ o escudo come o golpe inteiro (uma vez)
+                  rival.escudo = 0;
+                  rival.lastEscudoAt = now;
+                  this.punchHit = true;
+                  break outer;
+                }
                 const strong = pname === 'head';
                 // forcaSoco = quão forte ESTE lutador bate; resistencia = quanto o RIVAL aguenta
                 const kb = (this.forcaSoco || 1) * (this.buffForca || 1) * (AJUSTES.forcaSoco || 1) / (rival.resistencia || 1);
@@ -657,6 +664,7 @@ export class Ragdoll {
   }
 
   reset() {
+    this.escudo = 0;
     this.releaseGrabs();
     for (const spec of PARTS) {
       const b = this.parts[spec.name];
