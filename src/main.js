@@ -224,6 +224,16 @@ function setFundoTex(tex) { // fundo pintado em canvas (sem depender de arquivo)
 }
 setFundo('assets/fundo.jpg');
 
+// Texturas suaves reusadas na decoração dos mapas (floco de neve / nuvem / fagulha)
+const texBolinha = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const g = c.getContext('2d');
+  const gr = g.createRadialGradient(32, 32, 2, 32, 32, 30);
+  gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+})();
+
 // ---------- Fundos pintados (procedurais, por arena) ----------
 // Cada um é lazy + memoizado: só desenha na primeira vez que a arena abre.
 function fundoCanvas(desenha) {
@@ -715,6 +725,16 @@ function explodirBomba(m, arma) {
   som.bolada?.(); trauma = 1; hitStop = Math.max(hitStop, 0.1);
   removerArma(m, arma);
 }
+// Base escura sob a arena: dá espessura/acabamento de "plataforma flutuante"
+function baseArena(m, hx, hz) {
+  const base = new THREE.Mesh(
+    new THREE.BoxGeometry(hx * 2 - 0.35, 1.5, hz * 2 - 0.35),
+    new THREE.MeshStandardMaterial({ color: 0x241d38, roughness: 0.95 }),
+  );
+  base.position.y = -1.35;
+  scene.add(base);
+  m.meshes.push(base);
+}
 function chaoFixo(m, hx, hz, mat, atrito = 0.8) {
   const g = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, -0.3, 0));
   world.createCollider(RAPIER.ColliderDesc.cuboid(hx, 0.3, hz).setFriction(atrito).setCollisionGroups(GROUND_GROUPS), g);
@@ -725,6 +745,7 @@ function chaoFixo(m, hx, hz, mat, atrito = 0.8) {
   scene.add(deck);
   m.meshes.push(deck);
   m._deck = deck; // referência pro online (variantes de arena mudam o chão)
+  baseArena(m, hx, hz);
   return g;
 }
 
@@ -830,6 +851,21 @@ const MAPAS = [
     desc: 'bola de demolição no meio',
     build(m) {
       chaoFixo(m, ARENA.halfX, ARENA.halfZ, new THREE.MeshStandardMaterial({ map: deckTex, roughness: 0.85 }));
+      // Ringue de verdade: postes nos cantos + cordas (decoração, sem física)
+      const px = ARENA.halfX - 0.2, pz = ARENA.halfZ - 0.2;
+      for (const [cx, cz] of [[-px, -pz], [px, -pz], [-px, pz], [px, pz]]) {
+        const poste = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 1.0, 10), toonMat(THREE, 0xd63b30));
+        poste.position.set(cx, 0.5, cz); poste.castShadow = true;
+        scene.add(poste); m.meshes.push(poste);
+      }
+      const matCorda = new THREE.MeshBasicMaterial({ color: 0xf5f0ff, transparent: true, opacity: 0.85 });
+      for (const h of [0.38, 0.72]) {
+        for (const [w, d, x, z] of [[px * 2, 0.04, 0, -pz], [px * 2, 0.04, 0, pz], [0.04, pz * 2, -px, 0], [0.04, pz * 2, px, 0]]) {
+          const corda = new THREE.Mesh(new THREE.BoxGeometry(w, 0.035, d), matCorda);
+          corda.position.set(x, h, z);
+          scene.add(corda); m.meshes.push(corda);
+        }
+      }
       // Bola de demolição
       const ancora = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, 6.2, 0));
       const bola = world.createRigidBody(
@@ -964,6 +1000,22 @@ const MAPAS = [
       m.controle = 0.35;
       fazerCaixote(m, -2.8, 2.2);
       fazerCaixote(m, 2.8, -2.2);
+      // neve caindo devagarinho
+      const flocos = [];
+      for (let i = 0; i < 70; i++) {
+        const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: texBolinha, transparent: true, opacity: 0.85, depthWrite: false }));
+        s.scale.setScalar(0.05 + Math.random() * 0.06);
+        s.position.set((Math.random() * 2 - 1) * 8, Math.random() * 6, (Math.random() * 2 - 1) * 6);
+        scene.add(s); m.meshes.push(s);
+        flocos.push({ s, v: 0.35 + Math.random() * 0.5, seed: Math.random() * 10 });
+      }
+      m.update = (t) => {
+        for (const f of flocos) {
+          f.s.position.y -= f.v / 60;
+          f.s.position.x += Math.sin(t * 0.8 + f.seed) * 0.004;
+          if (f.s.position.y < 0) { f.s.position.y = 5.5 + Math.random(); f.s.position.x = (Math.random() * 2 - 1) * 8; f.s.position.z = (Math.random() * 2 - 1) * 6; }
+        }
+      };
       m.reset = () => resetCaixotes(m);
     },
   },
@@ -1409,6 +1461,7 @@ const MAPAS = [
       faixa1.position.set(0, -0.3, -2); faixa1.receiveShadow = true; scene.add(faixa1); m.meshes.push(faixa1);
       const faixa2 = new THREE.Mesh(new THREE.BoxGeometry(11, 0.6, 4), new THREE.MeshStandardMaterial({ map: t2, roughness: 0.9 }));
       faixa2.position.set(0, -0.3, 2); faixa2.receiveShadow = true; scene.add(faixa2); m.meshes.push(faixa2);
+      baseArena(m, 5.5, 4);
       m.update = (t) => {
         t1.offset.x = (t * 0.55) % 1; t2.offset.x = (-t * 0.55) % 1;
         const dt = 1 / 60;
@@ -1448,6 +1501,19 @@ const MAPAS = [
         s.scale.set(1.6, 0.1, 1); scene.add(s); m.meshes.push(s);
         riscos.push({ s, seed: Math.random() * 20 });
       }
+      // biruta no canto: aponta pra onde o vento vai soprar (leia e se prepare!)
+      const posteB = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 2.2, 8), toonMat(THREE, 0xd8d8e2));
+      posteB.position.set(4.8, 1.1, -3.4); posteB.castShadow = true;
+      scene.add(posteB); m.meshes.push(posteB);
+      const biruta = new THREE.Mesh(
+        new THREE.ConeGeometry(0.16, 0.85, 10, 1, true),
+        new THREE.MeshStandardMaterial({ color: 0xff7a2f, side: THREE.DoubleSide, roughness: 0.8 }),
+      );
+      biruta.rotation.z = Math.PI / 2; // cone deitado
+      const birutaPivo = new THREE.Group();
+      birutaPivo.position.set(4.8, 2.05, -3.4);
+      birutaPivo.add(biruta); biruta.position.x = 0.45;
+      scene.add(birutaPivo); m.meshes.push(birutaPivo);
       let prox = 0, fase = 'calmo', faseAte = 0, dirV = { x: 1, z: 0 };
       m.reset = () => { fase = 'calmo'; prox = 0; resetCaixotes(m); for (const r of riscos) r.s.material.opacity = 0; };
       m.update = (t) => {
@@ -1480,6 +1546,12 @@ const MAPAS = [
             r.s.material.rotation = Math.atan2(-dirV.z, dirV.x);
           }
         }
+        // biruta gira pro vento que vem; murcha na calmaria
+        const alvoRot = Math.atan2(-dirV.z, dirV.x);
+        birutaPivo.rotation.y += (alvoRot - birutaPivo.rotation.y) * 0.08;
+        const infla = fase === 'rajada' ? 1 : fase === 'aviso' ? 0.8 : 0.45;
+        biruta.scale.x += (infla - biruta.scale.x) * 0.1;
+        biruta.rotation.x = Math.sin(t * (fase === 'calmo' ? 2 : 9)) * 0.12;
       };
     },
   },
@@ -1504,6 +1576,15 @@ const MAPAS = [
         mesh.position.set(cx, -0.3, cz); mesh.receiveShadow = true;
         scene.add(mesh); m.meshes.push(mesh);
         tiles.push({ body, mesh, mat, cx, cz, estado: 'ok', ate: 0 });
+      }
+      // fagulhas de lava subindo ao redor da arena
+      const fagulhas = [];
+      for (let i = 0; i < 40; i++) {
+        const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: texBolinha, color: 0xff9040, transparent: true, opacity: 0.9, depthWrite: false }));
+        s.scale.setScalar(0.05 + Math.random() * 0.05);
+        s.position.set((Math.random() * 2 - 1) * 7, Math.random() * 3, (Math.random() * 2 - 1) * 5.5);
+        scene.add(s); m.meshes.push(s);
+        fagulhas.push({ s, v: 0.4 + Math.random() * 0.7, seed: Math.random() * 10 });
       }
       let prox = 0;
       m.reset = () => {
@@ -1532,6 +1613,12 @@ const MAPAS = [
             tile.mesh.position.y += (-0.3 - tile.mesh.position.y) * 0.25;
           }
         }
+        for (const f of fagulhas) {
+          f.s.position.y += f.v / 60;
+          f.s.position.x += Math.sin(t * 1.4 + f.seed) * 0.004;
+          f.s.material.opacity = 0.5 + 0.4 * Math.sin(t * 6 + f.seed);
+          if (f.s.position.y > 3.4) { f.s.position.y = -0.4; f.s.position.x = (Math.random() * 2 - 1) * 7; f.s.position.z = (Math.random() * 2 - 1) * 5.5; }
+        }
       };
     },
   },
@@ -1555,6 +1642,32 @@ const MAPAS = [
       m.bodies.push(g);
       const deck = new THREE.Mesh(new THREE.BoxGeometry(10, 0.6, 7.2), new THREE.MeshStandardMaterial({ map: texTramp, roughness: 0.75 }));
       deck.position.y = -0.3; deck.receiveShadow = true; scene.add(deck); m.meshes.push(deck);
+      baseArena(m, 5, 3.6);
+      // postes de circo + varal de bandeirinhas
+      const texBand = (() => {
+        const c = document.createElement('canvas'); c.width = 512; c.height = 64;
+        const g = c.getContext('2d');
+        const CORES = ['#ff5c8a', '#ffd94a', '#7ee0ff', '#7ed957', '#c490ff'];
+        g.strokeStyle = 'rgba(40,20,20,.8)'; g.lineWidth = 3;
+        g.beginPath(); g.moveTo(0, 4); g.lineTo(512, 4); g.stroke();
+        for (let i = 0; i < 10; i++) {
+          g.fillStyle = CORES[i % CORES.length];
+          g.beginPath(); g.moveTo(i * 51 + 4, 4); g.lineTo(i * 51 + 47, 4); g.lineTo(i * 51 + 25, 56); g.closePath(); g.fill();
+        }
+        const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+      })();
+      for (const [x1, z1, x2, z2] of [[-4.7, -3.3, 4.7, -3.3], [-4.7, 3.3, 4.7, 3.3]]) {
+        for (const [px, pz] of [[x1, z1], [x2, z2]]) {
+          const poste = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 2.6, 8), toonMat(THREE, 0xd63b30));
+          poste.position.set(px, 1.3, pz); poste.castShadow = true;
+          scene.add(poste); m.meshes.push(poste);
+        }
+        const larg = Math.hypot(x2 - x1, z2 - z1);
+        const varal = new THREE.Mesh(new THREE.PlaneGeometry(larg, 0.34), new THREE.MeshBasicMaterial({ map: texBand, transparent: true, side: THREE.DoubleSide }));
+        varal.position.set((x1 + x2) / 2, 2.42, (z1 + z2) / 2);
+        varal.rotation.y = Math.atan2(x2 - x1, z2 - z1) - Math.PI / 2;
+        scene.add(varal); m.meshes.push(varal);
+      }
     },
   },
   {
@@ -1609,6 +1722,15 @@ const MAPAS = [
         m.syncPairs.push([body, mesh]);
         plats.push({ body, lado, seed: lado * Math.PI * 0.5 });
       }
+      // nuvens passeando abaixo da arena (sensação de altitude)
+      const nuvens = [];
+      for (let i = 0; i < 7; i++) {
+        const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: texBolinha, transparent: true, opacity: 0.55, depthWrite: false }));
+        s.scale.set(2.2 + Math.random() * 2, 0.9 + Math.random() * 0.5, 1);
+        s.position.set((Math.random() * 2 - 1) * 9, -2.6 + Math.random() * 1.4, (Math.random() * 2 - 1) * 6);
+        scene.add(s); m.meshes.push(s);
+        nuvens.push({ s, v: 0.15 + Math.random() * 0.25 });
+      }
       let t0 = 0;
       m.reset = () => { t0 = -1; };
       m.update = (t) => {
@@ -1616,6 +1738,10 @@ const MAPAS = [
         for (const p of plats) {
           const z = Math.sin((t - t0) * 0.55 + p.seed) * 1.7;
           p.body.setNextKinematicTranslation({ x: p.lado * 2.9, y: -0.3, z });
+        }
+        for (const n of nuvens) {
+          n.s.position.x += n.v / 60;
+          if (n.s.position.x > 10) n.s.position.x = -10;
         }
       };
     },
