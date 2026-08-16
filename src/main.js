@@ -1350,6 +1350,7 @@ const MAPAS = [
       };
       // MORRO detalhado (diorama) emoldurando a arena
       new GLTFLoader().load(ASSET('assets/modelos/rio-cenario.glb'), (gltf) => {
+        if (m._dead) return; // trocou de mapa antes do GLB chegar: não vaza mesh na cena
         const s = gltf.scene;
         const box = new THREE.Box3().setFromObject(s);
         const size = new THREE.Vector3(); box.getSize(size);
@@ -1429,6 +1430,7 @@ const MAPAS = [
         });
         // palmeiras (clonadas do modelo low-poly)
         new GLTFLoader().load(ASSET('assets/modelos/palmeira-low.glb'), (gp) => {
+          if (m._dead) return;
           const proto = gp.scene;
           const pb = new THREE.Box3().setFromObject(proto), ps = new THREE.Vector3(); pb.getSize(ps);
           proto.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
@@ -1455,6 +1457,7 @@ const MAPAS = [
         }, undefined, () => res(null));
       });
       Promise.all(['casa-low', 'casa-b', 'casa-c', 'casa-d'].map((n) => carregarGeo('assets/modelos/' + n + '.glb'))).then((gs) => {
+        if (m._dead) return; // trocou de mapa: não cria casas (mesh + física) órfãs
         const info = gs.filter(Boolean).map((geo) => { const z = new THREE.Vector3(); geo.boundingBox.getSize(z); return { geo, esc: 0.6 / Math.max(z.x, z.z), h: z.y * (0.6 / Math.max(z.x, z.z)) }; });
         if (!info.length) return;
         let ci = 0, pick = 0;
@@ -1874,6 +1877,7 @@ let mapaIdx = 0;
 let mapa = null;
 function setMapa(idx) {
   if (mapa) {
+    mapa._dead = true; // loaders assíncronos do mapa antigo desistem (senão vazam mesh/física)
     for (const b of mapa.bodies) world.removeRigidBody(b);
     for (const me of mapa.meshes) scene.remove(me);
   }
