@@ -355,7 +355,7 @@ function criarJogador(ws, skin, ehKaiju = false, nome = null, cor = null, mat = 
   // 🎨 tinta escolhida pelo jogador (validada: int de cor ou nada; mat da lista)
   const corOk = Number.isInteger(cor) && cor >= 0 && cor <= 0xffffff ? cor : null;
   const matOk = MATS_LOJA.includes(mat) ? mat : null;
-  const j = { ws, slot, skin: skin | 0, ehKaiju: !!ehKaiju, cor: corOk, mat: matOk, nome: limparNome(nome) || `JOGADOR ${slot + 1}`, rag, input: { ...IDLE }, vivo: estado === 'lobby', score: 0, handles };
+  const j = { ws, slot, skin: skin | 0, ehKaiju: !!ehKaiju, cor: corOk, mat: matOk, nome: limparNome(nome) || `JOGADOR ${slot + 1}`, rag, input: { ...IDLE }, vivo: estado === 'lobby', score: 0, handles, tk: Math.random().toString(36).slice(2, 12), _offAt: 0 };
   jogadores.set(ws, j);
   refazerRivais();
   atualizarPropsDosRags(); // inclui as armas já dropadas nos props agarráveis
@@ -558,6 +558,16 @@ function enviarMelhor() {
 setInterval(() => {
   now += DT;
   tick++;
+  // carência de reconexão vencida (30s): agora sim remove o jogador caído
+  if (tick % 30 === 0) {
+    for (const [wsK, j] of [...jogadores.entries()]) {
+      if (j._offAt && Date.now() - j._offAt > 30000) {
+        console.log(`⌛ ${j.nome} não voltou — liberando o slot ${j.slot}`);
+        removerJogador(wsK);
+        enviarNomes();
+      }
+    }
+  }
   const lutando = estado === 'luta';
   for (const j of jogadores.values()) {
     const input = (lutando && j.vivo) || estado === 'lobby' ? j.input : IDLE;
@@ -649,7 +659,7 @@ setInterval(() => {
       rk: (estado === 'lobby' || estado === 'fim') && rankingNoite.size
         ? [...rankingNoite.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5) : undefined,
       ev: eventos.splice(0),
-      pl: js.map((j) => ({ s: j.slot, sk: j.skin, v: j.vivo ? 1 : 0, at: j.rag.isStunned(now) ? 1 : 0, sc: j.score, d: Math.round(j.rag.dano * 10) / 10, es: j.rag.escudo ? 1 : undefined, cr: j.cor ?? undefined, mt: j.mat ?? undefined })),
+      pl: js.map((j) => ({ s: j.slot, sk: j.skin, v: j.vivo ? 1 : 0, at: j.rag.isStunned(now) ? 1 : 0, sc: j.score, d: Math.round(j.rag.dano * 10) / 10, es: j.rag.escudo ? 1 : undefined, cr: j.cor ?? undefined, mt: j.mat ?? undefined, of: j._offAt ? 1 : undefined })),
       pr: props.map((b) => { const tr = b.translation(), ro = b.rotation(); return [q(tr.x), q(tr.y), q(tr.z), q(ro.x), q(ro.y), q(ro.z), q(ro.w)]; }),
       wp: armas.map((a) => { const tr = a.body.translation(), ro = a.body.rotation(); return { id: a.id, ti: ARMA_TIPOS.indexOf(a.tipo), q: a.quente ? 1 : 0, p: [q(tr.x), q(tr.y), q(tr.z), q(ro.x), q(ro.y), q(ro.z), q(ro.w)] }; }),
       pu: powerups.map((p) => ({ id: p.id, ti: POWER_TIPOS.indexOf(p.tipo), p: [q(p.x), q(p.y), q(p.z)] })),
@@ -714,9 +724,23 @@ wss.on('connection', (ws) => {
     if (!m || typeof m !== 'object') return;
     try {
       if (m.t === 'entrar' && !jogadores.has(ws)) {
+        // RECONEXÃO: token de uma queda recente? religa no MESMO slot/boneco
+        if (typeof m.tk === 'string' && m.tk) {
+          const volta = [...jogadores.entries()].find(([, o]) => o.tk === m.tk && o._offAt);
+          if (volta) {
+            const [wsVelho, j] = volta;
+            jogadores.delete(wsVelho);
+            j.ws = ws; j._offAt = 0; j.input = { ...IDLE };
+            jogadores.set(ws, j);
+            ws.send(JSON.stringify({ t: 'oi', slot: j.slot, tk: j.tk }));
+            enviarNomes();
+            console.log(`↩ ${j.nome} reconectou no slot ${j.slot}`);
+            return;
+          }
+        }
         const j = criarJogador(ws, m.skin, m.kaiju, m.nome, m.cor, m.mat);
         if (!j) { ws.send(JSON.stringify({ t: 'cheio' })); ws.close(); return; }
-        ws.send(JSON.stringify({ t: 'oi', slot: j.slot }));
+        ws.send(JSON.stringify({ t: 'oi', slot: j.slot, tk: j.tk }));
         enviarNomes();
         console.log(`+ ${j.nome} entrou (${jogadores.size} na sala)`);
       } else if (m.t === 'lutador') {
@@ -782,6 +806,17 @@ wss.on('connection', (ws) => {
     }
   });
   ws.on('close', () => {
+    const j = jogadores.get(ws);
+    // CARÊNCIA de reconexão: no meio da partida com 2+ ainda conectados, o boneco
+    // fica 30s esperando o dono voltar (Wi-Fi piscou). No lobby/fim, ou se a sala
+    // ficaria com <2 conectados (ninguém pra esperar), remove na hora.
+    const conectados = [...jogadores.values()].filter((o) => o !== j && o.ws.readyState === 1).length;
+    if (j && estado !== 'lobby' && estado !== 'fim' && conectados >= 2) {
+      j._offAt = Date.now();
+      j.input = { ...IDLE };
+      console.log(`⏳ ${j.nome} caiu — segurando o slot ${j.slot} por 30s`);
+      return;
+    }
     removerJogador(ws);
     enviarNomes();
     console.log(`- jogador saiu (${jogadores.size} na sala)`);

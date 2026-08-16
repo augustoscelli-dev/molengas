@@ -4246,7 +4246,7 @@ function iniciarOnline() {
   online.ws = ws; online.desconectou = false;
   ws.addEventListener('open', () => {
     const entC = PALETA[online.corIdx ?? 0]; // tinta escolhida (pode ser especial da loja)
-    ws.send(JSON.stringify({ t: 'entrar', skin: selCfg[0].skin, kaiju: selCfg[0].skin === IDX_KAIJU, nome: online.nome, cor: corDe(entC) ?? undefined, mat: (entC && entC.id) || undefined }));
+    ws.send(JSON.stringify({ t: 'entrar', skin: selCfg[0].skin, kaiju: selCfg[0].skin === IDX_KAIJU, nome: online.nome, cor: corDe(entC) ?? undefined, mat: (entC && entC.id) || undefined, tk: online.tk || undefined }));
     showMsg('NA SALA! 🌐', 'quando todos entrarem, o host (1º jogador) aperta F');
     online.inputTimer = setInterval(() => {
       if (ws.readyState !== 1) return;
@@ -4267,6 +4267,13 @@ function iniciarOnline() {
       online.reconTimer = setTimeout(() => { if (online && online.aguardando) conectarWS(); }, 4000);
       return;
     }
+    // RECONEXÃO: com token, tenta religar sozinho (o servidor segura o slot 30s)
+    online.reconN = (online.reconN || 0) + 1;
+    if (online.tk && online.reconN <= 10) {
+      showMsg('RECONECTANDO… 🔌', `tentativa ${online.reconN} de 10`);
+      online.reconTimer = setTimeout(() => { if (online && !online.desconectou) conectarWS(); }, 2500);
+      return;
+    }
     online.desconectou = true;
     showMsg('DESCONECTOU 😵', 'o servidor fechou — recarrega a página');
     // limpa a cena pra não deixar bonecos/armas congelados
@@ -4280,7 +4287,12 @@ function iniciarOnline() {
   ws.addEventListener('message', (e) => {
     if (typeof e.data === 'string') { // oi / cheio / melhor (JSON)
       let m; try { m = JSON.parse(e.data); } catch { return; }
-      if (m.t === 'oi') { online.slot = m.slot; online.aguardando = false; }
+      if (m.t === 'oi') {
+        const voltou = online.reconN > 0;
+        online.slot = m.slot; online.aguardando = false;
+        online.tk = m.tk || online.tk; online.reconN = 0;
+        if (voltou) { avisoOnline('🔌 RECONECTOU — de volta no seu boneco!'); showMsg(''); }
+      }
       else if (m.t === 'voto') { avisoOnline(`🗳️ seu voto: ${ARENAS_CLI[m.a] || '?'}`); som.selecionar?.(); }
       else if (m.t === 'cheio') { online.aguardando = true; showMsg('SALA CHEIA 😔', 'esperando abrir vaga…'); }
       else if (m.t === 'nomes') online.nomes = new Map(m.ns); // apelidos por slot

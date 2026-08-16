@@ -9,13 +9,13 @@ let erros = [];
 const ok = (m) => console.log('  ✅ ' + m);
 const falha = (m) => { erros.push(m); console.log('  ❌ ' + m); };
 
-function mkCli(skin) {
-  const c = { slot: null, last: null, cheio: false };
+function mkCli(skin, tk) {
+  const c = { slot: null, last: null, cheio: false, tk: null };
   c.ws = new WebSocket(URL); c.ws.binaryType = 'arraybuffer';
   c.ready = new Promise((res) => { c._res = res; });
-  c.ws.on('open', () => c.ws.send(JSON.stringify({ t: 'entrar', skin })));
+  c.ws.on('open', () => c.ws.send(JSON.stringify({ t: 'entrar', skin, tk: tk || undefined })));
   c.ws.on('message', (d) => {
-    if (Buffer.isBuffer(d) && d.length && d[0] === 0x7b) { try { const m = JSON.parse(d.toString()); if (m.t === 'oi') { c.slot = m.slot; c._res(); } else if (m.t === 'cheio') { c.cheio = true; c._res(); } } catch {} return; }
+    if (Buffer.isBuffer(d) && d.length && d[0] === 0x7b) { try { const m = JSON.parse(d.toString()); if (m.t === 'oi') { c.slot = m.slot; c.tk = m.tk || null; c._res(); } else if (m.t === 'cheio') { c.cheio = true; c._res(); } } catch {} return; }
     if (d instanceof ArrayBuffer) { try { const dv = new DataView(d); const jl = dv.getUint32(0, true); c.last = JSON.parse(new TextDecoder().decode(new Uint8Array(d, 4, jl))); } catch {} }
   });
   c.send = (o) => { if (c.ws.readyState === 1) c.ws.send(JSON.stringify(o)); };
@@ -86,6 +86,34 @@ async function main() {
   F1.ws.close(); F2.ws.close();
 
   A.ws.close();
+  await sleep(500);
+
+  // ---- E) reconexão com token segura o slot ----
+  console.log('E) queda no meio da luta: slot fica 30s esperando e o token religa');
+  const E1 = mkCli(0), E2 = mkCli(1), E3 = mkCli(2);
+  await Promise.all([E1.ready, E2.ready, E3.ready]);
+  E1.send({ t: 'comecar' });
+  let lutaE = false;
+  for (let i = 0; i < 40; i++) { await sleep(150); if (E2.last?.st === 'luta') { lutaE = true; break; } }
+  if (!lutaE || !E1.tk) { falha(`não preparou o cenário (luta=${lutaE}, tk=${!!E1.tk})`); }
+  else {
+    const slotCaido = E1.slot, tkCaido = E1.tk;
+    E1.ws.terminate(); // queda abrupta (sem close limpo)
+    await sleep(900);
+    const plOff = E2.last?.pl?.find((p) => p.s === slotCaido);
+    if (E2.last?.pl?.length === 3 && plOff?.of === 1) ok('slot segurado: 3 bonecos no snapshot, caído marcado of=1');
+    else falha(`slot não foi segurado (pl=${E2.last?.pl?.length}, of=${plOff?.of})`);
+    if (E2.last?.st === 'luta') ok('a luta seguiu rolando pros conectados'); else falha(`luta parou: ${E2.last?.st}`);
+    const E1b = mkCli(0, tkCaido); // religa com o token
+    await Promise.race([E1b.ready, sleep(1500)]);
+    if (E1b.slot === slotCaido) ok(`token religou no MESMO slot (${slotCaido})`);
+    else falha(`voltou no slot errado (${E1b.slot} ≠ ${slotCaido})`);
+    await sleep(700);
+    const plOn = E2.last?.pl?.find((p) => p.s === slotCaido);
+    if (plOn && plOn.of == null) ok('flag of limpa após reconectar'); else falha('of continuou marcado');
+    E1b.ws.close();
+  }
+  E2.ws.close(); E3.ws.close();
   await sleep(300);
   console.log('\n=== RESUMO ===');
   if (erros.length === 0) console.log('🎉 REGRESSÃO PASSOU');

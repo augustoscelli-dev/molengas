@@ -173,7 +173,11 @@ async function main() {
   ok(`partida com ${naAntes} jogadores, derrubando p3…`);
   C.close();
   await sleep(1500);
-  if (A.lastMeta.na === naAntes - 1) ok('servidor removeu o jogador que saiu'); else falha(`contagem errada após saída: ${A.lastMeta?.na}`);
+  // Desde a RECONEXÃO: no meio da partida com 2+ conectados o slot fica 30s
+  // esperando o dono voltar (of=1 no snapshot) em vez de sumir na hora.
+  const caidoC = A.lastMeta.pl?.find((p) => p.s === C.slot);
+  if (A.lastMeta.na === naAntes && caidoC?.of === 1) ok('slot segurado pra reconexão (of=1), luta segue com os conectados');
+  else falha(`carência de reconexão não funcionou (na=${A.lastMeta?.na} de ${naAntes}, of=${caidoC?.of})`);
   if (!A.nan) ok('sem NaN após desconexão'); else falha('NaN após desconexão');
   // continua jogando os 2 restantes
   for (let i = 0; i < 30; i++) { A.input([1, 0], { p: true }); B.input([-1, 0], { p: true }); await sleep(80); }
