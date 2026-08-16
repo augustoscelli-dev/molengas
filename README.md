@@ -106,7 +106,9 @@ De tempos em tempos caem coisas na arena (mais rápido no modo **CAOS**):
    - **F** — começa a partida
    - **M** — modo de sala: **Normal (até 8)** ou **LOUCURA (até 20)** 🤪
    - **N** — pontuação (Melhor de 5/3, Morte Súbita)
-   - **B** — arena: **CLÁSSICA**, **GELO 🧊** (escorrega) ou **ENCOLHE 😱** (o chão diminui!)
+   - **B** — arena: **CLÁSSICA**, **GELO 🧊** (escorrega), **ENCOLHE 😱** (o chão
+     diminui!), **ABISMO 🕳️** (buraco no meio — arrasta o rival pra morte!) ou
+     **RODÍZIO 🎲** (sorteia uma a cada partida)
    - **H** — **REI DO MORRO 👑** (dominar o centro por 10s fecha o round)
    - **Y** — **TIMES 🔴x🔵**: slots pares vs ímpares, **sem fogo amigo**, anel
      colorido sob cada jogador — funciona com qualquer tamanho de sala, **até

@@ -79,18 +79,35 @@ const ARENAS_ON = [
   { id: 'classica', nome: 'CLÁSSICA' },
   { id: 'gelo', nome: 'GELO 🧊' },      // chão escorregadio + tração reduzida
   { id: 'encolhe', nome: 'ENCOLHE 😱' }, // o chão encolhe durante o round
-  { id: 'rodizio', nome: 'RODÍZIO 🎲' }, // sorteia uma das três a cada partida
+  { id: 'abismo', nome: 'ABISMO 🕳️' },  // buraco no meio — arrasta o rival pra morte
+  { id: 'rodizio', nome: 'RODÍZIO 🎲' }, // sorteia uma das variantes a cada partida
 ];
-const NOME_ARENA = { classica: 'CLÁSSICA', gelo: 'GELO 🧊', encolhe: 'ENCOLHE 😱' };
+const NOME_ARENA = { classica: 'CLÁSSICA', gelo: 'GELO 🧊', encolhe: 'ENCOLHE 😱', abismo: 'ABISMO 🕳️' };
 let arenaIdx = 0;
 let arenaAtiva = 'classica'; // variante em vigor (o rodízio sorteia ao começar)
 let escalaEncolhe = 1;
 let proxEncolheAt = 0;
-let chaoCol = null;
-function setChaoEscala(k) { // troca só o collider do chão (não mexe na bola/caixotes)
-  if (chaoCol) world.removeCollider(chaoCol, true);
+let chaoCols = [];
+const FURO_ABISMO = 0.42; // fração do meio-lado que vira buraco no ABISMO
+function setChaoEscala(k) { // troca só os colliders do chão (não mexe na bola/caixotes)
+  for (const c of chaoCols) world.removeCollider(c, true);
+  chaoCols = [];
   const atrito = arenaAtiva === 'gelo' ? 0.03 : 0.8;
-  chaoCol = world.createCollider(RAPIER.ColliderDesc.cuboid(arenaHX * k, 0.3, arenaHZ * k).setFriction(atrito).setCollisionGroups(GROUND_GROUPS), chao);
+  const mk = (hx, hz, x, z) => chaoCols.push(world.createCollider(
+    RAPIER.ColliderDesc.cuboid(hx, 0.3, hz).setTranslation(x, 0, z)
+      .setFriction(atrito).setCollisionGroups(GROUND_GROUPS), chao));
+  if (arenaAtiva === 'abismo') {
+    // Moldura com buraco central: caiu no meio (ou pra fora), morreu.
+    // Spawns ficam a 0.62·min dos lados — sempre em cima da moldura (furo = 0.42).
+    const hx = arenaHX * k, hz = arenaHZ * k;
+    const fx = hx * FURO_ABISMO, fz = hz * FURO_ABISMO;
+    mk(hx, (hz - fz) / 2, 0, (hz + fz) / 2);   // faixa norte
+    mk(hx, (hz - fz) / 2, 0, -(hz + fz) / 2);  // faixa sul
+    mk((hx - fx) / 2, fz, (hx + fx) / 2, 0);   // faixa leste
+    mk((hx - fx) / 2, fz, -(hx + fx) / 2, 0);  // faixa oeste
+  } else {
+    mk(arenaHX * k, arenaHZ * k, 0, 0);
+  }
 }
 function aplicarControleArena() { // tração por variante (gelo derrapa)
   const c = arenaAtiva === 'gelo' ? 0.4 : 1;
@@ -99,7 +116,7 @@ function aplicarControleArena() { // tração por variante (gelo derrapa)
 function montarArena(scale) {
   for (const b of [chao, ancora, bola, ...caixotes]) if (b) world.removeRigidBody(b);
   caixotes = [];
-  chaoCol = null;
+  chaoCols = [];
   escalaEncolhe = 1;
   arenaHX = ARENA.halfX * scale; arenaHZ = ARENA.halfZ * scale;
   chao = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, -0.3, 0));
@@ -391,7 +408,7 @@ function startIntro(roundN) {
 function comecarPartida() {
   // RODÍZIO: sorteia a variante desta partida antes de montar
   arenaAtiva = ARENAS_ON[arenaIdx].id === 'rodizio'
-    ? ['classica', 'gelo', 'encolhe'][(Math.random() * 3) | 0]
+    ? ['classica', 'gelo', 'encolhe', 'abismo'][(Math.random() * 4) | 0]
     : ARENAS_ON[arenaIdx].id;
   montarArena(MODOS_SALA[salaModo].arena); // arena do modo escolhido
   const tot = capSala();
@@ -592,6 +609,7 @@ setInterval(() => {
       mo: MODOS_SALA[salaModo].nome, cap: capSala(), na: jogadores.size, pt: PONTOS[pontoIdx].n, jg: salaJaeger ? 1 : 0,
       an: (estado === 'lobby' || estado === 'fim') ? ARENAS_ON[arenaIdx].nome : NOME_ARENA[arenaAtiva], as: q2(escalaEncolhe),
       mr: salaMorro ? 1 : 0, tm: salaTimes ? 1 : 0, kg: (salaMorro && estado === 'luta' && morroLider) ? morroLider : undefined,
+      ah: arenaAtiva === 'abismo' ? [q2(arenaHX), q2(arenaHZ)] : undefined, // dims p/ o cliente desenhar a moldura
       rk: (estado === 'lobby' || estado === 'fim') && rankingNoite.size
         ? [...rankingNoite.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5) : undefined,
       ev: eventos.splice(0),

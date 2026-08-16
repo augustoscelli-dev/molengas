@@ -762,7 +762,20 @@ function baseArena(m, hx, hz) {
   base.position.y = -1.35;
   scene.add(base);
   m.meshes.push(base);
+  m._base = base; // referência pro online (ABISMO esconde o pedestal)
 }
+// Pedra escura com listras de perigo nas bordas (ABISMO offline e online)
+const texAbismo = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const g = c.getContext('2d');
+  g.fillStyle = '#4a4458'; g.fillRect(0, 0, 256, 256);
+  g.fillStyle = '#3e3950';
+  for (let i = 0; i < 40; i++) g.fillRect(Math.random() * 256, Math.random() * 256, 22, 10);
+  for (const y of [0, 244]) for (let x = 0; x < 256; x += 24) {
+    g.fillStyle = (x / 24) % 2 ? '#ffd94a' : '#221d30'; g.fillRect(x, y, 24, 12);
+  }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+})();
 function chaoFixo(m, hx, hz, mat, atrito = 0.8) {
   const g = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, -0.3, 0));
   world.createCollider(RAPIER.ColliderDesc.cuboid(hx, 0.3, hz).setFriction(atrito).setCollisionGroups(GROUND_GROUPS), g);
@@ -1827,18 +1840,7 @@ const MAPAS = [
       // Vazio total embaixo: caiu, morreu. Ilhas + pontes finas — o jogo aqui é
       // AGARRAR e arrastar o rival até a beirada (ou derrubar ele da ponte).
       climaMapa({ ceu: 0x8090c0, chao: 0x10142a, fog: 0x0a0d20, sol: 0xb8c8ff, solInt: 1.25, expo: 1.02 });
-      const texPedra = (() => { // pedra escura com listras de perigo nas bordas
-        const c = document.createElement('canvas'); c.width = c.height = 256;
-        const g = c.getContext('2d');
-        g.fillStyle = '#4a4458'; g.fillRect(0, 0, 256, 256);
-        g.fillStyle = '#3e3950';
-        for (let i = 0; i < 40; i++) g.fillRect(Math.random() * 256, Math.random() * 256, 22, 10);
-        for (const y of [0, 244]) for (let x = 0; x < 256; x += 24) {
-          g.fillStyle = (x / 24) % 2 ? '#ffd94a' : '#221d30'; g.fillRect(x, y, 24, 12);
-        }
-        const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
-      })();
-      const mat = new THREE.MeshStandardMaterial({ map: texPedra, roughness: 0.9 });
+      const mat = new THREE.MeshStandardMaterial({ map: texAbismo, roughness: 0.9 });
       const bloco = (x, z, hx, hz) => {
         const b = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(x, -0.3, z));
         world.createCollider(RAPIER.ColliderDesc.cuboid(hx, 0.3, hz).setFriction(0.9).setCollisionGroups(GROUND_GROUPS), b);
@@ -3883,9 +3885,28 @@ function receberSnap(m) {
   if (m.an && m.an !== online.arenaNome && mapa && mapa._deck) {
     online.arenaNome = m.an;
     if (!mapa._deckMatOrig) mapa._deckMatOrig = mapa._deck.material;
-    mapa._deck.material = /GELO/.test(m.an)
-      ? new THREE.MeshStandardMaterial({ map: texGelo, roughness: 0.15 })
-      : mapa._deckMatOrig;
+    if (online.abismoG) { // saiu do ABISMO: volta o chão normal
+      scene.remove(online.abismoG); online.abismoG = null;
+      mapa._deck.visible = true; if (mapa._base) mapa._base.visible = true;
+    }
+    if (/ABISMO/.test(m.an) && m.ah) {
+      // moldura com buraco central, na MESMA geometria do servidor (m.ah = [hx,hz])
+      mapa._deck.visible = false; if (mapa._base) mapa._base.visible = false;
+      const [hx, hz] = m.ah, fx = hx * 0.42, fz = hz * 0.42;
+      const matA = new THREE.MeshStandardMaterial({ map: texAbismo, roughness: 0.9 });
+      const g = new THREE.Group();
+      const add = (w, d, x, z) => {
+        const b = new THREE.Mesh(new THREE.BoxGeometry(w, 0.6, d), matA);
+        b.position.set(x, -0.3, z); b.receiveShadow = true; g.add(b);
+      };
+      add(hx * 2, hz - fz, 0, (hz + fz) / 2); add(hx * 2, hz - fz, 0, -(hz + fz) / 2);
+      add(hx - fx, fz * 2, (hx + fx) / 2, 0); add(hx - fx, fz * 2, -(hx + fx) / 2, 0);
+      scene.add(g); online.abismoG = g;
+    } else {
+      mapa._deck.material = /GELO/.test(m.an)
+        ? new THREE.MeshStandardMaterial({ map: texGelo, roughness: 0.15 })
+        : mapa._deckMatOrig;
+    }
   }
   // REI DO MORRO online: anel dourado no centro + HUD do líder
   const morroAtivo = !!m.mr && (m.st === 'luta' || m.st === 'intro');
