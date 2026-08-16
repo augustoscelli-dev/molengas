@@ -382,6 +382,27 @@
   #tut .tut-como { font-size: 13px; opacity: .75; margin-top: 3px; }
   @keyframes tutPulsa { 0%, 100% { box-shadow: 0 0 0 0 rgba(255, 181, 46, .7); } 60% { box-shadow: 0 0 0 12px rgba(255, 181, 46, 0); } }
   .tit-btn.pulsa { animation: tutPulsa 1.6s infinite; }
+  /* TORNEIO: árvore de chaves */
+  #chave { position: fixed; inset: 0; z-index: 35; display: flex; align-items: center; justify-content: center;
+    background: rgba(10, 8, 26, .78); backdrop-filter: blur(3px); }
+  .ch-card { background: rgba(16, 12, 40, .95); border: 2px solid #ffb52e; border-radius: 18px;
+    padding: 22px 30px; max-width: 92vw; max-height: 88vh; overflow: auto; text-align: center; color: #fff;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, .6); }
+  .ch-tit { font-size: 30px; font-weight: 900; letter-spacing: 3px; color: #ffb52e; margin-bottom: 12px; }
+  .ch-grade { display: flex; gap: 26px; align-items: center; justify-content: center; margin: 8px 0 14px; }
+  .ch-col { display: flex; flex-direction: column; gap: 14px; justify-content: space-around; }
+  .ch-rot { font-size: 11px; letter-spacing: 2px; opacity: .6; }
+  .ch-luta { border: 1px solid rgba(255, 255, 255, .25); border-radius: 10px; overflow: hidden; min-width: 168px; }
+  .ch-luta.ch-ativa { border-color: #ffb52e; box-shadow: 0 0 14px rgba(255, 181, 46, .5); }
+  .ch-nome { padding: 6px 12px; font-size: 14px; text-align: left; background: rgba(255, 255, 255, .04); }
+  .ch-nome + .ch-nome { border-top: 1px solid rgba(255, 255, 255, .12); }
+  .ch-nome.ch-venceu { color: #7ed957; font-weight: 700; }
+  .ch-nome.ch-vazio { opacity: .35; }
+  .ch-prox { font-size: 18px; margin: 8px 0 4px; }
+  .ch-campeao { font-size: 24px; margin: 10px 0 4px; color: #ffd94a; }
+  .ch-dica { font-size: 12.5px; opacity: .7; }
+  .ch-ns { display: flex; gap: 16px; justify-content: center; margin: 16px 0; }
+  .ch-ns .tit-btn { min-width: 84px; font-size: 26px; }
 </style>
 </head>
 <body>
@@ -392,6 +413,7 @@
   <div class="tit-botoes">
     <button class="tit-btn" id="tit-jogar" type="button">🎮 JOGAR</button>
     <button class="tit-btn" id="tit-online" type="button">🌐 JOGAR ONLINE</button>
+    <button class="tit-btn tit-btn-mini" id="tit-torneio" type="button">🏆 TORNEIO</button>
     <button class="tit-btn tit-btn-mini" id="tit-tutorial" type="button">🎓 TUTORIAL</button>
     <button class="tit-btn tit-btn-mini" id="tit-ajuda" type="button">❓ COMO JOGAR</button>
     <button class="tit-btn tit-btn-mini" id="tit-loja" type="button">🛒 LOJA &nbsp;·&nbsp; <span id="tit-moedas">0</span> 🪙</button>
@@ -532,6 +554,7 @@
   }
 </script>
 <div id="tut" style="display:none"></div>
+<div id="chave" style="display:none"></div>
 <script type="importmap">{ "imports": { "three": "./libs/three.module.js" } }</script>
 <script type="module" src="src/main.js"></script>
 </body>

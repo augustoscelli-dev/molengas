@@ -3768,12 +3768,16 @@ function mostrarVitoria(winner) {
   const retrato = ASSET(`assets/retratos/${SKINS[winner.cfg.skin].id}.jpg`);
   const btnClip = (melhorClip && window.MediaRecorder)
     ? `<button id="vit-baixar" type="button">🎬 BAIXAR A MELHOR JOGADA</button>` : '';
+  if (torneio) torneioRegistrarVencedor(winner); // avança o vencedor na chave
+  const dica = torneio
+    ? (torneio.campeao != null ? 'Aperte F — TEMOS UM CAMPEÃO! 🏆' : 'Aperte F pra voltar à chave do torneio')
+    : 'Aperte R pra voltar à seleção';
   $('msg').innerHTML =
     `<div class="vitoria"><img class="vit-retrato" src="${retrato}" alt="">` +
     `<div class="vit-tit">${titulo}</div>` +
     `<div class="vit-stats">${linhas}</div>` +
     btnClip +
-    `<div class="vit-dica">Aperte R pra voltar à seleção</div></div>`;
+    `<div class="vit-dica">${dica}</div></div>`;
   $('msg').style.display = 'block';
   $('vit-baixar')?.addEventListener('click', baixarMelhorJogada);
 }
@@ -4145,7 +4149,7 @@ function handleRounds(now) {
     startIntro(MODO_TIMES
       ? (lutadores.find((l) => timeDe(l) === 0)?.score || 0) + (lutadores.find((l) => timeDe(l) === 1)?.score || 0) + 1
       : lutadores.reduce((s, l) => s + l.score, 0) + 1);
-  } else if (state === 'fim' && isDown('KeyR')) {
+  } else if (state === 'fim' && isDown('KeyR') && !torneio) { // no torneio o F/R volta pra chave
     for (const l of lutadores) { l.rag.reset(); l.vivo = true; }
     mapa.reset?.(true);
     mostrarSelecao();
@@ -5312,6 +5316,7 @@ $('tit-jogar')?.addEventListener('click', () => {
 $('tit-online')?.addEventListener('click', () => { $('titulo').style.display = 'none'; if (!online) iniciarOnline(); });
 $('tit-ajuda')?.addEventListener('click', () => { $('ajuda').style.display = 'flex'; som.selecionar(); });
 $('tit-tutorial')?.addEventListener('click', () => { iniciarTutorial(); som.confirmar(); });
+$('tit-torneio')?.addEventListener('click', () => { mostrarSetupTorneio(); som.selecionar(); });
 // nunca fez o tutorial? o botão pulsa chamando atenção
 if (!localStorage.getItem('wobblers_tut')) $('tit-tutorial')?.classList.add('pulsa');
 $('ajuda-fechar')?.addEventListener('click', () => { $('ajuda').style.display = 'none'; });
@@ -5378,6 +5383,153 @@ addEventListener('keydown', (e) => {
   if (e.code === 'Enter' || e.code === 'Space' || e.code === 'KeyF') { mostrarSelecao(); som.confirmar(); }
 });
 // Celular: JOGAR no título cai direto numa luta rápida contra um bot
+// ---------- TORNEIO 🏆 (mata-mata local, 4-8 jogadores revezando o teclado) ----------
+// Estrutura: jog[] (nome+skin), rounds[][] de {a,b,w} com índices em jog (null = bye).
+// Cada luta é 1v1 no MESMO teclado (vermelho WASD+F × azul setas+K). Final = melhor de 3.
+let torneio = null;
+function iniciarTorneio(n) {
+  const jog = [];
+  for (let i = 0; i < n; i++) {
+    const skin = (i * 3 + 1) % SKINS.length;
+    jog.push({ nome: `J${i + 1} · ${SKINS[skin].nome}`, skin });
+  }
+  // embaralha o chaveamento e completa com byes até a potência de 2
+  const ordem = jog.map((_, i) => i).sort(() => Math.random() - 0.5);
+  let tam = 4; while (tam < n) tam *= 2;
+  while (ordem.length < tam) ordem.push(null);
+  const rounds = [];
+  let atual = [];
+  for (let i = 0; i < ordem.length; i += 2) atual.push({ a: ordem[i], b: ordem[i + 1], w: null });
+  rounds.push(atual);
+  for (let t = tam / 2; t >= 2; t /= 2) {
+    atual = [];
+    for (let i = 0; i < t / 2; i++) atual.push({ a: null, b: null, w: null });
+    rounds.push(atual);
+  }
+  torneio = { jog, rounds, campeao: null };
+  window._torneio = torneio; // teste automatizado espia aqui
+  torneioResolverByes();
+  mostrarChave();
+}
+// bye (b=null): quem tem adversário fantasma avança sozinho
+function torneioResolverByes() {
+  const R = torneio.rounds;
+  for (let r = 0; r < R.length; r++) {
+    for (let m = 0; m < R[r].length; m++) {
+      const M = R[r][m];
+      // bye SÓ existe na 1ª rodada — nas seguintes, null = "aguardando a luta de baixo"
+      if (r === 0 && M.w == null && M.a != null && M.b == null) M.w = M.a;
+      if (r === 0 && M.w == null && M.a == null && M.b != null) M.w = M.b;
+      if (M.w != null && r + 1 < R.length) {
+        const prox = R[r + 1][Math.floor(m / 2)];
+        if (m % 2 === 0) prox.a = M.w; else prox.b = M.w;
+      }
+    }
+  }
+  const final = R[R.length - 1][0];
+  if (final.w != null) torneio.campeao = final.w;
+}
+// próxima luta pendente (os dois lados definidos e sem vencedor)
+function torneioProxima() {
+  const R = torneio.rounds;
+  for (let r = 0; r < R.length; r++) {
+    for (let m = 0; m < R[r].length; m++) {
+      const M = R[r][m];
+      if (M.w == null && M.a != null && M.b != null) return { r, m, M };
+    }
+  }
+  return null;
+}
+function mostrarChave() {
+  const el = $('chave');
+  if (!el) return;
+  $('titulo').style.display = 'none';
+  showMsg(''); // some a tela de vitória da luta anterior
+  document.body.classList.add('menu');
+  const R = torneio.rounds;
+  const prox = torneioProxima();
+  const nomeDe = (i) => (i == null ? '—' : torneio.jog[i].nome);
+  const rotulos = { 1: 'FINAL', 2: 'SEMIS', 4: 'QUARTAS' };
+  const cols = R.map((rd, r) => {
+    const caixas = rd.map((M, m) => {
+      const ativa = prox && prox.r === r && prox.m === m;
+      const linha = (i, venceu) => `<div class="ch-nome${venceu ? ' ch-venceu' : ''}${i == null ? ' ch-vazio' : ''}">${nomeDe(i)}</div>`;
+      return `<div class="ch-luta${ativa ? ' ch-ativa' : ''}">${linha(M.a, M.w != null && M.w === M.a)}${linha(M.b, M.w != null && M.w === M.b)}</div>`;
+    }).join('');
+    return `<div class="ch-col"><div class="ch-rot">${rotulos[rd.length] || `RODADA ${r + 1}`}</div>${caixas}</div>`;
+  }).join('');
+  const rodape = torneio.campeao != null
+    ? `<div class="ch-campeao">🏆 CAMPEÃO: <b>${nomeDe(torneio.campeao)}</b>!</div><div class="ch-dica">F volta pro título</div>`
+    : `<div class="ch-prox">PRÓXIMA LUTA: <b>${nomeDe(prox.M.a)}</b> 🔴 × 🔵 <b>${nomeDe(prox.M.b)}</b>${R[R.length - 1][0] === prox.M ? ' — FINAL, melhor de 3!' : ''}</div>`
+      + '<div class="ch-dica">🔴 WASD + F soco &nbsp;·&nbsp; 🔵 setas + K soco &nbsp;·&nbsp; <b>F</b> começa &nbsp;·&nbsp; ESC abandona</div>';
+  el.innerHTML = `<div class="ch-card"><div class="ch-tit">🏆 TORNEIO</div><div class="ch-grade">${cols}</div>${rodape}</div>`;
+  el.style.display = 'flex';
+  som.selecionar?.();
+}
+function torneioConfirma() {
+  if (torneio.campeao != null) { torneioCancelar(); return; } // F na tela de campeão: sai
+  const prox = torneioProxima();
+  if (!prox) return;
+  torneio.atual = prox;
+  $('chave').style.display = 'none';
+  document.body.classList.remove('menu');
+  const ehFinal = torneio.rounds[torneio.rounds.length - 1][0] === prox.M;
+  WIN_SCORE = ehFinal ? 2 : 1; // final: melhor de 3
+  MODO_CAOS = false; MODO_MORRO = false; MODO_TIMES = false;
+  if (morroVis) { scene.remove(morroVis); morroVis = null; }
+  setMapa(Math.floor(Math.random() * MAPAS.length)); // arena sorteada por luta
+  montarLutadores([
+    { ...selCfg[0], tipo: 'kb1', skin: torneio.jog[prox.M.a].skin, _tid: prox.M.a },
+    { ...selCfg[1], tipo: 'kb2', skin: torneio.jog[prox.M.b].skin, _tid: prox.M.b },
+  ]);
+  mapa.reset?.(true);
+  updateScore();
+  som.musica(MAPAS[mapaIdx].trilha || 'luta');
+  startIntro(1);
+  som.confirmar?.();
+}
+function torneioRegistrarVencedor(l) {
+  if (!torneio?.atual || l.cfg._tid == null) return;
+  torneio.atual.M.w = l.cfg._tid;
+  torneio.atual = null;
+  torneioResolverByes();
+}
+function torneioCancelar() {
+  torneio = null;
+  $('chave').style.display = 'none';
+  mostrarTitulo();
+}
+// Tela de entrada: quantos jogadores? (4/6/8 — clique ou tecla do número)
+function mostrarSetupTorneio() {
+  const el = $('chave');
+  if (!el) return;
+  $('titulo').style.display = 'none';
+  document.body.classList.add('menu');
+  el.innerHTML = `<div class="ch-card"><div class="ch-tit">🏆 TORNEIO</div>
+    <div class="ch-prox">Quantos jogadores revezando o teclado?</div>
+    <div class="ch-ns">${[4, 6, 8].map((n) => `<button class="tit-btn" data-n="${n}" type="button">${n}</button>`).join('')}</div>
+    <div class="ch-dica">mata-mata 1×1 · 🔴 WASD+F × 🔵 setas+K · aperte o número · ESC volta</div></div>`;
+  el.style.display = 'flex';
+  el.querySelectorAll('[data-n]').forEach((b) => b.addEventListener('click', () => { iniciarTorneio(parseInt(b.dataset.n, 10)); som.confirmar?.(); }));
+}
+addEventListener('keydown', (e) => {
+  const chaveAberta = $('chave') && $('chave').style.display !== 'none';
+  if (!torneio) {
+    if (!chaveAberta) return; // tela de setup
+    if (e.code === 'Escape') { $('chave').style.display = 'none'; mostrarTitulo(); }
+    else if (e.code === 'Digit4') iniciarTorneio(4);
+    else if (e.code === 'Digit6') iniciarTorneio(6);
+    else if (e.code === 'Digit8') iniciarTorneio(8);
+    return;
+  }
+  if (chaveAberta) {
+    if (e.code === 'KeyF') torneioConfirma();
+    else if (e.code === 'Escape') torneioCancelar();
+  } else if (state === 'fim' && (e.code === 'KeyF' || e.code === 'KeyR')) {
+    mostrarChave(); // volta pra árvore do torneio (o vencedor já foi registrado)
+  }
+});
+
 // ---------- Tutorial 🎓 (DOJO vs manequim; passos com detecção de verdade) ----------
 let tut = null;
 const TUT_TEXTOS = [
@@ -5490,6 +5642,8 @@ if (PARAMS.has('servidor')) {
   state = 'luta';
 } else if (PARAMS.has('tutorial')) {
   iniciarTutorial(); // dev/teste: entra direto no tutorial
+} else if (PARAMS.get('torneio')) {
+  iniciarTorneio(Math.max(4, Math.min(8, parseInt(PARAMS.get('torneio'), 10) || 4))); // dev/teste
 } else {
   // dois lutadores de enfeite no palco atrás do menu
   montarLutadores([{ ...selCfg[0] }, { ...selCfg[1] }]);
