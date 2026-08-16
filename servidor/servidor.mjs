@@ -33,6 +33,9 @@ const ORDEM_MODOS = ['normal', 'loucura'];
 let salaModo = process.argv.includes('--loucura') ? 'loucura' : 'normal';
 const capSala = () => MODOS_SALA[salaModo].max;
 let salaMorro = false; // rei do morro 👑: dominar o centro fecha o round (host: tecla H)
+let salaTimes = false; // TIMES 🔴x🔵 (host: tecla Y): slot par vs ímpar, sem fogo amigo — até 10x10
+const timeS = (j) => j.slot % 2; // time 🔴 = slots pares · time 🔵 = ímpares
+const TIMES_NOME = ['🔴 VERMELHO', '🔵 AZUL'];
 const MORRO_ALVO_S = 10;
 let morroLider = null; // [slot, segundos] pro HUD dos clientes
 let salaJaeger = true; // robôs (par) x monstros (ímpar) LIGADO por padrão; host desliga no J. Fallback de performance protege salas grandes.
@@ -356,7 +359,10 @@ function removerJogador(ws) {
 }
 function refazerRivais() {
   const todos = [...jogadores.values()];
-  for (const j of todos) j.rag.rivals = todos.filter((o) => o !== j && o.vivo).map((o) => o.rag);
+  for (const j of todos) {
+    j.rag.rivals = todos.filter((o) => o !== j && o.vivo
+      && (!salaTimes || timeS(o) !== timeS(j))).map((o) => o.rag); // em TIMES, aliado não é alvo
+  }
 }
 function host() { return [...jogadores.values()].sort((a, b) => a.slot - b.slot)[0] ?? null; }
 
@@ -427,19 +433,25 @@ function rounds() {
       const decisiva = vivos.length <= 1 && vivos[0] && (vivos[0].score + 1) >= winScore();
       for (const j of cairam) considerarHighlightS(j, 'ringout', decisiva);
     }
-    if (vivos.length <= 1 && jogadores.size >= 2) {
+    // Em TIMES o round só fecha quando resta gente de UM time; no normal, 1 vivo
+    const fecha = salaTimes ? new Set(vivos.map(timeS)).size <= 1 : vivos.length <= 1;
+    if (fecha && jogadores.size >= 2) {
       const winner = vivos[0] ?? null;
-      if (winner) winner.score++;
+      if (winner && salaTimes) { for (const j of jogadores.values()) if (timeS(j) === timeS(winner)) j.score++; }
+      else if (winner) winner.score++;
+      const nomeV = winner ? (salaTimes ? 'TIME ' + TIMES_NOME[timeS(winner)] : winner.nome) : null;
       if (winner && winner.score >= winScore()) {
         estado = 'fim';
-        msg = '🏆 ' + winner.nome + ' VENCEU! (host: F reinicia)';
+        msg = '🏆 ' + nomeV + ' VENCEU! (host: F reinicia)';
         ev('vitoria');
-        rankingNoite.set(winner.nome, (rankingNoite.get(winner.nome) || 0) + 1); // placar da noite
+        if (salaTimes) { // placar da noite: todo mundo do time campeão pontua
+          for (const j of jogadores.values()) if (timeS(j) === timeS(winner)) rankingNoite.set(j.nome, (rankingNoite.get(j.nome) || 0) + 1);
+        } else rankingNoite.set(winner.nome, (rankingNoite.get(winner.nome) || 0) + 1);
         enviarMelhor(); // manda a melhor jogada da partida pra todos
       } else {
         estado = 'ponto';
         estadoAte = now + 1.4;
-        msg = winner ? 'PONTO DO ' + winner.nome + '!' : 'EMPATE!';
+        msg = nomeV ? 'PONTO DO ' + nomeV + '!' : 'EMPATE!';
         ev('ponto');
       }
     }
@@ -568,7 +580,7 @@ setInterval(() => {
       t: 's', st: estado, msg,
       mo: MODOS_SALA[salaModo].nome, cap: capSala(), na: jogadores.size, pt: PONTOS[pontoIdx].n, jg: salaJaeger ? 1 : 0,
       an: (estado === 'lobby' || estado === 'fim') ? ARENAS_ON[arenaIdx].nome : NOME_ARENA[arenaAtiva], as: q2(escalaEncolhe),
-      mr: salaMorro ? 1 : 0, kg: (salaMorro && estado === 'luta' && morroLider) ? morroLider : undefined,
+      mr: salaMorro ? 1 : 0, tm: salaTimes ? 1 : 0, kg: (salaMorro && estado === 'luta' && morroLider) ? morroLider : undefined,
       rk: (estado === 'lobby' || estado === 'fim') && rankingNoite.size
         ? [...rankingNoite.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5) : undefined,
       ev: eventos.splice(0),
@@ -676,6 +688,13 @@ wss.on('connection', (ws) => {
           arenaAtiva = ARENAS_ON[arenaIdx].id === 'rodizio' ? 'classica' : ARENAS_ON[arenaIdx].id;
           montarArena(MODOS_SALA[salaModo].arena); // reaplica atrito/escala da variante
           console.log('arena ->', ARENAS_ON[arenaIdx].nome);
+        }
+      } else if (m.t === 'times') {
+        const j = jogadores.get(ws); // só o host, e só fora da luta
+        if (j && j === host() && (estado === 'lobby' || estado === 'fim')) {
+          salaTimes = !salaTimes;
+          refazerRivais();
+          console.log('times ->', salaTimes);
         }
       } else if (m.t === 'morro') {
         const j = jogadores.get(ws);

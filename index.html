@@ -260,11 +260,45 @@
     text-shadow: 0 2px 0 rgba(0,0,0,.4); }
   .sel-dica { font-size: 13px; font-weight: 600; opacity: .85; color: #e7dffb;
     background: rgba(0,0,0,.34); padding: 4px 12px; border-radius: 999px; }
-  #sel-mapa { text-align: center; display: none; flex-direction: column; align-items: center; gap: 8px;
-    padding: 14px 22px; border-radius: 18px; background: rgba(10,6,26,.72);
-    border: 3px solid rgba(255,255,255,.16); box-shadow: 0 12px 30px rgba(0,0,0,.4); }
+  #sel-mapa, #sel-modo { display: none; flex-direction: column; align-items: center; gap: 10px;
+    width: 100%; max-width: 1120px; }
+  #selecao.fase-mapa #sel-mapa { display: flex; }
+  #selecao.fase-modo #sel-modo { display: flex; }
+  #selecao.fase-mapa .sel-roster, #selecao.fase-modo .sel-roster,
+  #selecao.fase-mapa #sel-rodape-dica, #selecao.fase-modo #sel-rodape-dica { display: none; }
   #sel-mapa .sel-nome { font-size: clamp(17px, 2.4vw, 22px); }
-  #selecao.fase-mapa .sel-roster, #selecao.fase-mapa #sel-rodape-dica { display: none; }
+  /* fileira de cards de mapa com foto (a arena de verdade aparece atrás, ao vivo) */
+  #mapa-grid { display: flex; gap: 12px; overflow-x: auto; padding: 18px 14px 12px; width: 100%;
+    scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  #mapa-grid::-webkit-scrollbar { display: none; }
+  .mapa-card { position: relative; flex: 0 0 auto; width: clamp(128px, 16vw, 182px);
+    border-radius: 16px; overflow: hidden; border: 4px solid rgba(255,255,255,.18); cursor: pointer;
+    background: #1a1236; box-shadow: 0 8px 20px rgba(0,0,0,.4);
+    transition: transform .15s cubic-bezier(.2,1.3,.4,1), border-color .15s, box-shadow .15s; }
+  .mapa-card:hover { transform: translateY(-3px); }
+  .mapa-card img { width: 100%; aspect-ratio: 26/15; object-fit: cover; display: block; }
+  .mapa-card .mc-nome { position: absolute; left: 0; right: 0; bottom: 0; padding: 16px 6px 5px;
+    font-family: var(--f-disp); font-size: 12.5px; letter-spacing: .4px; text-align: center;
+    background: linear-gradient(transparent, rgba(10,6,26,.9)); text-shadow: 0 2px 0 rgba(0,0,0,.55); }
+  .mapa-card.sel { border-color: #ffd94a; transform: translateY(-5px) scale(1.06);
+    box-shadow: 0 0 0 3px rgba(255,217,74,.35), 0 14px 30px rgba(0,0,0,.5); }
+  /* cards de modo de jogo */
+  #modo-grid { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; padding-top: 16px; }
+  .modo-card { width: clamp(124px, 14vw, 158px); border-radius: 16px; cursor: pointer; text-align: center;
+    border: 4px solid rgba(255,255,255,.18);
+    background: linear-gradient(180deg, rgba(44,30,88,.94), rgba(24,15,54,.96));
+    padding: 12px 10px; display: flex; flex-direction: column; align-items: center; gap: 5px;
+    box-shadow: 0 8px 20px rgba(0,0,0,.4);
+    transition: transform .15s cubic-bezier(.2,1.3,.4,1), border-color .15s, box-shadow .15s; }
+  .modo-card:hover { transform: translateY(-3px); }
+  .modo-card .mo-ico { font-size: 30px; line-height: 1.1; }
+  .modo-card .mo-nome { font-family: var(--f-disp); font-size: 14.5px; letter-spacing: .4px;
+    text-shadow: 0 2px 0 rgba(0,0,0,.45); }
+  .modo-card .mo-desc { font-size: 11.5px; font-weight: 600; opacity: .8; line-height: 1.3; }
+  .modo-card.sel { border-color: #ffd94a; transform: translateY(-5px) scale(1.05);
+    box-shadow: 0 0 0 3px rgba(255,217,74,.35), 0 14px 30px rgba(0,0,0,.5); }
+  .sel-extras { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+  .sel-extras b { color: #ffd94a; }
   /* no menu, o HUD da luta (placar/controles/mapa) fica escondido */
   body.menu #placar, body.menu #controles, body.menu #mapa { display: none; }
 </style>
@@ -317,10 +351,18 @@
       </div>
     </div>
     <div id="sel-mapa">
-      <div class="sel-nome">MAPA: <span id="sel-mapa-nome"></span></div>
-      <div class="sel-dica" id="sel-mapa-desc" style="margin-top:-2px"></div>
-      <div class="sel-nome" style="font-size:18px">MODO: <span id="sel-modo-nome"></span> &nbsp;·&nbsp; BOTS: <span id="sel-nivel"></span> &nbsp;·&nbsp; EXTRA: <span id="sel-modif"></span></div>
-      <div class="sel-dica">🔴 A · D mapa &nbsp;·&nbsp; X sorteia 🎲 &nbsp;·&nbsp; N modo &nbsp;·&nbsp; V nível &nbsp;·&nbsp; G extra 🎉 &nbsp;·&nbsp; C bot 🤖 &nbsp;·&nbsp; F começa!</div>
+      <div id="mapa-grid"></div>
+      <div class="sel-nome"><span id="sel-mapa-nome"></span> <span class="sel-dica" id="sel-mapa-desc" style="margin-left:6px"></span></div>
+      <div class="sel-dica">🔴 A · D navega &nbsp;·&nbsp; X sorteia 🎲 &nbsp;·&nbsp; F confirma &nbsp;·&nbsp; ESC volta</div>
+    </div>
+    <div id="sel-modo">
+      <span id="sel-modo-nome" style="display:none"></span>
+      <div id="modo-grid"></div>
+      <div class="sel-extras">
+        <span class="sel-dica">🤖 BOTS (V): <b id="sel-nivel"></b></span>
+        <span class="sel-dica">🎉 EXTRA (G): <b id="sel-modif"></b></span>
+      </div>
+      <div class="sel-dica">🔴 A · D modo &nbsp;·&nbsp; V bots &nbsp;·&nbsp; G extra &nbsp;·&nbsp; C bot 🤖 &nbsp;·&nbsp; F começa! &nbsp;·&nbsp; ESC volta</div>
     </div>
     <div class="sel-dica" id="sel-rodape-dica">🔴 A · D muda &nbsp;·&nbsp; F confirma &nbsp;·&nbsp; 🔵 ← · → muda &nbsp;·&nbsp; K confirma &nbsp;·&nbsp; 🎮 A entra &nbsp;·&nbsp; C bot 🤖</div>
   </div>
@@ -349,6 +391,7 @@
   <div class="oa-btn" data-act="pontos">Pontos</div>
   <div class="oa-btn" data-act="arena">Arena</div>
   <div class="oa-btn" data-act="morro">👑</div>
+  <div class="oa-btn" data-act="times">🔴🔵</div>
 </div>
 <div id="touch">
   <div id="touch-gritos">

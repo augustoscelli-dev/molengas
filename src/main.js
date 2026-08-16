@@ -24,12 +24,12 @@ const VERSAO = 'v15-cidade';
 let WIN_SCORE = 5; // rounds pra vencer a partida (definido pelo modo escolhido)
 // Modos de jogo (escolhidos no menu com a tecla N)
 const MODOS = [
-  { nome: 'Melhor de 5', vitorias: 5, caos: false },
-  { nome: 'Melhor de 3', vitorias: 3, caos: false },
-  { nome: 'Morte Súbita', vitorias: 1, caos: false },
-  { nome: 'CAOS ⚔️ (armas sem parar)', vitorias: 5, caos: true },
-  { nome: 'REI DO MORRO 👑 (domine o centro)', vitorias: 3, caos: false, morro: true },
-  { nome: 'DUPLAS 2v2 🤝 (você + aliado)', vitorias: 3, caos: false, times: true },
+  { nome: 'MELHOR DE 5', ico: '🏆', desc: 'primeiro a fazer 5 pontos', vitorias: 5, caos: false },
+  { nome: 'MELHOR DE 3', ico: '⚡', desc: 'partida rápida: 3 pontos', vitorias: 3, caos: false },
+  { nome: 'MORTE SÚBITA', ico: '💀', desc: 'um round só, sem choro', vitorias: 1, caos: false },
+  { nome: 'CAOS', ico: '⚔️', desc: 'armas caindo sem parar', vitorias: 5, caos: true },
+  { nome: 'REI DO MORRO', ico: '👑', desc: 'domine o centro por 10s', vitorias: 3, caos: false, morro: true },
+  { nome: 'DUPLAS 2v2', ico: '🤝', desc: 'você + aliado vs. a dupla rival', vitorias: 3, caos: false, times: true },
 ];
 let modoIdx = 0;
 let MODO_CAOS = false; // partida atual usa drop de armas acelerado?
@@ -3066,14 +3066,56 @@ function atualizarSelecao() {
     }).join('');
   }
   $('selecao').classList.toggle('fase-mapa', selFase === 'mapa');
-  if ($('sel-tit')) $('sel-tit').textContent = selFase === 'mapa' ? 'ARENA & MODO' : 'ESCOLHA SEU LUTADOR';
-  $('sel-mapa').style.display = selFase === 'mapa' ? 'flex' : 'none';
+  $('selecao').classList.toggle('fase-modo', selFase === 'modo');
+  if ($('sel-tit')) {
+    $('sel-tit').textContent = selFase === 'mapa' ? 'ESCOLHA A ARENA'
+      : selFase === 'modo' ? 'MODO DE JOGO' : 'ESCOLHA SEU LUTADOR';
+  }
+  // grade de mapas: marca o selecionado e centraliza ele na fileira
+  const mg = $('mapa-grid');
+  if (mg && selFase === 'mapa') {
+    mg.querySelectorAll('.mapa-card').forEach((c) => {
+      const sel = parseInt(c.dataset.i, 10) === mapaIdx;
+      c.classList.toggle('sel', sel);
+      if (sel) mg.scrollTo({ left: c.offsetLeft - mg.clientWidth / 2 + c.clientWidth / 2, behavior: 'smooth' });
+    });
+  }
+  const og = $('modo-grid');
+  if (og) og.querySelectorAll('.modo-card').forEach((c) => c.classList.toggle('sel', parseInt(c.dataset.i, 10) === modoIdx));
   $('sel-mapa-nome').textContent = MAPAS[mapaIdx].nome;
   if ($('sel-mapa-desc')) $('sel-mapa-desc').textContent = MAPAS[mapaIdx].desc || '';
   if ($('sel-modo-nome')) $('sel-modo-nome').textContent = MODOS[modoIdx].nome;
   if ($('sel-jaeger')) $('sel-jaeger').textContent = ESTILO === 'j' ? 'SIM 🤖' : 'não';
   if ($('sel-nivel')) $('sel-nivel').textContent = NIVEIS[nivelIdx].nome;
   if ($('sel-modif')) $('sel-modif').textContent = MODIFS[modifIdx].nome;
+}
+// Monta as grades (1x): cards de mapa com foto e cards de modo
+const slugMapa = (n) => n.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+{
+  const mg = $('mapa-grid');
+  if (mg) {
+    mg.innerHTML = MAPAS.map((m, i) => `<div class="mapa-card" data-i="${i}">`
+      + `<img src="${ASSET('assets/mapas/' + slugMapa(m.nome) + '.jpg')}" alt="" loading="lazy" onerror="this.remove()">`
+      + `<div class="mc-nome">${m.nome}</div></div>`).join('');
+    mg.querySelectorAll('.mapa-card').forEach((c) => c.addEventListener('click', () => {
+      if (state !== 'selecao' || selFase !== 'mapa') return;
+      const i = parseInt(c.dataset.i, 10);
+      if (mapaIdx === i) { selFase = 'modo'; som.confirmar(); } // 2º clique confirma
+      else { setMapa(i); som.selecionar(); }
+      atualizarSelecao();
+    }));
+  }
+  const og = $('modo-grid');
+  if (og) {
+    og.innerHTML = MODOS.map((m, i) => `<div class="modo-card" data-i="${i}">`
+      + `<div class="mo-ico">${m.ico}</div><div class="mo-nome">${m.nome}</div><div class="mo-desc">${m.desc}</div></div>`).join('');
+    og.querySelectorAll('.modo-card').forEach((c) => c.addEventListener('click', () => {
+      if (state !== 'selecao' || selFase !== 'modo') return;
+      const i = parseInt(c.dataset.i, 10);
+      if (modoIdx === i) { iniciarLuta(); return; } // 2º clique começa
+      modoIdx = i; som.selecionar(); atualizarSelecao();
+    }));
+  }
 }
 // Clicar num card escolhe a fantasia do J1; clicar de novo confirma (bom pra mouse)
 document.querySelectorAll('.sel-card').forEach((card) => {
@@ -3254,8 +3296,10 @@ function confete(qtd = 70) {
 // Seleção por teclado
 addEventListener('keydown', (e) => {
   if (state !== 'selecao') return;
-  if (e.code === 'Escape') { // volta um passo: mapa -> skins -> título
-    if (selFase === 'mapa') mostrarSelecao(); else mostrarTitulo();
+  if (e.code === 'Escape') { // volta um passo: modo -> mapa -> skins -> título
+    if (selFase === 'modo') { selFase = 'mapa'; atualizarSelecao(); }
+    else if (selFase === 'mapa') mostrarSelecao();
+    else mostrarTitulo();
     return;
   }
   if (selFase === 'skins') {
@@ -3267,15 +3311,21 @@ addEventListener('keydown', (e) => {
     if (!selCfg[1].conf && e.code === 'KeyK') { selCfg[1].conf = true; som.confirmar(); }
     if (e.code === 'KeyC') addBot(); // dá pra chamar o bot já na escolha
     checarFaseMapa();
-  } else {
-    if (e.code === 'KeyA') { setMapa(mapaIdx - 1); som.selecionar(); }
-    if (e.code === 'KeyD') { setMapa(mapaIdx + 1); som.selecionar(); }
+  } else if (selFase === 'mapa') { // tela de arena (cards com foto, preview ao vivo atrás)
+    if (e.code === 'KeyA' || e.code === 'ArrowLeft') { setMapa(mapaIdx - 1); som.selecionar(); }
+    if (e.code === 'KeyD' || e.code === 'ArrowRight') { setMapa(mapaIdx + 1); som.selecionar(); }
     if (e.code === 'KeyX') { setMapa((Math.random() * MAPAS.length) | 0); som.confirmar(); } // 🎲 sorteio
     if (e.code === 'KeyC') addBot();
-    if (e.code === 'KeyN') { modoIdx = (modoIdx + 1) % MODOS.length; som.selecionar(); } // modo de jogo
+    if (e.code === 'KeyN') { modoIdx = (modoIdx + 1) % MODOS.length; som.selecionar(); } // atalho antigo
+    if (e.code === 'KeyJ') alternarModelo3D(); // liga/desliga o Jaeger (preview + partida)
+    if (e.code === 'KeyF' || e.code === 'Enter') { selFase = 'modo'; som.confirmar(); }
+  } else { // tela de modo de jogo
+    if (e.code === 'KeyA' || e.code === 'ArrowLeft') { modoIdx = (modoIdx + MODOS.length - 1) % MODOS.length; som.selecionar(); }
+    if (e.code === 'KeyD' || e.code === 'ArrowRight' || e.code === 'KeyN') { modoIdx = (modoIdx + 1) % MODOS.length; som.selecionar(); }
     if (e.code === 'KeyV') { nivelIdx = (nivelIdx + 1) % NIVEIS.length; som.selecionar(); } // dificuldade dos bots
     if (e.code === 'KeyG') { modifIdx = (modifIdx + 1) % MODIFS.length; som.selecionar(); } // modificador de festa
-    if (e.code === 'KeyJ') alternarModelo3D(); // liga/desliga o Jaeger (preview + partida)
+    if (e.code === 'KeyC') addBot();
+    if (e.code === 'KeyJ') alternarModelo3D();
     if (e.code === 'KeyF') { iniciarLuta(); return; }
   }
   atualizarSelecao();
@@ -3307,9 +3357,14 @@ function menuGamepad() {
       }
       checarFaseMapa();
       atualizarSelecao();
-    } else if (g === 0) {
+    } else if (g === 0 && selFase === 'mapa') {
       if (esq) { setMapa(mapaIdx - 1); som.selecionar(); }
       if (dir) { setMapa(mapaIdx + 1); som.selecionar(); }
+      if (a) { selFase = 'modo'; som.confirmar(); }
+      atualizarSelecao();
+    } else if (g === 0) { // fase modo
+      if (esq) { modoIdx = (modoIdx + MODOS.length - 1) % MODOS.length; som.selecionar(); }
+      if (dir) { modoIdx = (modoIdx + 1) % MODOS.length; som.selecionar(); }
       if (a) { iniciarLuta(); return; }
       atualizarSelecao();
     }
@@ -3683,6 +3738,7 @@ function iniciarOnline() {
     if (e.code === 'KeyT') online.ws.send(JSON.stringify({ t: 'lutador' }));  // QUALQUER um troca robô↔monstro
     if (e.code === 'KeyB') online.ws.send(JSON.stringify({ t: 'arena' }));    // host troca a variante de arena
     if (e.code === 'KeyH') online.ws.send(JSON.stringify({ t: 'morro' }));    // host liga o rei do morro 👑
+    if (e.code === 'KeyY') online.ws.send(JSON.stringify({ t: 'times' }));    // host liga TIMES 🔴x🔵 (até 10x10)
     // provocações 😂💀😱❤️ nas teclas 1-4 (valem a qualquer momento)
     if (e.code === 'Digit1') online.ws.send(JSON.stringify({ t: 'grito', g: 0 }));
     if (e.code === 'Digit2') online.ws.send(JSON.stringify({ t: 'grito', g: 1 }));
@@ -3810,7 +3866,7 @@ function receberSnap(m) {
   for (const pl of m.pl) {
     let v = online.visuais.get(pl.s);
     if (!v || v.skin !== pl.sk) {
-      if (v) destroyVisual(v.meshes);
+      if (v) { destroyVisual(v.meshes); if (v.anelT) { scene.remove(v.anelT); v.anelT = null; } }
       // online usa .modeloHint (não .modelo): o modelo segue a fantasia escolhida
       // quando o estilo 'j' está ligado, mas o fallback de performance ainda manda.
       const base = SKINS[pl.sk % SKINS.length];
@@ -3819,6 +3875,16 @@ function receberSnap(m) {
       online.visuais.set(pl.s, v);
     }
     garantirNomeSprite(v, pl.s); // plaquinha com o apelido sobre a cabeça
+    // TIMES 🔴x🔵: anel colorido no chão marcando o time (slot par/ímpar)
+    if (m.tm && !v.anelT) {
+      v.anelT = new THREE.Mesh(
+        new THREE.RingGeometry(0.3, 0.42, 32),
+        new THREE.MeshBasicMaterial({ color: CORES_TIME[pl.s % 2], transparent: true, opacity: 0.75, side: THREE.DoubleSide, depthWrite: false }),
+      );
+      v.anelT.rotation.x = -Math.PI / 2;
+      scene.add(v.anelT);
+    } else if (!m.tm && v.anelT) { scene.remove(v.anelT); v.anelT = null; }
+    if (v.anelT) v.anelT.visible = !!pl.v;
     if (pl.es && Math.random() < 0.35 && v.meshes.torso) { // 🛡️ escudo: bolhas azuis
       const tp = v.meshes.torso.position;
       spawnFx(texBolinha, { x: tp.x, y: tp.y, z: tp.z }, { escala: 0.12, vida: 0.4, cor: 0x6ec8ff, vy: 0.5 });
@@ -3827,6 +3893,7 @@ function receberSnap(m) {
   for (const [s, v] of online.visuais) {
     if (!m.pl.some((p) => p.s === s)) {
       destroyVisual(v.meshes);
+      if (v.anelT) scene.remove(v.anelT);
       online.visuais.delete(s);
     }
   }
@@ -3869,8 +3936,9 @@ function receberSnap(m) {
     const ko = Math.round(((pl.d || 0) / 4) * 100); // 0..100% até o nocaute
     const quase = (pl.d || 0) >= 3.5 ? 'box-shadow:0 0 6px rgba(255,60,50,.9);' : '';
     const apelido = online.nomes.get(pl.s) || '';
+    const corTime = m.tm ? `border:3px solid ${pl.s % 2 ? '#40a0ff' : '#ff5252'};` : ''; // TIMES: moldura 🔴/🔵
     return `<span style="display:inline-flex;flex-direction:column;align-items:center;gap:2px;${mortoOp}">` +
-      `<span style="display:inline-flex;align-items:center;gap:3px"><img class="retrato" style="width:${tam}px;height:${tam}px;margin:0 2px" src="${ASSET(`assets/retratos/${nm.id}.jpg`)}" onerror="this.style.display='none'"><b>${pl.sc}</b></span>` +
+      `<span style="display:inline-flex;align-items:center;gap:3px"><img class="retrato" style="width:${tam}px;height:${tam}px;margin:0 2px;${corTime}" src="${ASSET(`assets/retratos/${nm.id}.jpg`)}" onerror="this.style.display='none'"><b>${pl.sc}</b></span>` +
       (apelido ? `<span style="font-size:11px;font-weight:700;opacity:.9;max-width:${tam + 26}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${apelido}</span>` : '') +
       `<span style="width:${tam + 12}px;height:4px;border-radius:3px;background:rgba(0,0,0,.45);overflow:hidden;${quase}"><span style="display:block;height:100%;width:${ko}%;background:linear-gradient(90deg,#ffd34a,#ff7a2f);transition:width .1s"></span></span></span>`;
   }).join('');
@@ -3882,7 +3950,7 @@ function receberSnap(m) {
     const lista = [...online.nomes.values()];
     let quem = lista.length ? `<br>na sala: <b>${lista.slice(0, 8).join('</b> · <b>')}</b>${lista.length > 8 ? ` +${lista.length - 8}` : ''}` : '';
     if (m.rk && m.rk.length) quem += `<br>🏆 placar da noite: ${m.rk.map(([n, v]) => `<b>${n}</b> ${v}`).join(' &nbsp;·&nbsp; ')}`;
-    showMsg('SALA ONLINE 🌐', `${m.mo || ''} — <b>${m.na || 0}/${m.cap || 0}</b> na sala &nbsp;·&nbsp; ${m.pt || ''} &nbsp;·&nbsp; arena: <b>${m.an || 'CLÁSSICA'}</b>${m.mr ? ' &nbsp;·&nbsp; 👑 <b>REI DO MORRO</b>' : ''}${quem}<br><b>T</b> troca 🤖↔🦖 &nbsp;·&nbsp; <b>1-4</b> provocam 😂 &nbsp;·&nbsp; host: <b>F</b> começa &nbsp;·&nbsp; <b>M</b> modo &nbsp;·&nbsp; <b>N</b> pontuação &nbsp;·&nbsp; <b>B</b> arena &nbsp;·&nbsp; <b>H</b> 👑`);
+    showMsg('SALA ONLINE 🌐', `${m.mo || ''} — <b>${m.na || 0}/${m.cap || 0}</b> na sala &nbsp;·&nbsp; ${m.pt || ''} &nbsp;·&nbsp; arena: <b>${m.an || 'CLÁSSICA'}</b>${m.mr ? ' &nbsp;·&nbsp; 👑 <b>REI DO MORRO</b>' : ''}${m.tm ? ' &nbsp;·&nbsp; 🔴🔵 <b>TIMES</b> (par x ímpar)' : ''}${quem}<br><b>T</b> troca 🤖↔🦖 &nbsp;·&nbsp; <b>1-4</b> provocam 😂 &nbsp;·&nbsp; host: <b>F</b> começa &nbsp;·&nbsp; <b>M</b> modo &nbsp;·&nbsp; <b>N</b> pontuação &nbsp;·&nbsp; <b>B</b> arena &nbsp;·&nbsp; <b>H</b> 👑 &nbsp;·&nbsp; <b>Y</b> 🔴🔵`);
     online.msgAtual = '__lobby__'; online._fimMostrado = false; online.faseFinal = null; online.melhorPend = null;
   } else if (m.st === 'fim') {
     if (!online._fimMostrado) {
@@ -3987,6 +4055,7 @@ function aplicarSnapOnline(m1, m2, f) {
       msh.quaternion.set(lerp(x1 * s2, x2), lerp(y1 * s2, y2), lerp(z1 * s2, z2), lerp(w1 * s2, w2)).normalize();
       o += 6;
     }
+    if (v.anelT) v.anelT.position.set(v.meshes.pelvis.position.x, 0.04, v.meshes.pelvis.position.z); // anel do time acompanha
     // Carinha + respiração só existem no estilo gominha; no Jaeger ('j') o esqueleto cuida
     if (v.meshes._face) {
       const piscando = ((agora + pl2.s * 1.9) % 3.4) < 0.13;

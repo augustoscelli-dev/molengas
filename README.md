@@ -58,16 +58,16 @@ PULO / ESQUIVA** na direita. Ao abrir, já cai numa luta rápida contra um bot.
    direto pro jogo; **ESC** volta um passo em qualquer tela).
 1. **Escolha o lutador** no palco 3D: J1 com **A/D**, J2 com **←/→** (ou clique no
    card). Confirme com **F** (J1) e **K** (J2). Aperte **C** pra adicionar um **bot 🤖**.
-2. **Tela de mapa** (depois de todos confirmarem):
-   - **A / D** — troca o **mapa** (são 17!) · **X** sorteia 🎲
-   - **N** — modo (Melhor de 5 · Melhor de 3 · Morte Súbita · CAOS ⚔️ · REI DO MORRO 👑 ·
-     **DUPLAS 2v2 🤝** — você + aliado contra a dupla rival, sem fogo amigo, anel
-     colorido mostra o time; bots completam a sala)
-   - **G** — modificador de festa (LUA 🌙 · TURBO ⚡ · FORTÕES 💪)
-   - **V** — **dificuldade** dos bots (Fácil · Médio · Difícil)
-   - **J** — liga o **Jaeger × Kaiju** (robô × monstro, com força assimétrica)
-   - **F** — **começa!**
-3. No fim da partida, **R** volta pra seleção.
+2. **Tela de arena:** fileira de **cards com foto** de cada mapa (são 17!) e o
+   mapa de verdade montado ao vivo atrás. **A / D** navega · **X** sorteia 🎲 ·
+   clique no card também funciona · **F** confirma.
+3. **Tela de modo:** cards dos 6 modos — Melhor de 5 🏆 · Melhor de 3 ⚡ ·
+   Morte Súbita 💀 · CAOS ⚔️ · REI DO MORRO 👑 · **DUPLAS 2v2 🤝** (você +
+   aliado, sem fogo amigo, anel colorido mostra o time; bots completam a sala).
+   Na mesma tela: **V** — dificuldade dos bots · **G** — modificador de festa
+   (LUA 🌙 · TURBO ⚡ · FORTÕES 💪) · **J** — Jaeger × Kaiju · **F** — **começa!**
+4. No fim da partida, **R** volta pra seleção. **ESC** volta um passo em
+   qualquer tela do menu.
 
 ---
 
@@ -107,6 +107,10 @@ De tempos em tempos caem coisas na arena (mais rápido no modo **CAOS**):
    - **N** — pontuação (Melhor de 5/3, Morte Súbita)
    - **B** — arena: **CLÁSSICA**, **GELO 🧊** (escorrega) ou **ENCOLHE 😱** (o chão diminui!)
    - **H** — **REI DO MORRO 👑** (dominar o centro por 10s fecha o round)
+   - **Y** — **TIMES 🔴x🔵**: slots pares vs ímpares, **sem fogo amigo**, anel
+     colorido sob cada jogador — funciona com qualquer tamanho de sala, **até
+     10x10** no modo LOUCURA! O round fecha quando um time inteiro cai e o
+     ponto vai pro time todo.
    - **1-4** — provocações 😂💀😱❤️ · **T** troca seu lutador
    - No **celular** esses viram **botões na tela**.
 5. Uma **seta "VOCÊ"** fica sobre o seu boneco pra você se achar no meio da bagunça.
