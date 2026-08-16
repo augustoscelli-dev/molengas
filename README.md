@@ -58,7 +58,8 @@ PULO / ESQUIVA** na direita. Ao abrir, já cai numa luta rápida contra um bot.
    direto pro jogo; **ESC** volta um passo em qualquer tela).
 1. **Escolha o lutador** no palco 3D: J1 com **A/D**, J2 com **←/→** (ou clique no
    card). Confirme com **F** (J1) e **K** (J2). Aperte **C** pra adicionar um **bot 🤖**.
-2. **Tela de arena:** fileira de **cards com foto** de cada mapa (são 17!) e o
+2. **Tela de arena:** fileira de **cards com foto** de cada mapa (são 18! — no
+   **ABISMO 🕳️** não tem chão: agarre o rival e **arraste ele pro buraco**) e o
    mapa de verdade montado ao vivo atrás. **A / D** navega · **X** sorteia 🎲 ·
    clique no card também funciona · **F** confirma.
 3. **Tela de modo:** cards dos 6 modos — Melhor de 5 🏆 · Melhor de 3 ⚡ ·

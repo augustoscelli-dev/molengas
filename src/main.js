@@ -1817,6 +1817,55 @@ const MAPAS = [
       };
     },
   },
+  {
+    nome: 'ABISMO',
+    desc: 'sem chão — arrasta o rival pro buraco',
+    fundoTex: FUNDOS.noite,
+    amb: 'vento',
+    semHolofotes: true, // no vazio só a luz fria da noite (cones lavariam o breu)
+    build(m) {
+      // Vazio total embaixo: caiu, morreu. Ilhas + pontes finas — o jogo aqui é
+      // AGARRAR e arrastar o rival até a beirada (ou derrubar ele da ponte).
+      climaMapa({ ceu: 0x8090c0, chao: 0x10142a, fog: 0x0a0d20, sol: 0xb8c8ff, solInt: 1.25, expo: 1.02 });
+      const texPedra = (() => { // pedra escura com listras de perigo nas bordas
+        const c = document.createElement('canvas'); c.width = c.height = 256;
+        const g = c.getContext('2d');
+        g.fillStyle = '#4a4458'; g.fillRect(0, 0, 256, 256);
+        g.fillStyle = '#3e3950';
+        for (let i = 0; i < 40; i++) g.fillRect(Math.random() * 256, Math.random() * 256, 22, 10);
+        for (const y of [0, 244]) for (let x = 0; x < 256; x += 24) {
+          g.fillStyle = (x / 24) % 2 ? '#ffd94a' : '#221d30'; g.fillRect(x, y, 24, 12);
+        }
+        const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+      })();
+      const mat = new THREE.MeshStandardMaterial({ map: texPedra, roughness: 0.9 });
+      const bloco = (x, z, hx, hz) => {
+        const b = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(x, -0.3, z));
+        world.createCollider(RAPIER.ColliderDesc.cuboid(hx, 0.3, hz).setFriction(0.9).setCollisionGroups(GROUND_GROUPS), b);
+        m.bodies.push(b);
+        const mesh = new THREE.Mesh(new THREE.BoxGeometry(hx * 2, 0.6, hz * 2), mat);
+        mesh.position.set(x, -0.3, z); mesh.receiveShadow = true;
+        scene.add(mesh); m.meshes.push(mesh);
+        return mesh;
+      };
+      bloco(0, 0, 1.05, 1.05); // ilha central
+      bloco(-3, 0, 0.9, 0.9); bloco(3, 0, 0.9, 0.9);     // ilhas dos spawns (E/O)
+      bloco(0, -3.1, 0.9, 0.9); bloco(0, 3.1, 0.9, 0.9); // ilhas dos spawns (N/S)
+      bloco(-1.6, 0, 0.56, 0.26); bloco(1.6, 0, 0.56, 0.26); // pontes finas
+      bloco(0, -1.65, 0.26, 0.58); bloco(0, 1.65, 0.26, 0.58);
+      // pedregulhos flutuando lá embaixo (sensação de abismo sem fim)
+      const pedras = [];
+      for (let i = 0; i < 9; i++) {
+        const s = 0.4 + Math.random() * 0.8;
+        const p = new THREE.Mesh(new THREE.BoxGeometry(s, s * 0.7, s), new THREE.MeshStandardMaterial({ color: 0x2a2440, roughness: 1 }));
+        p.position.set((Math.random() * 2 - 1) * 7, -3 - Math.random() * 3, (Math.random() * 2 - 1) * 5);
+        p.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
+        scene.add(p); m.meshes.push(p);
+        pedras.push({ p, y0: p.position.y, ph: Math.random() * 6.3 });
+      }
+      m.update = (t) => { for (const r of pedras) r.p.position.y = r.y0 + Math.sin(t * 0.4 + r.ph) * 0.25; };
+    },
+  },
 ];
 
 let mapaIdx = 0;
@@ -1838,6 +1887,7 @@ function setMapa(idx) {
   if (MAPAS[mapaIdx].fundoTex) setFundoTex(MAPAS[mapaIdx].fundoTex());
   else setFundo(MAPAS[mapaIdx].fundo ?? 'assets/fundo.jpg');
   som.ambiente(MAPAS[mapaIdx].amb || null); // camada sonora da arena (vento/lava/neve/água)
+  for (const h of holofotes) h.visible = !MAPAS[mapaIdx].semHolofotes;
   for (const l of lutadores) {
     l.rag.props = mapa.props;
     l.rag.controle = mapa.controle ?? 1;
