@@ -5,3 +5,5 @@ servidor/node_modules/
 .env
 .fly/
 servidor/placar-noite.json
+desktop/node_modules/
+desktop/dist/

@@ -12,10 +12,12 @@ sem instalar nada (three.js + Rapier3D, ES modules puros).
 
 ## ▶️ Como abrir
 
-- **No PC:** dê dois cliques em **`jogar.bat`** (sobe um servidor local e abre o
-  navegador). Abrir o `index.html` direto **não funciona** — o navegador bloqueia
-  a física e a arte.
-- **Publicado:** `https://augustoscelli-dev.github.io/molengas/`
+- **App desktop (o produto!):** `cd desktop && npm install && npm start` — janela
+  própria com o servidor online embutido. `npm run dist` gera o instalador
+  (.exe/.AppImage/.dmg). Plano de lojas em `docs/lancamento-lojas.md`.
+- **No PC (dev rápido):** dê dois cliques em **`jogar.bat`** (sobe um servidor
+  local e abre o navegador).
+- **Publicado (demo web):** `https://augustoscelli-dev.github.io/molengas/`
 
 ---
 

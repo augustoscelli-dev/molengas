@@ -1,0 +1,42 @@
+{
+  "name": "wobblers-desktop",
+  "productName": "WOBBLERS!",
+  "version": "0.1.0",
+  "description": "WOBBLERS! — briga de bonecos molengas (versão desktop)",
+  "main": "main.cjs",
+  "author": "Augusto Scelli",
+  "license": "UNLICENSED",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^38.2.1",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "dev.augustoscelli.wobblers",
+    "productName": "WOBBLERS",
+    "directories": { "output": "dist" },
+    "files": ["main.cjs"],
+    "extraResources": [
+      {
+        "from": "..",
+        "to": "jogo",
+        "filter": [
+          "index.html",
+          "src/**",
+          "libs/**",
+          "assets/**",
+          "servidor/**",
+          "!servidor/placar-noite.json",
+          "!**/*.md"
+        ]
+      }
+    ],
+    "win": { "target": "nsis" },
+    "nsis": { "oneClick": true, "shortcutName": "WOBBLERS!" },
+    "linux": { "target": "AppImage", "category": "Game" },
+    "mac": { "target": "dmg", "category": "public.app-category.games" }
+  }
+}
