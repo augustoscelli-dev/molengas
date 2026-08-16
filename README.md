@@ -60,8 +60,8 @@ PULO / ESQUIVA** na direita. Ao abrir, já cai numa luta rápida contra um bot.
    card). **Pinte o seu boneco** 🎨: J1 com **W/S**, J2 com **↑/↓** (12 tintas — o
    boneco no palco muda na hora). Confirme com **F** (J1) e **K** (J2). Aperte **C**
    pra adicionar um **bot 🤖**.
-2. **Tela de arena:** fileira de **cards com foto** de cada mapa (são 18! — no
-   **ABISMO 🕳️** não tem chão: agarre o rival e **arraste ele pro buraco**) e o
+2. **Tela de arena:** fileira de **cards com foto** de cada mapa (são 20! — no
+   **ABISMO 🕳️** não tem chão, no **JARDIM 🌿** a grama amassa na briga e o **DOJO 🥋** tem sacos de pancada pra treinar) e o
    mapa de verdade montado ao vivo atrás. **A / D** navega · **X** sorteia 🎲 ·
    clique no card também funciona · **F** confirma.
 3. **Tela de modo:** cards dos 6 modos — Melhor de 5 🏆 · Melhor de 3 ⚡ ·
@@ -95,6 +95,7 @@ De tempos em tempos caem coisas na arena (mais rápido no modo **CAOS**):
 | 🏏 Bastão / 🔧 Cano | Pancada; quanto mais rápido o swing, mais forte |
 | 🔨 Martelo | Pesadão — manda o oponente voando (ring-out fácil) |
 | 🔫 Laser | Segure e **soco** pra atirar; superaquece se spammar |
+| 🪝 Gancho | **Soco** com ele na mão ARPOA o rival à frente e o **puxa** — combo cruel no ABISMO |
 | 💣 Bomba | Pega e o pavio acende — **jogue no rival antes de explodir!** |
 
 **Pega** com **agarrar**, **usa** com **soco**, e **arremessa** soltando o agarrar.

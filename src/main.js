@@ -577,6 +577,24 @@ const ARMAS_DEF = {
       return g;
     },
   },
+  // 🪝 GANCHO: soco com ele na mão ARPOA o rival mais próximo à frente e o PUXA.
+  gancho: {
+    icone: '🪝',
+    y0: 0.4, massa: 1.6, alcance: 0.45, forca: 4,
+    puxa: true, alcancePuxa: 4.5, cadencia: 1.2,
+    collider: () => RAPIER.ColliderDesc.capsule(0.18, 0.07),
+    mesh: () => {
+      const g = new THREE.Group();
+      const mMetal = new THREE.MeshStandardMaterial({ color: 0x8890a0, metalness: 0.85, roughness: 0.3 });
+      const cabo = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.05, 0.4, 10), toonMat(THREE, 0x6a4a28));
+      const haste = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.22, 10), mMetal);
+      haste.position.y = 0.3;
+      const curva = new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.028, 10, 16, Math.PI * 1.25), mMetal);
+      curva.position.y = 0.42; curva.rotation.z = Math.PI * 0.62;
+      g.add(cabo, haste, curva);
+      return g;
+    },
+  },
 };
 // Cache dos modelos de arma (GLB do Meshy) — carrega uma vez, clona a cada drop.
 const armaGLBcache = {};
@@ -1874,6 +1892,109 @@ const MAPAS = [
         pedras.push({ p, y0: p.position.y, ph: Math.random() * 6.3 });
       }
       m.update = (t) => { for (const r of pedras) r.p.position.y = r.y0 + Math.sin(t * 0.4 + r.ph) * 0.25; };
+    },
+  },
+  {
+    nome: 'JARDIM',
+    desc: 'grama alta que amassa na briga',
+    fundoTex: FUNDOS.ceuAberto,
+    semHolofotes: true, // dia claro: holofote viraria clarão
+    build(m) {
+      // Gramado ensolarado com ~900 lâminas de grama INSTANCIADAS: balançam com
+      // o vento e AMASSAM onde os bonecos pisam (levantando devagar depois).
+      climaMapa({ ceu: 0x9fd4f0, chao: 0x2e5c1e, fog: 0x8fc4a8, sol: 0xffeab0, solInt: 1.15, expo: 0.95 });
+      const texGrama = (() => {
+        const c = document.createElement('canvas'); c.width = c.height = 256;
+        const g = c.getContext('2d');
+        g.fillStyle = '#3f7a2c'; g.fillRect(0, 0, 256, 256);
+        for (let i = 0; i < 260; i++) {
+          g.strokeStyle = `hsl(${100 + Math.random() * 20}, 45%, ${26 + Math.random() * 14}%)`;
+          const x = Math.random() * 256, y = Math.random() * 256;
+          g.beginPath(); g.moveTo(x, y); g.lineTo(x + (Math.random() * 6 - 3), y - 6 - Math.random() * 6); g.stroke();
+        }
+        const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+        t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(4, 3);
+        return t;
+      })();
+      chaoFixo(m, 5.5, 4, new THREE.MeshStandardMaterial({ map: texGrama, roughness: 0.95 }));
+      const N = 900;
+      const geoL = new THREE.PlaneGeometry(0.055, 0.3); geoL.translate(0, 0.15, 0);
+      const matL = new THREE.MeshStandardMaterial({ color: 0xffffff, side: THREE.DoubleSide, roughness: 0.9 });
+      const inst = new THREE.InstancedMesh(geoL, matL, N);
+      scene.add(inst); m.meshes.push(inst);
+      const laminas = [];
+      const cor = new THREE.Color();
+      for (let i = 0; i < N; i++) {
+        laminas.push({ x: (Math.random() * 2 - 1) * 5.2, z: (Math.random() * 2 - 1) * 3.7, f: Math.random() * 6.3, rot: Math.random() * 6.3, alt: 1 });
+        inst.setColorAt(i, cor.setHSL(0.28 + Math.random() * 0.07, 0.55, 0.3 + Math.random() * 0.14));
+      }
+      if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
+      const M4 = new THREE.Matrix4(), Q4 = new THREE.Quaternion(), E4 = new THREE.Euler(), V4 = new THREE.Vector3(), S4 = new THREE.Vector3();
+      m.update = (t) => {
+        for (let i = 0; i < N; i++) {
+          const d = laminas[i];
+          let alvo = 1;
+          for (const l of lutadores) { // pisou/caiu em cima: amassa
+            const pp = l.rag.parts.pelvis.translation();
+            const ax = pp.x - d.x, az = pp.z - d.z;
+            if (ax * ax + az * az < 0.32 && pp.y < 1.3) { alvo = 0.16; break; }
+          }
+          d.alt += (alvo - d.alt) * (alvo < d.alt ? 0.5 : 0.018); // amassa rápido, levanta devagar
+          E4.set(Math.sin(t * 1.7 + d.f) * 0.17 * d.alt, d.rot, 0);
+          Q4.setFromEuler(E4);
+          M4.compose(V4.set(d.x, 0, d.z), Q4, S4.set(1, Math.max(0.12, d.alt), 1));
+          inst.setMatrixAt(i, M4);
+        }
+        inst.instanceMatrix.needsUpdate = true;
+      };
+      // borboletas passeando 🦋
+      const bors = [];
+      for (let i = 0; i < 5; i++) {
+        const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: texBolinha, color: [0xffd94a, 0xff9ad0, 0x9ad0ff][i % 3], transparent: true, depthWrite: false }));
+        s.scale.setScalar(0.12); scene.add(s); m.meshes.push(s);
+        bors.push({ s, f: Math.random() * 6.3, r: 2 + Math.random() * 2.5 });
+      }
+      const upGrama = m.update;
+      m.update = (t) => {
+        upGrama(t);
+        for (const b of bors) b.s.position.set(Math.sin(t * 0.4 + b.f) * b.r, 0.7 + Math.sin(t * 2.2 + b.f) * 0.25, Math.cos(t * 0.33 + b.f) * (b.r * 0.7));
+      };
+    },
+  },
+  {
+    nome: 'DOJO',
+    desc: 'treino livre — sacos de pancada',
+    build(m) {
+      // Tatame zen com 3 sacos de pancada pendurados por mola: teste golpes,
+      // socão e tintas sem pressão (dá pra jogar partida normal aqui também).
+      climaMapa({ ceu: 0xf2e4c8, chao: 0x6a5a3a, fog: 0xd8c8a8, sol: 0xfff0d0, solInt: 1.4 });
+      const texTatame = (() => {
+        const c = document.createElement('canvas'); c.width = c.height = 256;
+        const g = c.getContext('2d');
+        g.fillStyle = '#9ab06a'; g.fillRect(0, 0, 256, 256);
+        g.strokeStyle = '#7a9050'; g.lineWidth = 4;
+        for (let i = 0; i <= 4; i++) { g.beginPath(); g.moveTo(i * 64, 0); g.lineTo(i * 64, 256); g.stroke(); g.beginPath(); g.moveTo(0, i * 64); g.lineTo(256, i * 64); g.stroke(); }
+        const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+        t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(3, 2.2);
+        return t;
+      })();
+      chaoFixo(m, 5.5, 4, new THREE.MeshStandardMaterial({ map: texTatame, roughness: 0.9 }));
+      for (const [sx, sz] of [[-2.6, -1.6], [0, 2], [2.6, -1.6]]) {
+        const anc = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(sx, 3.4, sz));
+        const saco = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(sx, 1.5, sz).setLinearDamping(0.5).setAngularDamping(0.7));
+        world.createCollider(RAPIER.ColliderDesc.capsule(0.42, 0.26).setMass(10).setFriction(0.5).setCollisionGroups(PROP_GROUPS), saco);
+        world.createImpulseJoint(RAPIER.JointData.spherical({ x: 0, y: 0, z: 0 }, { x: 0, y: 1.9, z: 0 }), anc, saco, true);
+        m.bodies.push(anc, saco);
+        const grp = new THREE.Group();
+        const corpo = new THREE.Mesh(new THREE.CapsuleGeometry(0.26, 0.84, 6, 14), toonMat(THREE, 0xc0392b));
+        const topo = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.09, 0.2, 10), toonMat(THREE, 0x4a3a28));
+        topo.position.y = 0.62;
+        grp.add(corpo, topo);
+        grp.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+        scene.add(grp); m.meshes.push(grp);
+        m.syncPairs.push([saco, grp]);
+        m.props.push(saco); // dá pra socar E agarrar o saco
+      }
     },
   },
 ];
@@ -4792,6 +4913,37 @@ function frame(t) {
       arma.calor = Math.min(arma.calorMax, arma.calor + arma.calorPorTiro);
       if (arma.calor >= arma.calorMax && !arma.quente) { arma.quente = true; som.overheat?.(); }
       dispararLaser(l, arma);
+    }
+  }
+  // 🪝 GANCHO: soco com ele na mão arpoa o rival mais próximo à frente e o PUXA
+  for (const l of lutadores) {
+    const g = mapa.armas && mapa.armas.find((a) => a.puxa && l.rag.grabJoints.some((gj) => gj && gj.body === a.body));
+    if (!g) continue;
+    if (l.rag.lastPunchStartAt > (l._ganchoVisto ?? -1)) {
+      l._ganchoVisto = l.rag.lastPunchStartAt;
+      if (simNow < (l._ganchoCd ?? 0)) continue;
+      l._ganchoCd = simNow + g.cadencia;
+      const me = l.rag.parts.torso.translation();
+      const dx = Math.sin(l.rag.heading), dz = Math.cos(l.rag.heading);
+      let alvo = null, bd = g.alcancePuxa;
+      for (const o of rivaisDe(l, true)) {
+        const q = o.rag.parts.torso.translation();
+        const vx = q.x - me.x, vz = q.z - me.z, d = Math.hypot(vx, vz);
+        if (d < bd && d > 0.4 && (vx * dx + vz * dz) / (d || 1) > 0.45) { bd = d; alvo = o; }
+      }
+      som.arremesso();
+      if (alvo) {
+        const q = alvo.rag.parts.torso.translation();
+        const vx = me.x - q.x, vz = me.z - q.z, d = Math.hypot(vx, vz) || 1;
+        for (const pn of ['torso', 'pelvis']) alvo.rag.parts[pn].applyImpulse({ x: (vx / d) * 6.5, y: 1.5, z: (vz / d) * 6.5 }, true);
+        alvo.rag.stun(simNow + 0.7);
+        alvo.rag._agr = l.rag; alvo.rag._agrAt = simNow; // autor (pra melhor jogada)
+        for (let i = 1; i <= 6; i++) { // corrente visual rapidinha
+          const k = i / 7;
+          trailFx({ x: me.x + (q.x - me.x) * k, y: me.y + (q.y - me.y) * k + 0.1, z: me.z + (q.z - me.z) * k }, 0xffe08a);
+        }
+        som.agarra(); trauma = Math.min(1, trauma + 0.3);
+      }
     }
   }
   updateBeams(fdt);
