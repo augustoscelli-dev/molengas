@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { networkInterfaces } from 'node:os';
 import { WebSocketServer } from 'ws';
 import * as RAPIER from '../libs/rapier3d.es.js';
-import { Ragdoll, PARTS, ARENA } from '../src/ragdoll.js';
+import { Ragdoll, PARTS, ARENA, DANO_KO } from '../src/ragdoll.js';
 
 await RAPIER.init();
 
@@ -170,11 +170,11 @@ montarArena(MODOS_SALA[salaModo].arena);
 // ---------- Armas (só a física; o cliente desenha) ----------
 // tipos: índice usado no snapshot (bastao=0, cano=1, martelo=2, laser=3, bomba=4)
 const ARMAS_DEF_S = {
-  bastao:  { y0: 0.55, massa: 2.6, alcance: 0.72, forca: 10, col: () => RAPIER.ColliderDesc.capsule(0.32, 0.06) },
-  cano:    { y0: 0.5,  massa: 3.2, alcance: 0.66, forca: 12, col: () => RAPIER.ColliderDesc.capsule(0.36, 0.05) },
-  martelo: { y0: 0.6,  massa: 4.6, alcance: 0.82, forca: 22, col: () => RAPIER.ColliderDesc.capsule(0.3, 0.09) },
+  bastao:  { y0: 0.55, massa: 2.6, alcance: 0.72, forca: 7, col: () => RAPIER.ColliderDesc.capsule(0.32, 0.06) },
+  cano:    { y0: 0.5,  massa: 3.2, alcance: 0.66, forca: 8, col: () => RAPIER.ColliderDesc.capsule(0.36, 0.05) },
+  martelo: { y0: 0.6,  massa: 4.6, alcance: 0.82, forca: 10, col: () => RAPIER.ColliderDesc.capsule(0.3, 0.09) },
   laser:   { y0: 0.4,  massa: 1.5, alcance: 0.42, forca: 4, tiro: true, alcanceTiro: 7, cadencia: 0.28, danoTiro: 1, calorMax: 6, calorPorTiro: 1, resfria: 2.2, col: () => RAPIER.ColliderDesc.capsule(0.12, 0.13) },
-  bomba:   { y0: 0.4,  massa: 2.0, alcance: 0.5, forca: 4, bomba: true, fuse: 3.2, raio: 2.5, forcaExpl: 18, col: () => RAPIER.ColliderDesc.ball(0.17) },
+  bomba:   { y0: 0.4,  massa: 2.0, alcance: 0.5, forca: 4, bomba: true, fuse: 3.2, raio: 2.5, forcaExpl: 9, col: () => RAPIER.ColliderDesc.ball(0.17) },
 };
 const ARMA_TIPOS = ['bastao', 'cano', 'martelo', 'laser', 'bomba'];
 let armas = [];
@@ -193,7 +193,7 @@ function soltarArmaS(tipo, x, z) {
     id: proxArmaId++, tipo, body: b, alcance: def.alcance, forca: def.forca,
     tiro: !!def.tiro, alcanceTiro: def.alcanceTiro || 0, cadencia: def.cadencia || 0.5, danoTiro: def.danoTiro || 1,
     calor: 0, calorMax: def.calorMax || 6, calorPorTiro: def.calorPorTiro || 1, resfria: def.resfria || 2.2, quente: false,
-    bomba: !!def.bomba, fuse: def.fuse || 3.2, raio: def.raio || 2.4, forcaExpl: def.forcaExpl || 18, explodeEm: null,
+    bomba: !!def.bomba, fuse: def.fuse || 3.2, raio: def.raio || 2.4, forcaExpl: def.forcaExpl || 9, explodeEm: null,
   };
   armas.push(arma);
   atualizarPropsDosRags();
@@ -216,8 +216,8 @@ function explodirBombaS(arma) {
     if (d > arma.raio) continue;
     const f = arma.forcaExpl * (1 - d / arma.raio), nl = d || 1;
     for (const pn of ['torso', 'pelvis', 'head']) j.rag.parts[pn].applyImpulse({ x: (dx / nl) * f, y: 3 + f * 0.25, z: (dz / nl) * f }, true);
-    j.rag.dano = Math.min(4, j.rag.dano + 2); j.rag.stun(now + 1.4);
-    if (j.rag.dano >= 4 && !j.rag.isDowned(now)) j.rag.knockdown(now);
+    j.rag.dano = Math.min(DANO_KO, j.rag.dano + 2); j.rag.stun(now + 1.4);
+    if (j.rag.dano >= DANO_KO && !j.rag.isDowned(now)) j.rag.knockdown(now);
     j.rag.lastHitLandedAt = now;
   }
   ev('explosao', q(p.x), q(p.y), q(p.z));
@@ -238,9 +238,9 @@ function dispararLaserS(j, arma) {
   const ex = mp.x + dx * alvoT, ez = mp.z + dz * alvoT;
   ev('laser', q(mp.x), q(mp.y), q(mp.z), q(ex), q(mp.y), q(ez));
   if (alvo) {
-    alvo.rag.dano = Math.min(4, alvo.rag.dano + arma.danoTiro); alvo.rag.stun(now + 0.85);
+    alvo.rag.dano = Math.min(DANO_KO, alvo.rag.dano + arma.danoTiro); alvo.rag.stun(now + 0.85);
     alvo.rag._agr = j.rag; alvo.rag._agrAt = now; // autor do tiro
-    if (alvo.rag.dano >= 4 && !alvo.rag.isDowned(now)) alvo.rag.knockdown(now);
+    if (alvo.rag.dano >= DANO_KO && !alvo.rag.isDowned(now)) alvo.rag.knockdown(now);
     for (const pn of ['torso', 'pelvis']) alvo.rag.parts[pn].applyImpulse({ x: dx * 7, y: 1.6, z: dz * 7 }, true);
     alvo.rag.lastHitLandedAt = now;
   }
@@ -276,10 +276,10 @@ function tickArmas() {
         if (Math.hypot(ap.x - tp.x, ap.y - tp.y, ap.z - tp.z) < arma.alcance) {
           j._armaCd = now + 0.7;
           const forte = sp > 7.5;
-          j.rag.dano = Math.min(4, j.rag.dano + (forte ? 2 : 1)); j.rag.stun(now + (forte ? 1.5 : 1.0));
+          j.rag.dano = Math.min(DANO_KO, j.rag.dano + (forte ? 2 : 1)); j.rag.stun(now + (forte ? 1.5 : 1.0));
           const dono = [...jogadores.values()].find((x) => x.rag.grabJoints.some((g) => g && g.body === arma.body));
           if (dono) { j.rag._agr = dono.rag; j.rag._agrAt = now; } // autor da arma branca
-          if (j.rag.dano >= 4 && !j.rag.isDowned(now)) j.rag.knockdown(now);
+          if (j.rag.dano >= DANO_KO && !j.rag.isDowned(now)) j.rag.knockdown(now);
           const dl = Math.hypot(av.x, av.z) || 1;
           for (const pn of ['torso', 'pelvis']) j.rag.parts[pn].applyImpulse({ x: (av.x / dl) * arma.forca, y: 2, z: (av.z / dl) * arma.forca }, true);
           j.rag.lastHitLandedAt = now; ev('bolada');
@@ -632,7 +632,7 @@ const _tick = setInterval(() => {
         const tp = j.rag.parts.torso.translation();
         if (Math.hypot(bp.x - tp.x, bp.y - tp.y, bp.z - tp.z) < 0.95) {
           j._bolaCd = now + 1.2;
-          j.rag.dano = Math.min(4, j.rag.dano + 1);
+          j.rag.dano = Math.min(DANO_KO, j.rag.dano + 1);
           j.rag.stun(now + 1.1);
           j.rag.lastHitLandedAt = now;
           ev('bolada');

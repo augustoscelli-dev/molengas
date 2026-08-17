@@ -33,6 +33,13 @@ const JOINTS = [
 // Limites da plataforma — fora disso as molas desligam e o boneco despenca.
 export const ARENA = { halfX: 5.5, halfZ: 4.0 };
 
+// Dano acumulado que derruba (nocaute). Estava espalhado como "4" em 17 lugares
+// entre cliente e servidor; virou constante pra os dois não descolarem. Subir
+// este número = luta mais longa. Calibrado por simulação: 26 dá rodada de ~30s
+// (era 4 = ~14s). O dano decai 0.12/s em update(), então trocação parada não
+// acumula — precisa de pressão contínua pra fechar o nocaute.
+export const DANO_KO = 26;
+
 // Fração do peso de cada parte que é "segurada" pela marionete enquanto em pé.
 const ANTIGRAV = {
   pelvis: 0.8, torso: 0.8, head: 0.8,
@@ -270,10 +277,22 @@ export class Ragdoll {
     // Buffs de power-up expiram
     if (now > this.buffVelAte) this.buffVel = 1;
     if (now > this.buffForcaAte) this.buffForca = 1;
+    // 🧯 FREIO DE LANÇAMENTO (ideia do Smash: a velocidade de lançamento decai
+    // 0.051 por frame). O golpe pode dar um tranco forte — que é o que se VÊ —
+    // porque logo depois o freio come a sobra e a distância fica curta. Sem isso
+    // "pancada visível" e "não mandar pra fora" eram o mesmo botão, e um sempre
+    // estragava o outro.
+    if (this._freioAte != null) {
+      const freando = now < this._freioAte;
+      if (freando !== this._freando) {
+        this._freando = freando;
+        for (const pn of ['torso', 'pelvis', 'head']) this.parts[pn]?.setLinearDamping(freando ? 3.4 : 0.3);
+      }
+    }
     // Fim do nocaute: zera o dano pra não cair de novo na hora e levanta
     if (this.downUntil && now >= this.downUntil) { this.downUntil = 0; this.dano = 0.5; this.hoverBlockUntil = now; }
     // recuperação gradual: dano de combo esvai, fôlego volta (não some no nocaute)
-    if (!this.isDowned(now)) this.dano = Math.max(0, this.dano - 0.25 * dt);
+    if (!this.isDowned(now)) this.dano = Math.max(0, this.dano - 0.12 * dt);
     this.folego = Math.min(1, this.folego + 0.22 * dt);
     if (this.hangingOnLedge()) this.stats.pendurado += dt;
     const pelvis = this.parts.pelvis;
@@ -342,8 +361,8 @@ export class Ragdoll {
         // 🧱 CAMBALEIO: com muito dano o boneco anda torto (sway senoidal) —
         // todo mundo vê de longe quem está quase caindo, e fugir cambaleando é cômico
         let grogue = 1;
-        if (this.dano >= 2.4) {
-          const s = Math.sin(now * 6.5 + (this._seedCamb ??= Math.random() * 6.3)) * 0.4 * Math.min(1, (this.dano - 2.2) / 1.6);
+        if (this.dano >= DANO_KO * 0.6) {
+          const s = Math.sin(now * 6.5 + (this._seedCamb ??= Math.random() * 6.3)) * 0.4 * Math.min(1, (this.dano - DANO_KO * 0.55) / (DANO_KO * 0.4));
           const px = nx - nz * s, pz = nz + nx * s, pl = Math.hypot(px, pz) || 1;
           nx = px / pl; nz = pz / pl;
           grogue = 0.9;
@@ -496,9 +515,9 @@ export class Ragdoll {
           const ddx = rh.x - mh.x, ddz = rh.z - mh.z, dl = Math.hypot(ddx, ddz) || 1;
           this.parts.head.applyImpulse({ x: (ddx / dl) * 5, y: 1.2, z: (ddz / dl) * 5 }, true);
           rb.applyImpulse({ x: (ddx / dl) * 7, y: 2.4, z: (ddz / dl) * 7 }, true);
-          alvoAgarrado.dano = Math.min(4, alvoAgarrado.dano + 2); // cabeçada dói o dobro
-          alvoAgarrado.stun(now + Math.min(2.6, 1.2 * (1 + alvoAgarrado.dano * 0.35)));
-          if (alvoAgarrado.dano >= 4 && !alvoAgarrado.isDowned(now)) alvoAgarrado.knockdown(now);
+          alvoAgarrado.dano = Math.min(DANO_KO, alvoAgarrado.dano + 2); // cabeçada dói o dobro
+          alvoAgarrado.stun(now + Math.min(2.6, 1.2 * (1 + alvoAgarrado.dano * (1.4 / DANO_KO))));
+          if (alvoAgarrado.dano >= DANO_KO && !alvoAgarrado.isDowned(now)) alvoAgarrado.knockdown(now);
           alvoAgarrado.lastHitLandedAt = now;
           this.stats.acertos++;
         } else {
@@ -600,18 +619,38 @@ export class Ragdoll {
                 // forcaSoco = quão forte ESTE lutador bate; resistencia = quanto o RIVAL aguenta
                 const kb = (this.forcaSoco || 1) * (this.buffForca || 1) * (AJUSTES.forcaSoco || 1) / (rival.resistencia || 1);
                 const fator = (this._voadora ? 1.35 : 1) * (this._socoFraco ? 0.55 : 1) * (this._chute ? 1.3 : 1) * (1 + (this._cargaGolpe || 0) * 1.1) * kb;
+                // 🎯 O empurrão CRESCE COM O DANO do rival (ideia do Smash).
+                // Rival inteiro quase não sai do lugar, então o começo da luta é
+                // trocação de perto em vez de "um soco e já voou pra fora"; quem
+                // está quase nocauteado voa longe, e a queda vira o clímax em vez
+                // de acidente dos 5 primeiros segundos.
+                const escala = 0.95 + (rival.dano / DANO_KO) * 1.6;
+                const emp = fator * escala;
+                rival._freioAte = now + 0.32; // liga o freio de lançamento (ver update)
+                // O empurrão baixo do começo deixava o rival PARADO no golpe —
+                // parecia boneco duro. O tranco de reação vem por TORQUE: torce o
+                // tronco, a cabeça chicoteia, o corpo cambaleia. Como torque não
+                // desloca, dá impacto sem mandar ninguém pra fora da arena.
+                const giro = (strong ? 2.4 : 1.7) * fator;
+                tb.applyTorqueImpulse({ x: dir[2] * giro, y: (strong ? 1.8 : 1.1) * fator, z: -dir[0] * giro }, true);
+                if (pname !== 'head') {
+                  const cab = rival.parts.head;
+                  cab.applyTorqueImpulse({ x: dir[2] * giro * 0.7, y: 0, z: -dir[0] * giro * 0.7 }, true);
+                }
                 tb.applyImpulse({
-                  x: dir[0] * (strong ? 6.5 : 5) * fator,
-                  y: (this._chute ? 1.0 : (strong ? 2.2 : 1.5)) * fator, // chute empurra mais reto (bom p/ ring-out)
-                  z: dir[2] * (strong ? 6.5 : 5) * fator,
+                  x: dir[0] * (strong ? 4 : 3.2) * emp,
+                  // o y é o que tira o corpo do chão e faz passar por cima da amurada:
+                  // baixo demais o golpe perde peso, alto demais vira ring-out fácil
+                  y: (this._chute ? 0.7 : (strong ? 1.2 : 0.9)) * emp,
+                  z: dir[2] * (strong ? 4 : 3.2) * emp,
                 }, true);
                 // nocaute acumulativo: combo atordoa cada vez mais (rival mais resistente sobe o dano mais devagar)
-                rival.dano = Math.min(4, rival.dano + ((this.forcaSoco || 1) * (1 + (this._cargaGolpe || 0) * 0.8)) / (rival.resistencia || 1));
-                const dur = Math.min(2.6, (strong ? 1.35 : 0.4) * (1 + rival.dano * 0.35) * fator);
+                rival.dano = Math.min(DANO_KO, rival.dano + ((this.forcaSoco || 1) * (1 + (this._cargaGolpe || 0) * 0.8)) / (rival.resistencia || 1));
+                const dur = Math.min(2.6, (strong ? 1.35 : 0.4) * (1 + rival.dano * (1.4 / DANO_KO)) * fator);
                 rival.stun(now + dur);
                 rival._agr = this; rival._agrAt = now; // quem bateu por último (pra "melhor jogada")
                 // Encheu o dano => NOCAUTE: desaba mole (dá pra agarrar e arrastar)
-                if (rival.dano >= 4 && !rival.isDowned(now)) rival.knockdown(now);
+                if (rival.dano >= DANO_KO && !rival.isDowned(now)) rival.knockdown(now);
                 rival.lastHitLandedAt = now;
                 this.stats.acertos++;
                 this.punchHit = true;

@@ -1,6 +1,6 @@
 import * as THREE from '../libs/three.module.js';
 import * as RAPIER from '../libs/rapier3d.es.js';
-import { Ragdoll, PARTS, ARENA } from './ragdoll.js';
+import { Ragdoll, PARTS, ARENA, DANO_KO } from './ragdoll.js';
 import { MAPS, readInput, isDown } from './input.js';
 import { SKINS, getFaceTexture, toonMat, addOutline, vinilMat } from './skins.js';
 import { som, initSom } from './som.js';
@@ -527,7 +527,7 @@ function resetCaixotes(m) {
 const ARMAS_DEF = {
   bastao: {
     icone: '🏏',
-    y0: 0.55, massa: 2.6, alcance: 0.72, forca: 10,
+    y0: 0.55, massa: 2.6, alcance: 0.72, forca: 7,
     collider: () => RAPIER.ColliderDesc.capsule(0.32, 0.06),
     mesh: () => {
       const g = new THREE.Group();
@@ -539,7 +539,7 @@ const ARMAS_DEF = {
   },
   cano: {
     icone: '🔧',
-    y0: 0.5, massa: 3.2, alcance: 0.66, forca: 12,
+    y0: 0.5, massa: 3.2, alcance: 0.66, forca: 8,
     collider: () => RAPIER.ColliderDesc.capsule(0.36, 0.05),
     mesh: () => {
       const g = new THREE.Group();
@@ -552,7 +552,7 @@ const ARMAS_DEF = {
   },
   martelo: {
     icone: '🔨',
-    y0: 0.6, massa: 4.6, alcance: 0.82, forca: 22, // pesadão: swing lento mas manda longe (ring-out fácil)
+    y0: 0.6, massa: 4.6, alcance: 0.82, forca: 10, // pesadão: swing lento, tranco forte sem virar ring-out automático
     collider: () => RAPIER.ColliderDesc.capsule(0.3, 0.09),
     mesh: () => {
       const g = new THREE.Group();
@@ -565,7 +565,7 @@ const ARMAS_DEF = {
   bomba: {
     icone: '💣',
     y0: 0.4, massa: 2.0, alcance: 0.5, forca: 4,
-    bomba: true, fuse: 3.2, raio: 2.5, forcaExpl: 18, // acende ao pegar; joga no rival antes de estourar
+    bomba: true, fuse: 3.2, raio: 2.5, forcaExpl: 9, // acende ao pegar; joga no rival antes de estourar
     collider: () => RAPIER.ColliderDesc.ball(0.17),
     mesh: () => {
       const g = new THREE.Group();
@@ -660,7 +660,7 @@ function soltarArma(m, x, z, tipo = 'bastao') {
     tiro: !!def.tiro, alcanceTiro: def.alcanceTiro || 0, cadencia: def.cadencia || 0.5,
     danoTiro: def.danoTiro || 1, cor: def.cor || 0x37e5ff,
     calor: 0, calorMax: def.calorMax || 6, calorPorTiro: def.calorPorTiro || 1, resfria: def.resfria || 2.2, quente: false,
-    bomba: !!def.bomba, fuse: def.fuse || 3.2, raio: def.raio || 2.4, forcaExpl: def.forcaExpl || 17, explodeEm: null,
+    bomba: !!def.bomba, fuse: def.fuse || 3.2, raio: def.raio || 2.4, forcaExpl: def.forcaExpl || 9, explodeEm: null,
   });
   return b;
 }
@@ -719,10 +719,10 @@ function dispararLaser(l, arma) {
   powFx({ x: fx + dx * 0.4, y: fy, z: fz + dz * 0.4 });
   som.laser?.();
   if (alvo) {
-    alvo.rag.dano = Math.min(4, alvo.rag.dano + arma.danoTiro);
+    alvo.rag.dano = Math.min(DANO_KO, alvo.rag.dano + arma.danoTiro);
     alvo.rag.stun(simNow + 0.85);
     alvo.rag._agr = l.rag; alvo.rag._agrAt = simNow; // autor do tiro
-    if (alvo.rag.dano >= 4 && !alvo.rag.isDowned(simNow)) alvo.rag.knockdown(simNow);
+    if (alvo.rag.dano >= DANO_KO && !alvo.rag.isDowned(simNow)) alvo.rag.knockdown(simNow);
     for (const pn of ['torso', 'pelvis']) alvo.rag.parts[pn].applyImpulse({ x: dx * 7, y: 1.6, z: dz * 7 }, true);
     alvo.rag.lastHitLandedAt = simNow;
     burstEstrelas(ap); powFx(ap); trauma = Math.min(1, trauma + 0.4); hitStop = Math.max(hitStop, 0.05);
@@ -783,9 +783,9 @@ function explodirBomba(m, arma) {
     if (d > arma.raio) continue;
     const f = arma.forcaExpl * (1 - d / arma.raio), nl = d || 1;
     for (const pn of ['torso', 'pelvis', 'head']) l.rag.parts[pn].applyImpulse({ x: (dx / nl) * f, y: 3 + f * 0.25, z: (dz / nl) * f }, true);
-    l.rag.dano = Math.min(4, l.rag.dano + 2);
+    l.rag.dano = Math.min(DANO_KO, l.rag.dano + 2);
     l.rag.stun(simNow + 1.4);
-    if (l.rag.dano >= 4 && !l.rag.isDowned(simNow)) l.rag.knockdown(simNow);
+    if (l.rag.dano >= DANO_KO && !l.rag.isDowned(simNow)) l.rag.knockdown(simNow);
     l.rag.lastHitLandedAt = simNow;
   }
   powFx(p); burstEstrelas(p); puffFx(p);
@@ -1312,7 +1312,7 @@ const MAPAS = [
               }
               l.rag.releaseGrabs();
               l.rag.stun(now + 1.2);
-              l.rag.dano = Math.min(4, l.rag.dano + 1);
+              l.rag.dano = Math.min(DANO_KO, l.rag.dano + 1);
             }
           }
           som.bolada();
@@ -4064,7 +4064,7 @@ function updateHudBarras(now) {
   }
   for (const l of lutadores) {
     if (!l._hudKO) continue;
-    const ko = Math.min(1, l.rag.dano / 4);
+    const ko = Math.min(1, l.rag.dano / DANO_KO);
     l._hudKO.style.width = (ko * 100).toFixed(0) + '%';
     l._hudFol.style.width = (Math.max(0, Math.min(1, l.rag.folego)) * 100).toFixed(0) + '%';
     const down = l.rag.isDowned(now);
@@ -5374,7 +5374,7 @@ function frame(t) {
       const tp = l.rag.parts.torso.translation();
       if (Math.hypot(bp.x - tp.x, bp.y - tp.y, bp.z - tp.z) < 0.95) {
         l._bolaCd = simNow + 1.2;
-        l.rag.dano = Math.min(4, l.rag.dano + 1);
+        l.rag.dano = Math.min(DANO_KO, l.rag.dano + 1);
         l.rag.stun(simNow + 1.1);
         l.rag.lastHitLandedAt = simNow;
         som.bolada();
@@ -5409,11 +5409,11 @@ function frame(t) {
       if (Math.hypot(ap.x - tp.x, ap.y - tp.y, ap.z - tp.z) < arma.alcance) {
         l._armaCd = simNow + 0.7;
         const forte = sp > 7.5;
-        l.rag.dano = Math.min(4, l.rag.dano + (forte ? 2 : 1));
+        l.rag.dano = Math.min(DANO_KO, l.rag.dano + (forte ? 2 : 1));
         l.rag.stun(simNow + (forte ? 1.5 : 1.0));
         const dono = lutadores.find((x) => x.rag.grabJoints.some((g) => g && g.body === arma.body));
         if (dono) { l.rag._agr = dono.rag; l.rag._agrAt = simNow; } // autor da arma branca
-        if (l.rag.dano >= 4 && !l.rag.isDowned(simNow)) l.rag.knockdown(simNow);
+        if (l.rag.dano >= DANO_KO && !l.rag.isDowned(simNow)) l.rag.knockdown(simNow);
         const dl = Math.hypot(av.x, av.z) || 1;
         for (const pn of ['torso', 'pelvis']) {
           l.rag.parts[pn].applyImpulse({ x: (av.x / dl) * arma.forca, y: 2, z: (av.z / dl) * arma.forca }, true);
@@ -5445,7 +5445,7 @@ function frame(t) {
     if (simNow > proxPowerEm && powerups.length < 2) {
       const tipos = Object.keys(POWERDEF);
       // diretor: se alguém está muito machucado, o drop tende a ser cura (dá chance de virada)
-      const machucado = lutadores.some((l) => l.vivo && l.rag.dano > 2.5);
+      const machucado = lutadores.some((l) => l.vivo && l.rag.dano > DANO_KO * 0.625);
       const tipoPw = machucado && Math.random() < 0.6 ? 'cura' : tipos[(Math.random() * tipos.length) | 0];
       const px = (Math.random() * 2 - 1) * 2.2, pz = (Math.random() * 2 - 1) * 1.6;
       spawnPower(tipoPw, px, pz);
@@ -5564,11 +5564,11 @@ function frame(t) {
       const pos = p.parts.head.translation();
       burstEstrelas(pos);
       powFx(pos);
-      som.acerto(1 + p.dano * 0.15); // vítima grogue = pancada soa maior
+      som.acerto(1 + p.dano * (0.6 / DANO_KO)); // vítima grogue = pancada soa maior
       som.vozDor(VOZES[l.slot]);
       // Golpe mais forte (quanto mais grogue, maior o baque) sacode e congela mais
-      trauma = Math.min(1, trauma + 0.5 + p.dano * 0.06);
-      hitStop = Math.max(hitStop, 0.05 + p.dano * 0.012);
+      trauma = Math.min(1, trauma + 0.5 + p.dano * (0.24 / DANO_KO));
+      hitStop = Math.max(hitStop, 0.05 + p.dano * (0.048 / DANO_KO));
     }
     if (p.stunUntil > 0 && p.stunUntil > (p._stunVisto ?? 0)) {
       p._stunVisto = p.stunUntil;
