@@ -58,9 +58,14 @@ const ANTIGRAV = {
   // Era 0.8 no miolo: 80% da gravidade anulada deixava o corpo sem peso, e o
   // boneco lia como marionete em vez de corpo. Menos anti-gravidade = o tronco
   // afunda no passo, assenta na parada, e o golpe tem onde repercutir.
-  pelvis: 0.62, torso: 0.58, head: 0.55,
-  upperArmL: 0.32, upperArmR: 0.32, forearmL: 0.28, forearmR: 0.28,
-  thighL: 0.2, thighR: 0.2, calfL: 0.2, calfR: 0.2,
+  // Era 0.8 no miolo, quando o esqueleto não tinha junta e precisava ser
+  // segurado no ar. Com curso nas juntas o corpo se sustenta, então a muleta
+  // pode cair: menos antigravidade = o tronco afunda no passo, assenta na
+  // parada e o golpe tem onde repercutir. Verificado que continua em pé até
+  // 0.22, mas aí o pé começa a enterrar; 0.45 é o passo firme sem estragar.
+  pelvis: 0.45, torso: 0.42, head: 0.40,
+  upperArmL: 0.24, upperArmR: 0.24, forearmL: 0.2, forearmR: 0.2,
+  thighL: 0.15, thighR: 0.15, calfL: 0.15, calfR: 0.15,
 };
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -373,8 +378,9 @@ export class Ragdoll {
       }
       // Quadril flutuante. Era 1.0, mas a perna esticada só alcança 0.88 abaixo do
       // quadril. Com as juntas ganhando curso a perna passou a sustentar de outro
-      // jeito: 0.95 passou a AFUNDAR o pé 2,5 cm. Remedido, 0.99 é o ponto.
-      const f = clamp((0.99 - toi) * 950 - pv.y * 95, -160, 650);
+      // jeito. Remedido de novo ao baixar a antigravidade (corpo mais pesado afunda
+      // mais): 1.03 põe o pé no chão sem enterrar.
+      const f = clamp((1.03 - toi) * 950 - pv.y * 95, -160, 650);
       pelvis.applyImpulse({ x: 0, y: f * dt, z: 0 }, true);
       // Corda na cabeça
       const head = this.parts.head;
