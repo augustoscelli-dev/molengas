@@ -423,7 +423,7 @@ export class Ragdoll {
         }
         this.heading = Math.atan2(nx, nz);
         const speedAlong = pv.x * nx + pv.z * nz;
-        if (speedAlong < 2.4) {
+        if (speedAlong < 1.7) {
           const tr = 220 * grogue * this.controle * (this.buffVel || 1) * (this._carga > 0.1 ? 0.55 : 1);
           pelvis.applyImpulse({ x: nx * tr * dt, y: 0, z: nz * tr * dt }, true);
           this.parts.torso.applyImpulse({ x: nx * tr * 0.4 * dt, y: 0, z: nz * tr * 0.4 * dt }, true);
