@@ -816,9 +816,22 @@ const texAbismo = (() => {
   }
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
 })();
-function chaoFixo(m, hx, hz, mat, atrito = 0.8) {
+// 🥊 Altura da corda do ringue. Tem que ficar ACIMA da cintura (o quadril fica
+// em 0.99): em 0.75 o boneco passava por cima andando. Medido: 0.9 barra quem
+// anda e ainda deixa o arremesso passar. Mesmo valor no servidor.
+const CORDA_ALT = 0.9;
+function cordasFisicas(m, corpo, hx, hz) {
+  const e = 0.07, hy = CORDA_ALT / 2, cy = 0.3 + hy;
+  const par = (px, py, pz, x, z) => world.createCollider(
+    RAPIER.ColliderDesc.cuboid(px, py, pz).setTranslation(x, cy, z)
+      .setFriction(0.4).setCollisionGroups(GROUND_GROUPS), corpo);
+  par(hx + e, hy, e, 0, hz + e); par(hx + e, hy, e, 0, -(hz + e));
+  par(e, hy, hz + e, hx + e, 0); par(e, hy, hz + e, -(hx + e), 0);
+}
+function chaoFixo(m, hx, hz, mat, atrito = 0.8, cordas = false) {
   const g = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, -0.3, 0));
   world.createCollider(RAPIER.ColliderDesc.cuboid(hx, 0.3, hz).setFriction(atrito).setCollisionGroups(GROUND_GROUPS), g);
+  if (cordas) cordasFisicas(m, g, hx, hz);
   m.bodies.push(g);
   const deck = new THREE.Mesh(new THREE.BoxGeometry(hx * 2, 0.6, hz * 2), mat);
   deck.position.y = -0.3;

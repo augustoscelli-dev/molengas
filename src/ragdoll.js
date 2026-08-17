@@ -49,9 +49,8 @@ export const ARENA = { halfX: 5.5, halfZ: 4.0 };
 
 // Dano acumulado que derruba (nocaute). Estava espalhado como "4" em 17 lugares
 // entre cliente e servidor; virou constante pra os dois não descolarem. Subir
-// este número = luta mais longa. Calibrado por simulação: 26 dá rodada de ~30s
-// (era 4 = ~14s). O dano decai 0.12/s em update(), então trocação parada não
-// acumula — precisa de pressão contínua pra fechar o nocaute.
+// este número = luta mais longa. Calibrado por simulação: 26 dá rodada de ~34s.
+// O dano decai 0.12/s: trocação parada não acumula, precisa de pressão contínua.
 export const DANO_KO = 26;
 
 // Fração do peso de cada parte que é "segurada" pela marionete enquanto em pé.
@@ -150,7 +149,8 @@ export class Ragdoll {
       if (owner != null) cd.setActiveHooks(R.ActiveHooks.FILTER_CONTACT_PAIRS);
       const col = world.createCollider(cd, body);
       if (onCollider) onCollider(col, spec);
-      this.parts[spec.name] = body;
+      body.__rag = this; // quem arremessa precisa achar o corpo INTEIRO do alvo,
+      this.parts[spec.name] = body; // não só o membro que estava agarrado
     }
     for (const [a, b, aa, ab, tipo, eixo, limite] of JOINTS) {
       const p1 = { x: aa[0], y: aa[1], z: aa[2] }, p2 = { x: ab[0], y: ab[1], z: ab[2] };
@@ -202,10 +202,23 @@ export class Ragdoll {
       if (!g) continue;
       this.world.removeImpulseJoint(g.j, true);
       if (arremesso && spin > 2.5 && g.body && !g.chao) {
+        // 🥊 ARREMESSO POR CIMA DA CORDA. Com o ringue fechado, esta é a única
+        // forma de tirar o rival da arena — então o lançamento precisa vencer
+        // uma corda de 0.9 m. Medido no harness: impulso vertical ~22 é o
+        // mínimo que passa por cima. Girar mais joga mais longe; giro fraco
+        // (perto de 2.5) só empurra, não ejeta — o arremesso tem que ser
+        // merecido. Vai no tronco+quadril+cabeça pra levantar o corpo inteiro,
+        // senão só o membro agarrado sobe e o resto fica pendurado.
         const v = g.body.linvel();
         const sp = Math.hypot(v.x, v.y, v.z) || 1;
-        const k = Math.min(spin * 1.3, 10);
-        g.body.applyImpulse({ x: (v.x / sp) * k, y: (v.y / sp) * k + spin * 0.35, z: (v.z / sp) * k }, true);
+        const k = Math.min(spin * 1.8, 15);
+        const alto = spin * 3.2;
+        const dono = g.body.__rag ?? null;
+        const alvos = dono ? ['torso', 'pelvis', 'head'].map((n) => dono.parts[n]) : [g.body];
+        for (const b of alvos) {
+          if (!b) continue;
+          b.applyImpulse({ x: (v.x / sp) * k, y: (v.y / sp) * k + alto, z: (v.z / sp) * k }, true);
+        }
         this.lastThrowAt = this._now ?? 0;
         this.stats.arremessos++;
       }
@@ -394,7 +407,7 @@ export class Ragdoll {
         }
         this.heading = Math.atan2(nx, nz);
         const speedAlong = pv.x * nx + pv.z * nz;
-        if (speedAlong < 3.6) {
+        if (speedAlong < 2.4) {
           const tr = 220 * grogue * this.controle * (this.buffVel || 1) * (this._carga > 0.1 ? 0.55 : 1);
           pelvis.applyImpulse({ x: nx * tr * dt, y: 0, z: nz * tr * dt }, true);
           this.parts.torso.applyImpulse({ x: nx * tr * 0.4 * dt, y: 0, z: nz * tr * 0.4 * dt }, true);
