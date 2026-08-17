@@ -304,8 +304,10 @@ export class Ragdoll {
         const b = this.parts[name];
         b.applyImpulse({ x: 0, y: b.mass() * 9.81 * a * dt, z: 0 }, true);
       }
-      // Quadril flutuante (alto o bastante pras pernas ficarem quase esticadas)
-      const f = clamp((1.0 - toi) * 950 - pv.y * 95, -160, 650);
+      // Quadril flutuante. Era 1.0, mas a perna esticada só alcança 0.88 abaixo do
+      // quadril — sobrava 12 cm de ar e o boneco pairava. 0.95 põe o pé no chão
+      // sem afundar (em 0.90 ele começa a enterrar no piso).
+      const f = clamp((0.95 - toi) * 950 - pv.y * 95, -160, 650);
       pelvis.applyImpulse({ x: 0, y: f * dt, z: 0 }, true);
       // Corda na cabeça
       const head = this.parts.head;
@@ -371,27 +373,68 @@ export class Ragdoll {
         const t2 = clamp(e2 * (forte ? 5 : 1.6) - av2b.y * (forte ? 1.2 : 0.4), -7, 7);
         b.applyTorqueImpulse({ x: 0, y: t2 * dt, z: 0 }, true);
       }
-      // Passinhos: parado os pés plantam no chão sob o quadril;
-      // andando eles alternam passadas (ergue, avança, apoia)
+      // Passinhos. Cada perna alterna BALANÇO (no ar, mirando onde vai pisar) e
+      // APOIO (pegada cravada no MUNDO, o corpo passa por cima dela).
+      //
+      // Antes o alvo do pé era relativo ao quadril nos dois momentos, então ele
+      // andava junto com o corpo e nunca ficava parado no chão — patinação por
+      // construção. E o alvo vertical era surfaceY+0.14 pros dois pés ao mesmo
+      // tempo, o que erguia os dois juntos: 8.5 cm de chão andando, o "flutuando".
       if (standing) {
         const andando = mlen > 0.01;
-        this.gaitT += dt * (andando ? 8 : 0);
+        // Cadência e passada acompanham a velocidade REAL. Fixo em 8 rad/s com
+        // passo de 0.2, o pé cobria 0.56 m/s enquanto o corpo ia a 3.7 — 6.6x de
+        // descompasso, e nenhuma pegada segura isso. Em ~1 m/s dá os mesmos 8 de
+        // antes, então andar devagar continua igual.
+        const vel = Math.hypot(pv.x, pv.z);
+        const amp = clamp(0.16 + vel * 0.06, 0.16, 0.34);       // passo cresce ao correr
+        this.gaitT += dt * (andando ? clamp(vel * 7.2, 5, 20) : 0);
         const fwdX = Math.sin(this.heading), fwdZ = Math.cos(this.heading);
         const latX = Math.cos(this.heading), latZ = -Math.sin(this.heading);
+        this._pegada ??= [null, null];
         for (let lado = 0; lado < 2; lado++) {
           const calf = this.parts[lado === 0 ? 'calfL' : 'calfR'];
           const fase = this.gaitT + (lado === 0 ? 0 : Math.PI);
-          const passo = andando ? Math.cos(fase) * 0.2 : 0;
-          const ergue = andando ? Math.max(0, Math.sin(fase)) * 0.1 : 0;
-          const alvoX = pp.x + latX * (lado === 0 ? -0.11 : 0.11) + fwdX * passo;
-          const alvoZ = pp.z + latZ * (lado === 0 ? -0.11 : 0.11) + fwdZ * passo;
-          const alvoY = surfaceY + 0.14 + ergue;
+          const s = Math.sin(fase);
+          const noAr = andando && s > 0; // meio ciclo no ar, meio apoiando
+          const latOff = lado === 0 ? -0.11 : 0.11;
           const cp = calf.translation();
           const ponta = qrot(calf.rotation(), [0, -0.17, 0]);
+          const pex = cp.x + ponta[0], pez = cp.z + ponta[2];
+          let alvoX, alvoZ, ergue;
+          if (!andando) {
+            this._pegada[lado] = null;
+            alvoX = pp.x + latX * latOff;
+            alvoZ = pp.z + latZ * latOff;
+            ergue = 0;
+          } else if (noAr) {
+            // BALANÇO: mira à frente do quadril, já descontando o quanto o corpo
+            // ainda anda até o pé encostar (senão pisa sempre atrás e arrasta)
+            this._pegada[lado] = null;
+            alvoX = pp.x + latX * latOff + fwdX * amp * 1.1 + pv.x * 0.12;
+            alvoZ = pp.z + latZ * latOff + fwdZ * amp * 1.1 + pv.z * 0.12;
+            ergue = s * 0.13;
+          } else {
+            // APOIO: crava a pegada na 1ª vez e segura ali. Se o corpo já passou
+            // longe demais, solta e repisa — senão a perna estica e vira freio.
+            const marca = this._pegada[lado];
+            if (marca && Math.hypot(marca.x - pp.x, marca.z - pp.z) > 0.35 + amp * 1.6) this._pegada[lado] = null;
+            this._pegada[lado] ??= { x: pex, z: pez };
+            alvoX = this._pegada[lado].x;
+            alvoZ = this._pegada[lado].z;
+            ergue = 0;
+          }
+          // 0.045: a ponta encosta de verdade. O 0.14 antigo era alto demais e
+          // segurava os dois pés no ar mesmo em apoio.
+          const apoiando = andando && !noAr;
+          // pé de apoio empurra CONTRA o chão (alvo abaixo da superfície) pra
+          // encostar de verdade; no balanço ele sobe. Antes os dois ficavam a
+          // surfaceY+0.14 ao mesmo tempo e o boneco pairava.
+          const alvoY = surfaceY + (apoiando ? -0.02 : 0.045) + ergue;
           const cv = calf.linvel();
-          const fx2 = clamp((alvoX - (cp.x + ponta[0])) * 26 - cv.x * 3, -18, 18);
-          const fy2 = clamp((alvoY - (cp.y + ponta[1])) * 22 - cv.y * 4, -10, 14);
-          const fz2 = clamp((alvoZ - (cp.z + ponta[2])) * 26 - cv.z * 3, -18, 18);
+          const fx2 = clamp((alvoX - pex) * 26 - cv.x * 3, -18, 18);
+          const fy2 = clamp((alvoY - (cp.y + ponta[1])) * 22 - cv.y * 4, apoiando ? -20 : -10, 14);
+          const fz2 = clamp((alvoZ - pez) * 26 - cv.z * 3, -18, 18);
           calf.applyImpulse({ x: fx2 * dt, y: fy2 * dt, z: fz2 * dt }, true);
         }
         // Braços balançam no ritmo da passada (fase oposta à perna do mesmo lado)
@@ -690,5 +733,6 @@ export class Ragdoll {
     this.punchHit = true;
     this.heading = this.heading0;
     this.gaitT = 0;
+    this._pegada = [null, null]; // pegadas cravadas no mundo: some no reset
   }
 }
