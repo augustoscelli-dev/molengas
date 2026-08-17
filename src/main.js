@@ -2214,13 +2214,16 @@ const MAPAS = [
         const navio = g.scene;
         let temTex = false;
         navio.traverse((o) => { if (o.isMesh && o.material && o.material.map) temTex = true; });
-        const matMadeira = new THREE.MeshStandardMaterial({ color: 0x4a3320, roughness: 0.82 });
         navio.traverse((o) => {
           if (!o.isMesh) return;
           // o export do Meshy vem SEM normais — sem isto, material liso vira NaN
           // no sombreamento e o bloom espalha o NaN pra tela inteira (tela preta)
           if (!o.geometry.attributes.normal) o.geometry.computeVertexNormals();
-          if (!temTex) o.material = matMadeira;
+          if (!temTex) {
+            // pintura procedural por vértice (escudos/vela/casco) feita na otimização
+            const temCor = !!o.geometry.attributes.color;
+            o.material = new THREE.MeshStandardMaterial({ color: temCor ? 0xffffff : 0x4a3320, roughness: 0.85, vertexColors: temCor });
+          }
           o.castShadow = true; o.receiveShadow = true;
         });
         // Navio DE LADO (dragão numa ponta da tela, espiral na outra) e a LUTA
@@ -2234,6 +2237,7 @@ const MAPAS = [
         navio.scale.set(escXZ, escY, escXZ);
         navio.position.y = 0.535 * escY - 0.04; // convés interno vira o chão (y≈0)
         m._deck.visible = false; if (m._base) m._base.visible = false; // o barco É o chão
+        m._navio = navio; m._navioY = navio.position.y; // balanço visual no update
         barco.visible = false;
         scene.add(navio); m.meshes.push(navio);
       }, undefined, () => {}); // sem o arquivo, fica o barco procedural
@@ -2247,6 +2251,27 @@ const MAPAS = [
       bandeira.position.set(0.35, 6.95, -3.2); barco.add(bandeira);
       const bandBase = bandeira.geometry.attributes.position.array.slice();
       fazerCaixote(m, -2.8, 2.2); fazerCaixote(m, 2.8, -2.2);
+      // spray branco na PROA (estoura quando o navio corta o mar)
+      const sprays = [];
+      for (let i = 0; i < 8; i++) {
+        const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: texBolinha, color: 0xf2f8ff, transparent: true, opacity: 0, depthWrite: false }));
+        scene.add(sp); m.meshes.push(sp);
+        sprays.push({ sp, f: i / 8, seed: Math.random() });
+      }
+      // gaivotas 🕊️ circulando o mastro
+      const texGaivota = (() => {
+        const c = document.createElement('canvas'); c.width = 64; c.height = 32;
+        const g = c.getContext('2d');
+        g.strokeStyle = '#fff'; g.lineWidth = 5; g.lineCap = 'round';
+        g.beginPath(); g.moveTo(6, 22); g.quadraticCurveTo(20, 8, 32, 18); g.quadraticCurveTo(44, 8, 58, 22); g.stroke();
+        const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+      })();
+      const gaivotas = [];
+      for (let i = 0; i < 3; i++) {
+        const gv = new THREE.Sprite(new THREE.SpriteMaterial({ map: texGaivota, transparent: true, depthWrite: false }));
+        gv.scale.set(0.7, 0.35, 1); scene.add(gv); m.meshes.push(gv);
+        gaivotas.push({ gv, f: i * 2.1, r: 5.5 + i * 1.6, alt: 5.2 + i * 0.9 });
+      }
       // ---- o mar ----
       const geoMar = new THREE.PlaneGeometry(240, 240, 120, 120);
       geoMar.rotateX(-Math.PI / 2);
@@ -2346,6 +2371,24 @@ const MAPAS = [
           bp.array[i * 3 + 2] = Math.sin(x * 4.2 - t * 6.5) * 0.09 * (x + 0.625);
         }
         bp.needsUpdate = true;
+        // balanço do navio (visual, suave — a física do chão fica parada)
+        if (m._navio) {
+          m._navio.rotation.x = Math.sin(t * 0.45) * 0.02;
+          m._navio.rotation.z = Math.sin(t * 0.3 + 1.3) * 0.012;
+          m._navio.position.y = m._navioY + Math.sin(t * 0.6) * 0.05;
+        }
+        // spray da proa: borrifos em arco saindo do bico (-x)
+        for (const s2 of sprays) {
+          const k = (t * 0.55 + s2.f) % 1;
+          s2.sp.position.set(-7.4 - k * 2.2, 0.15 + k * 1.4 - k * k * 1.6, (s2.seed - 0.5) * 2.4);
+          s2.sp.scale.setScalar(0.18 + k * 0.55);
+          s2.sp.material.opacity = (1 - k) * 0.55 * Math.min(1, k * 6);
+        }
+        // gaivotas circulando com batidinha de asa (escala em y oscila)
+        for (const g2 of gaivotas) {
+          g2.gv.position.set(Math.cos(t * 0.22 + g2.f) * g2.r, g2.alt + Math.sin(t * 1.1 + g2.f) * 0.35, Math.sin(t * 0.22 + g2.f) * g2.r * 0.55);
+          g2.gv.scale.y = 0.28 + Math.abs(Math.sin(t * 5 + g2.f)) * 0.14;
+        }
         if (prox === 0) prox = t + 7 + Math.random() * 4;
         if (fase === 'calmo' && t > prox) {
           fase = 'aviso'; faseAte = t + 1.1;
