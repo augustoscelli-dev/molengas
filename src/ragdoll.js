@@ -17,17 +17,31 @@ export const PARTS = [
   { name: 'calfR',     shape: 'capsule', hh: 0.12, r: 0.06,  off: [0.10, 0.22, 0],   mass: 1.5 },
 ];
 
+// Cada junta agora tem CURSO. Antes era tudo `spherical`, que prende dois pontos
+// e libera 360° nos três eixos — o cotovelo dobrava pro lado errado, o joelho
+// invertia e o braço girava infinito (era ele que parecia cata-vento em jogo).
+//
+//   eixo   = eixo da dobradiça / do giro principal
+//   limite = [min, max] em radianos, ou null pra junta sem curso definido
+//   trava  = graus de liberdade CONGELADOS (junta generic); a torção entra aqui
+//
+// Pegadinha do Rapier: JointData.revolute ignora os campos limits/limitsEnabled
+// do descritor. O limite só pega chamando setLimits() na junta JÁ CRIADA.
+// E `spherical` não aceita limite nem motor — foram removidos no alpha e seguem
+// sem funcionar, por isso a mudança é de TIPO de junta, não de parâmetro.
 const JOINTS = [
-  ['pelvis', 'torso',     [0, 0.17, 0],      [0, -0.16, 0]],
-  ['torso',  'head',      [0, 0.18, 0],      [0, -0.16, 0]],
-  ['torso',  'upperArmL', [-0.27, 0.11, 0],  [0, 0.12, 0]],
-  ['torso',  'upperArmR', [0.27, 0.11, 0],   [0, 0.12, 0]],
-  ['upperArmL', 'forearmL', [0, -0.13, 0],   [0, 0.13, 0]],
-  ['upperArmR', 'forearmR', [0, -0.13, 0],   [0, 0.13, 0]],
-  ['pelvis', 'thighL',    [-0.10, -0.16, 0], [0, 0.20, 0]],
-  ['pelvis', 'thighR',    [0.10, -0.16, 0],  [0, 0.20, 0]],
-  ['thighL', 'calfL',     [0, -0.18, 0],     [0, 0.16, 0]],
-  ['thighR', 'calfR',     [0, -0.18, 0],     [0, 0.16, 0]],
+  // ombro/quadril/pescoço: 2 eixos livres, TORÇÃO travada
+  ['pelvis', 'torso',     [0, 0.17, 0],      [0, -0.16, 0],  'gen', [0, 1, 0], [-0.5, 0.5]],
+  ['torso',  'head',      [0, 0.18, 0],      [0, -0.16, 0],  'gen', [0, 1, 0], [-0.7, 0.7]],
+  ['torso',  'upperArmL', [-0.27, 0.11, 0],  [0, 0.12, 0],   'gen', [0, 1, 0], null],
+  ['torso',  'upperArmR', [0.27, 0.11, 0],   [0, 0.12, 0],   'gen', [0, 1, 0], null],
+  ['pelvis', 'thighL',    [-0.10, -0.16, 0], [0, 0.20, 0],   'gen', [0, 1, 0], null],
+  ['pelvis', 'thighR',    [0.10, -0.16, 0],  [0, 0.20, 0],   'gen', [0, 1, 0], null],
+  // cotovelo/joelho: dobradiça de eixo único, dobra pra um lado só
+  ['upperArmL', 'forearmL', [0, -0.13, 0],   [0, 0.13, 0],   'hinge', [1, 0, 0], [-0.15, 2.4]], // sinal do curso descoberto por teste: invertido, o braço fica dobrado e o soco não alcança
+  ['upperArmR', 'forearmR', [0, -0.13, 0],   [0, 0.13, 0],   'hinge', [1, 0, 0], [-0.15, 2.4]],
+  ['thighL', 'calfL',     [0, -0.18, 0],     [0, 0.16, 0],   'hinge', [1, 0, 0], [-1.1, 1.1]],
+  ['thighR', 'calfR',     [0, -0.18, 0],     [0, 0.16, 0],   'hinge', [1, 0, 0], [-1.1, 1.1]],
 ];
 
 // Limites da plataforma — fora disso as molas desligam e o boneco despenca.
@@ -42,9 +56,12 @@ export const DANO_KO = 26;
 
 // Fração do peso de cada parte que é "segurada" pela marionete enquanto em pé.
 const ANTIGRAV = {
-  pelvis: 0.8, torso: 0.8, head: 0.8,
-  upperArmL: 0.5, upperArmR: 0.5, forearmL: 0.5, forearmR: 0.5,
-  thighL: 0.25, thighR: 0.25, calfL: 0.25, calfR: 0.25,
+  // Era 0.8 no miolo: 80% da gravidade anulada deixava o corpo sem peso, e o
+  // boneco lia como marionete em vez de corpo. Menos anti-gravidade = o tronco
+  // afunda no passo, assenta na parada, e o golpe tem onde repercutir.
+  pelvis: 0.62, torso: 0.58, head: 0.55,
+  upperArmL: 0.32, upperArmR: 0.32, forearmL: 0.28, forearmR: 0.28,
+  thighL: 0.2, thighR: 0.2, calfL: 0.2, calfR: 0.2,
 };
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -135,12 +152,20 @@ export class Ragdoll {
       if (onCollider) onCollider(col, spec);
       this.parts[spec.name] = body;
     }
-    for (const [a, b, aa, ab] of JOINTS) {
-      const data = R.JointData.spherical(
-        { x: aa[0], y: aa[1], z: aa[2] },
-        { x: ab[0], y: ab[1], z: ab[2] },
-      );
-      world.createImpulseJoint(data, this.parts[a], this.parts[b], true);
+    for (const [a, b, aa, ab, tipo, eixo, limite] of JOINTS) {
+      const p1 = { x: aa[0], y: aa[1], z: aa[2] }, p2 = { x: ab[0], y: ab[1], z: ab[2] };
+      const ax = { x: eixo[0], y: eixo[1], z: eixo[2] };
+      let data;
+      if (tipo === 'hinge') {
+        data = R.JointData.revolute(p1, p2, ax);
+      } else {
+        // generic travando as 3 translações + a TORÇÃO em torno do eixo do membro:
+        // sobram 2 eixos de giro, que é o que ombro e quadril de verdade fazem
+        const M = R.JointAxesMask;
+        data = R.JointData.generic(p1, p2, ax, M.LinX | M.LinY | M.LinZ | M.AngY);
+      }
+      const j = world.createImpulseJoint(data, this.parts[a], this.parts[b], true);
+      if (limite && typeof j.setLimits === 'function') j.setLimits(limite[0], limite[1]);
     }
   }
 
@@ -324,31 +349,31 @@ export class Ragdoll {
         b.applyImpulse({ x: 0, y: b.mass() * 9.81 * a * dt, z: 0 }, true);
       }
       // Quadril flutuante. Era 1.0, mas a perna esticada só alcança 0.88 abaixo do
-      // quadril — sobrava 12 cm de ar e o boneco pairava. 0.95 põe o pé no chão
-      // sem afundar (em 0.90 ele começa a enterrar no piso).
-      const f = clamp((0.95 - toi) * 950 - pv.y * 95, -160, 650);
+      // quadril. Com as juntas ganhando curso a perna passou a sustentar de outro
+      // jeito: 0.95 passou a AFUNDAR o pé 2,5 cm. Remedido, 0.99 é o ponto.
+      const f = clamp((0.99 - toi) * 950 - pv.y * 95, -160, 650);
       pelvis.applyImpulse({ x: 0, y: f * dt, z: 0 }, true);
       // Corda na cabeça
       const head = this.parts.head;
       const hp = head.translation();
       const hv = head.linvel();
-      const fx = clamp((pp.x - hp.x) * 240 - hv.x * 18, -220, 220);
-      const fy = clamp((pp.y + 0.68 - hp.y) * 480 - hv.y * 32, -100, 520);
-      const fz = clamp((pp.z - hp.z) * 240 - hv.z * 18, -220, 220);
+      const fx = clamp((pp.x - hp.x) * 130 - hv.x * 8, -220, 220);
+      const fy = clamp((pp.y + 0.68 - hp.y) * 300 - hv.y * 17, -100, 520);
+      const fz = clamp((pp.z - hp.z) * 130 - hv.z * 8, -220, 220);
       head.applyImpulse({ x: fx * dt, y: fy * dt, z: fz * dt }, true);
       // Tronco acompanha
       const torso = this.parts.torso;
       const tp = torso.translation();
       const tv = torso.linvel();
-      const ty = clamp((pp.y + 0.34 - tp.y) * 380 - tv.y * 30, -100, 420);
+      const ty = clamp((pp.y + 0.34 - tp.y) * 240 - tv.y * 16, -100, 420);
       torso.applyImpulse({ x: 0, y: ty * dt, z: 0 }, true);
       // Torque que segura o corpo na vertical (senão tomba pro lado)
       for (const bname of ['pelvis', 'torso']) {
         const b = this.parts[bname];
         const up = qrot(b.rotation(), [0, 1, 0]);
         const av2 = b.angvel();
-        const tx = clamp((up[1] >= 0 ? 1 : 0.3) * (-up[2] * 24) - av2.x * 3, -13, 13);
-        const tz = clamp((up[1] >= 0 ? 1 : 0.3) * (up[0] * 24) - av2.z * 3, -13, 13);
+        const tx = clamp((up[1] >= 0 ? 1 : 0.3) * (-up[2] * 15) - av2.x * 1.9, -13, 13);
+        const tz = clamp((up[1] >= 0 ? 1 : 0.3) * (up[0] * 15) - av2.z * 1.9, -13, 13);
         b.applyTorqueImpulse({ x: tx * dt, y: 0, z: tz * dt }, true);
       }
     }
@@ -501,6 +526,11 @@ export class Ragdoll {
       }
       // Ataques com o botão de soco: CABEÇADA (agarrando), CHUTE (segurando trás) ou SOCO.
       // Só no APERTO (segurar não repete mais): segurando, carrega o SOCÃO — solta no release.
+      // NOTA DA JANELA DO GOLPE: era 0.25s, calibrado pra um braço de juntas
+      // esféricas que chicoteava sem resistência — o punho chegava no alvo no
+      // frame 3. Com juntas de curso o braço tem inércia e só chega no frame 23,
+      // então a janela fechava ANTES do soco e nada conectava. 0.36s cobre a
+      // viagem real. Se mexer na rigidez das juntas, remeça isto.
       if (input.punch && !this._punchHeld && now >= this.punchReadyAt) {
         const dir = [Math.sin(this.heading), 0, Math.cos(this.heading)];
         const alvoAgarrado = this.grabbedRival();
@@ -526,7 +556,7 @@ export class Ragdoll {
           this._voadora = !grounded;
           this._chute = querChute;
           this.punchReadyAt = now + (this._socoFraco ? 1.3 : querChute ? 0.95 : 0.8);
-          this.punchUntil = now + (this._voadora ? 0.32 : querChute ? 0.3 : 0.25);
+          this.punchUntil = now + (this._voadora ? 0.43 : querChute ? 0.41 : 0.36); // ver nota da janela
           this.punchHit = false;
           this._cargaGolpe = 0;
           this.lastPunchStartAt = now;
@@ -570,7 +600,7 @@ export class Ragdoll {
           this._cargaGolpe = this._carga;
           this.folego = Math.max(0, this.folego - (0.34 + this._carga * 0.2));
           this.punchReadyAt = now + 1.05;
-          this.punchUntil = now + 0.3;
+          this.punchUntil = now + 0.30;
           this.punchHit = false;
           this.lastPunchStartAt = now;
           this.stats.socos++;
