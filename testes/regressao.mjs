@@ -32,8 +32,9 @@ async function main() {
 
   // ---- A) input malformado ----
   console.log('A) input malformado não derruba o servidor');
-  const A = mkCli(0), B = mkCli(1);
-  await Promise.all([A.ready, B.ready]);
+  // em série: o A precisa chegar primeiro pra ser o host (usa 'modo' e 'comecar')
+  const A = mkCli(0); await A.ready;
+  const B = mkCli(1); await B.ready;
   A.send({ t: 'input' });                    // sem .m
   A.send({ t: 'input', m: null });           // m null
   A.send({ t: 'input', m: 'xis' });          // m string
@@ -90,8 +91,10 @@ async function main() {
 
   // ---- E) reconexão com token segura o slot ----
   console.log('E) queda no meio da luta: slot fica 30s esperando e o token religa');
-  const E1 = mkCli(0), E2 = mkCli(1), E3 = mkCli(2);
-  await Promise.all([E1.ready, E2.ready, E3.ready]);
+  // em série: o E1 é o host (manda 'comecar') e é dele o slot que cai/reconecta
+  const E1 = mkCli(0); await E1.ready;
+  const E2 = mkCli(1); await E2.ready;
+  const E3 = mkCli(2); await E3.ready;
   E1.send({ t: 'comecar' });
   let lutaE = false;
   for (let i = 0; i < 40; i++) { await sleep(150); if (E2.last?.st === 'luta') { lutaE = true; break; } }

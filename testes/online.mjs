@@ -87,8 +87,11 @@ async function main() {
 
   // -------- 1. Conexão + lobby --------
   console.log('1) Conexão e lobby');
-  const A = new Cli('host', 0), B = new Cli('p2', 1), C = new Cli('p3', 2);
-  await Promise.all([A.ready, B.ready, C.ready]);
+  // em série: o servidor dá slot por ordem de chegada do 'entrar'. Conectar os
+  // três de uma vez deixa a ordem à mercê do handshake e às vezes o host não é o A.
+  const A = new Cli('host', 0); await A.ready;
+  const B = new Cli('p2', 1); await B.ready;
+  const C = new Cli('p3', 2); await C.ready;
   if (A.slot === 0 && B.slot === 1 && C.slot === 2) ok('3 clientes entraram com slots 0,1,2');
   else falha(`slots errados: ${A.slot},${B.slot},${C.slot}`);
 
