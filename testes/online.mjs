@@ -72,12 +72,31 @@ class Cli {
       this.snaps++; this.bytes += data.byteLength;
       const { meta, poses, truncated } = decodeSnap(ab);
       this.lastMeta = meta; this.estados.add(meta.st);
+      this.poses = poses;
       if (truncated) this.trunc++;
       if (nanCheck(poses)) this.nan = true;
     });
     this.ws.on('error', (e) => falha(`${name}: ws error ${e.message}`));
   }
   send(o) { if (this.ws.readyState === 1) this.ws.send(JSON.stringify(o)); }
+  // Direção do rival mais próximo, lida do snapshot.
+  rumoAoRival() {
+    const m = this.lastMeta, ps = this.poses;
+    if (!m || !ps || !ps.length) return [1, 0];
+    const eu = m.pl.findIndex((p) => p.s === this.slot);
+    if (eu < 0 || !ps[eu]) return [1, 0];
+    const [ex, , ez] = ps[eu][0];
+    let melhor = null, dm = 1e9;
+    for (let i = 0; i < ps.length; i++) {
+      if (i === eu || !ps[i] || m.pl[i]?.v === 0) continue;
+      const [x, , z] = ps[i][0];
+      const d = Math.hypot(x - ex, z - ez);
+      if (d < dm) { dm = d; melhor = [x - ex, z - ez]; }
+    }
+    if (!melhor) return [1, 0];
+    const l = Math.hypot(melhor[0], melhor[1]) || 1;
+    return [melhor[0] / l, melhor[1] / l];
+  }
   input(m, opts = {}) { this.send({ t: 'input', m, ...opts }); }
   close() { try { this.ws.close(); } catch {} }
 }
@@ -123,20 +142,33 @@ async function main() {
   if (entrouLuta) ok('estado = luta (após intro)'); else falha(`não entrou em luta: ${A.lastMeta?.st}`);
 
   // -------- 4. Joga: empurra todo mundo contra um canto pra causar ring-out --------
-  console.log('4) Simula luta até alguém cair (ring-out)');
+  console.log('4) Simula luta até alguém ser ARREMESSADO pra fora');
   const t0 = Date.now();
-  let virouFim = false;
+  let virouFim = false, tick = 0;
   // todos correm pra +X socando; empurra pra fora da arena
   const dirs = { [A.slot]: [1, 0], [B.slot]: [1, 0], [C.slot]: [1, 0.2] };
-  while (Date.now() - t0 < 18000) {
-    A.input([1, 0], { p: true });
-    B.input([1, 0.1], { p: true, g: Math.random() < 0.3 });
-    C.input([1, -0.1], { p: true });
+  while (Date.now() - t0 < 90000) {
+    // O RINGUE TEM CORDA: não dá pra empurrar ninguém pra fora andando. A ÚNICA
+    // forma de fechar a rodada é nocautear, agarrar o corpo mole e ARREMESSAR
+    // por cima. Então os bots alternam: batem (toque, não segurar — segurar
+    // carrega o socão e nunca solta), e periodicamente agarram e giram, que é
+    // a jogada que tira o rival.
+    tick++;
+    const fase = tick % 40;
+    const socando = fase < 24 && fase % 3 !== 0;
+    const agarrando = fase >= 24;                 // 16 ticks segurando + girando
+    const giro = agarrando ? [Math.sin(tick * 0.5), Math.cos(tick * 0.5)] : null;
+    for (const [cli, off] of [[A, 0], [B, 13], [C, 26]]) {
+      const f = (tick + off) % 40;
+      const ag = f >= 24;
+      cli.input(ag ? [Math.sin((tick + off) * 0.5), Math.cos((tick + off) * 0.5)] : cli.rumoAoRival(),
+        { p: !ag && f % 3 !== 0, g: ag });
+    }
     await sleep(80);
     if (A.lastMeta && A.lastMeta.st === 'fim') { virouFim = true; break; }
   }
   if (virouFim) ok(`partida terminou (${((Date.now() - t0) / 1000).toFixed(1)}s)`);
-  else falha('partida não terminou em 18s (ring-out não disparou?)');
+  else falha('partida não terminou em 90s (ninguém conseguiu arremessar o rival pra fora?)');
 
   // -------- 5. Melhor jogada --------
   console.log('5) Melhor jogada (play of the game)');

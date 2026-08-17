@@ -103,6 +103,15 @@ let escalaEncolhe = 1;
 let proxEncolheAt = 0;
 let chaoCols = [];
 const FURO_ABISMO = 0.42; // fração do meio-lado que vira buraco no ABISMO
+// 🥊 CORDAS DO RINGUE: barreira física na borda, acima da cintura. Ninguém sai
+// andando nem levando empurrão — a ÚNICA saída é ser ARREMESSADO por cima.
+// É esse o jogo: nocauteou, tem alguns segundos pra agarrar e jogar pra fora;
+// falhou, o cara acorda e a briga continua. A lógica de fim de rodada já casa
+// com isso (só deixa a rodada quem cai), então a corda é o que faltava.
+// Medido: 0.75 NÃO barra (o quadril fica em 0.99 e o boneco passa por cima
+// andando); 0.9 barra e ainda deixa o arremesso passar; 1.5 barra até o
+// arremesso e travaria a partida.
+const CORDA_ALT = 0.9;
 function setChaoEscala(k) { // troca só os colliders do chão (não mexe na bola/caixotes)
   for (const c of chaoCols) world.removeCollider(c, true);
   chaoCols = [];
@@ -122,6 +131,16 @@ function setChaoEscala(k) { // troca só os colliders do chão (não mexe na bol
   } else {
     mk(arenaHX * k, arenaHZ * k, 0, 0);
   }
+  // as 4 cordas. O corpo do chão está em y=-0.3 e o topo do piso em y=0, então
+  // a parede vai de local 0.3 (=chão) até 0.3+CORDA_ALT.
+  const hx = arenaHX * k, hz = arenaHZ * k, e = 0.07, hy = CORDA_ALT / 2, cy = 0.3 + hy;
+  const parede = (px, py, pz, x, z) => chaoCols.push(world.createCollider(
+    RAPIER.ColliderDesc.cuboid(px, py, pz).setTranslation(x, cy, z)
+      .setFriction(0.4).setCollisionGroups(GROUND_GROUPS), chao));
+  parede(hx + e, hy, e, 0, hz + e);
+  parede(hx + e, hy, e, 0, -(hz + e));
+  parede(e, hy, hz + e, hx + e, 0);
+  parede(e, hy, hz + e, -(hx + e), 0);
 }
 function aplicarControleArena() { // tração por variante (gelo derrapa)
   const c = arenaAtiva === 'gelo' ? 0.4 : 1;

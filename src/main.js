@@ -944,7 +944,7 @@ const MAPAS = [
     nome: 'ESTÁDIO',
     desc: 'bola de demolição no meio',
     build(m) {
-      chaoFixo(m, ARENA.halfX, ARENA.halfZ, new THREE.MeshStandardMaterial({ map: deckTex, roughness: 0.85 }));
+      chaoFixo(m, ARENA.halfX, ARENA.halfZ, new THREE.MeshStandardMaterial({ map: deckTex, roughness: 0.85 }), 0.8, true);
       // Ringue de verdade: postes nos cantos + cordas (decoração, sem física)
       const px = ARENA.halfX - 0.2, pz = ARENA.halfZ - 0.2;
       for (const [cx, cz] of [[-px, -pz], [px, -pz], [-px, pz], [px, pz]]) {
@@ -953,7 +953,7 @@ const MAPAS = [
         scene.add(poste); m.meshes.push(poste);
       }
       const matCorda = new THREE.MeshBasicMaterial({ color: 0xf5f0ff, transparent: true, opacity: 0.85 });
-      for (const h of [0.38, 0.72]) {
+      for (const h of [0.45, CORDA_ALT]) { // a de cima marca EXATAMENTE onde a física barra
         for (const [w, d, x, z] of [[px * 2, 0.04, 0, -pz], [px * 2, 0.04, 0, pz], [0.04, pz * 2, -px, 0], [0.04, pz * 2, px, 0]]) {
           const corda = new THREE.Mesh(new THREE.BoxGeometry(w, 0.035, d), matCorda);
           corda.position.set(x, h, z);

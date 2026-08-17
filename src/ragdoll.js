@@ -201,7 +201,7 @@ export class Ragdoll {
       const g = this.grabJoints[i];
       if (!g) continue;
       this.world.removeImpulseJoint(g.j, true);
-      if (arremesso && spin > 2.5 && g.body && !g.chao) {
+      if (arremesso && spin > 1.0 && g.body && !g.chao) {
         // 🥊 ARREMESSO POR CIMA DA CORDA. Com o ringue fechado, esta é a única
         // forma de tirar o rival da arena — então o lançamento precisa vencer
         // uma corda de 0.9 m. Medido no harness: impulso vertical ~22 é o
@@ -209,15 +209,25 @@ export class Ragdoll {
         // (perto de 2.5) só empurra, não ejeta — o arremesso tem que ser
         // merecido. Vai no tronco+quadril+cabeça pra levantar o corpo inteiro,
         // senão só o membro agarrado sobe e o resto fica pendurado.
-        const v = g.body.linvel();
-        const sp = Math.hypot(v.x, v.y, v.z) || 1;
-        const k = Math.min(spin * 1.8, 15);
-        const alto = spin * 3.2;
+        // Direção do arremesso = pra onde QUEM ARREMESSA está olhando. Antes
+        // usava a velocidade do corpo agarrado normalizada, mas corpo mole
+        // parado tem velocidade ~0: a direção virava ruído e o rival era
+        // lançado pra qualquer lado, quase sempre de volta pra dentro. Mirar
+        // pelo heading é o que o jogador espera e o que torna a jogada uma
+        // JOGADA, não sorteio.
+        const dirA = [Math.sin(this.heading), Math.cos(this.heading)];
+        // Com o ringue fechado o ARREMESSO é a única forma de pontuar, então
+        // ele precisa ser confiável: a perícia já está em nocautear e agarrar,
+        // não em conseguir rodopiar. Base fixa que vence a corda de 0.9 m
+        // (medido: 22 de impulso vertical é o mínimo que passa), e o giro
+        // adiciona alcance por cima disso.
+        const k = Math.min(6 + spin * 1.8, 16);
+        const alto = 24 + Math.min(spin, 8) * 1.6;
         const dono = g.body.__rag ?? null;
         const alvos = dono ? ['torso', 'pelvis', 'head'].map((n) => dono.parts[n]) : [g.body];
         for (const b of alvos) {
           if (!b) continue;
-          b.applyImpulse({ x: (v.x / sp) * k, y: (v.y / sp) * k + alto, z: (v.z / sp) * k }, true);
+          b.applyImpulse({ x: dirA[0] * k, y: alto, z: dirA[1] * k }, true);
         }
         this.lastThrowAt = this._now ?? 0;
         this.stats.arremessos++;
