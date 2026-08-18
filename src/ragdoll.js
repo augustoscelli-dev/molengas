@@ -334,7 +334,7 @@ export class Ragdoll {
       if (!g || !g.ombro || !g.rival) continue;
       for (const nome of ['torso', 'pelvis', 'head', 'thighL', 'thighR', 'calfL', 'calfR', 'upperArmL', 'upperArmR', 'forearmL', 'forearmR']) {
         const b = g.rival.parts[nome];
-        if (b) b.applyImpulse({ x: 0, y: b.mass() * 9.81 * 0.75 * dt, z: 0 }, true);
+        if (b) b.applyImpulse({ x: 0, y: b.mass() * 9.81 * 0.45 * dt, z: 0 }, true);
       }
     }
     if (now > this.buffVelAte) this.buffVel = 1;
