@@ -163,7 +163,7 @@ function montarArena(scale) {
   for (let i = 0; i < n; i++) {
     const a = (i / n) * Math.PI * 2 + 0.4, r = Math.min(arenaHX, arenaHZ) * 0.5;
     const cx = Math.cos(a) * r, cz = Math.sin(a) * r;
-    const b = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(cx, 0.4, cz).setLinearDamping(0.25).setAngularDamping(0.5));
+    const b = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(cx, 0.4, cz).setLinearDamping(0.25).setAngularDamping(0.5).setCcdEnabled(true));
     world.createCollider(RAPIER.ColliderDesc.cuboid(0.19, 0.19, 0.19).setMass(4).setFriction(0.6).setCollisionGroups(PROP_GROUPS), b);
     caixotes.push(b);
   }
@@ -206,7 +206,7 @@ function atualizarPropsDosRags() {
 }
 function soltarArmaS(tipo, x, z) {
   const def = ARMAS_DEF_S[tipo] || ARMAS_DEF_S.bastao;
-  const b = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(x, 4.2, z).setLinearDamping(0.2).setAngularDamping(0.45));
+  const b = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(x, 4.2, z).setLinearDamping(0.2).setAngularDamping(0.45).setCcdEnabled(true));
   world.createCollider(def.col().setMass(def.massa).setFriction(0.6).setCollisionGroups(WEAPON_GROUPS), b);
   const arma = {
     id: proxArmaId++, tipo, body: b, alcance: def.alcance, forca: def.forca,
