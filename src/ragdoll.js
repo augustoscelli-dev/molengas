@@ -227,7 +227,7 @@ export class Ragdoll {
         // (medido: 22 de impulso vertical é o mínimo que passa), e o giro
         // adiciona alcance por cima disso.
         const k = Math.min(6 + spin * 1.8, 16);
-        const alto = 24 + Math.min(spin, 8) * 1.6;
+        const alto = 12 + Math.min(spin, 8) * 1.6;
         const dono = g.body.__rag ?? null;
         const alvos = dono ? ['torso', 'pelvis', 'head'].map((n) => dono.parts[n]) : [g.body];
         for (const b of alvos) {
@@ -328,6 +328,15 @@ export class Ragdoll {
     this._now = now;
     const stunned = this.isStunned(now);
     // Buffs de power-up expiram
+    // Peso do corpo que está no ombro: sem isto a junta não segura os ~30 kg de
+    // um nocauteado (molas de postura desligadas) e ele escorrega pra trás/baixo.
+    for (const g of this.grabJoints) {
+      if (!g || !g.ombro || !g.rival) continue;
+      for (const nome of ['torso', 'pelvis', 'head', 'thighL', 'thighR', 'calfL', 'calfR', 'upperArmL', 'upperArmR', 'forearmL', 'forearmR']) {
+        const b = g.rival.parts[nome];
+        if (b) b.applyImpulse({ x: 0, y: b.mass() * 9.81 * 0.75 * dt, z: 0 }, true);
+      }
+    }
     if (now > this.buffVelAte) this.buffVel = 1;
     if (now > this.buffForcaAte) this.buffForca = 1;
     // 🧯 FREIO DE LANÇAMENTO (ideia do Smash: a velocidade de lançamento decai
@@ -759,8 +768,24 @@ export class Ragdoll {
         }
         const hand = this.parts[side === 0 ? 'forearmL' : 'forearmR'];
         if (best) {
-          const data = this.R.JointData.spherical({ x: 0, y: -0.12, z: 0 }, { x: 0, y: 0, z: 0 });
-          this.grabJoints[side] = { j: this.world.createImpulseJoint(data, hand, best, true), body: best, chao: false, rival: bestRival };
+          // 🫱 CARREGAR NO OMBRO: rival NOCAUTEADO prende no TRONCO de quem
+          // carrega, à frente e acima — não pendurado na mão. Pendurado na mão
+          // o corpo era arrastado ATRÁS, e chegar na beirada e largar não
+          // servia de nada: o alvo continuava pra dentro. À frente, largar na
+          // corda tomba ele pra fora sozinho.
+          // Junta FIXA (não esférica): esférica prende um ponto só e o corpo
+          // pendura. E mesmo fixa não basta — o nocauteado está com as molas de
+          // postura desligadas, então são ~30 kg de peso morto numa junta só.
+          // O que segura é a antigravidade aplicada nele enquanto carregado,
+          // logo abaixo em update(). Junta segura a posição, antigrav o peso.
+          const noOmbro = bestRival && bestRival.isDowned(now);
+          const base = noOmbro ? this.parts.torso : hand;
+          const anc = noOmbro ? { x: 0, y: 0.20, z: 0.30 } : { x: 0, y: -0.12, z: 0 };
+          const alvoB = noOmbro ? bestRival.parts.torso : best;
+          const data = noOmbro
+            ? this.R.JointData.fixed(anc, { x: 0, y: 0, z: 0, w: 1 }, { x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 0, w: 1 })
+            : this.R.JointData.spherical(anc, { x: 0, y: 0, z: 0 });
+          this.grabJoints[side] = { j: this.world.createImpulseJoint(data, base, alvoB, true), body: alvoB, chao: false, rival: bestRival, ombro: !!noOmbro };
           this.lastGrabAt = now;
         } else if (situacaoBeirada && this.world.projectPoint) {
           // Caindo perto da plataforma: a mão gruda na beirada
