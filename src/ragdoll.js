@@ -35,8 +35,12 @@ const JOINTS = [
   ['torso',  'head',      [0, 0.18, 0],      [0, -0.16, 0],  'gen', [0, 1, 0], [-0.7, 0.7]],
   ['torso',  'upperArmL', [-0.27, 0.11, 0],  [0, 0.12, 0],   'gen', [0, 1, 0], null],
   ['torso',  'upperArmR', [0.27, 0.11, 0],   [0, 0.12, 0],   'gen', [0, 1, 0], null],
-  ['pelvis', 'thighL',    [-0.10, -0.16, 0], [0, 0.20, 0],   'gen', [0, 1, 0], null],
-  ['pelvis', 'thighR',    [0.10, -0.16, 0],  [0, 0.20, 0],   'gen', [0, 1, 0], null],
+  // quadril vira DOBRADIÇA pra poder receber motor de ângulo: junta 'generic'
+  // não expõe configureMotorPosition, e é o quadril que leva a realimentação de
+  // equilíbrio do SIMBICON. Custo: a perna não abre pro lado — mas o boneco
+  // sempre anda na direção que encara, então perna frente/trás basta.
+  ['pelvis', 'thighL',    [-0.10, -0.16, 0], [0, 0.20, 0],   'hinge', [1, 0, 0], [-1.5, 1.5]],
+  ['pelvis', 'thighR',    [0.10, -0.16, 0],  [0, 0.20, 0],   'hinge', [1, 0, 0], [-1.5, 1.5]],
   // cotovelo/joelho: dobradiça de eixo único, dobra pra um lado só
   ['upperArmL', 'forearmL', [0, -0.13, 0],   [0, 0.13, 0],   'hinge', [1, 0, 0], [-0.15, 2.4]], // sinal do curso descoberto por teste: invertido, o braço fica dobrado e o soco não alcança
   ['upperArmR', 'forearmR', [0, -0.13, 0],   [0, 0.13, 0],   'hinge', [1, 0, 0], [-0.15, 2.4]],
@@ -51,6 +55,18 @@ export const ARENA = { halfX: 5.5, halfZ: 4.0 };
 // entre cliente e servidor; virou constante pra os dois não descolarem. Subir
 // este número = luta mais longa. Calibrado por simulação: 26 dá rodada de ~34s.
 // O dano decai 0.12/s: trocação parada não acumula, precisa de pressão contínua.
+// Ganhos do controlador de marcha (ver bloco das pernas em update()). Ficam
+// juntos aqui porque são varridos como conjunto: mexer num sem medir os outros
+// não diz nada num sistema com realimentação.
+export const SIMB = {
+  cd: -2.2, cv: -0.2,   // realimentação de equilíbrio (valores do SimbiconJS,
+                        // e varridos aqui também: -2.2/-0.2 é o ótimo nosso)
+  qBal: -0.55, jBal: 0.5,
+  qApoio: 0.25, jApoio: 0.12,
+  kQ: 11000, kJ: 4500, amort: 0.12,   // varridos: patinação cai até ~40% e platô
+  passo: 0.46,
+};
+
 export const DANO_KO = 26;
 
 // Fração do peso de cada parte que é "segurada" pela marionete enquanto em pé.
@@ -171,6 +187,10 @@ export class Ragdoll {
       }
       const j = world.createImpulseJoint(data, this.parts[a], this.parts[b], true);
       if (limite && typeof j.setLimits === 'function') j.setLimits(limite[0], limite[1]);
+      // guarda as juntas das PERNAS: são elas que ganham motor de ângulo
+      // (controlar ângulo é o que o esqueleto entrega; empurrar o pé por mola,
+      // que era o que havia antes, não garante posição nenhuma)
+      (this.juntas ??= {})[a + '>' + b] = j;
     }
   }
 
@@ -391,6 +411,18 @@ export class Ragdoll {
 
     // "Em pé" = anti-gravidade parcial + molas de marionete + torque de vertical.
     const standing = !stunned && toi !== null && now > this.hoverBlockUntil;
+    // 🔌 MOTOR DAS PERNAS DESLIGA fora do "em pé". O motor do Rapier PERSISTE:
+    // sem zerar a rigidez, o nocauteado continuaria de perna dura, e o corpo
+    // mole (que é o que dá pra agarrar, carregar no ombro e arremessar) sumia.
+    if (this.juntas && this._motorLigado !== standing) {
+      this._motorLigado = standing;
+      if (!standing) {
+        for (const l of ['L', 'R']) {
+          this.juntas[`pelvis>thigh${l}`]?.configureMotorPosition?.(0, 0, 0);
+          this.juntas[`thigh${l}>calf${l}`]?.configureMotorPosition?.(0, 0, 0);
+        }
+      }
+    }
     if (standing) {
       for (const [name, a] of Object.entries(ANTIGRAV)) {
         const b = this.parts[name];
@@ -466,70 +498,58 @@ export class Ragdoll {
         const t2 = clamp(e2 * (forte ? 5 : 1.6) - av2b.y * (forte ? 1.2 : 0.4), -7, 7);
         b.applyTorqueImpulse({ x: 0, y: t2 * dt, z: 0 }, true);
       }
-      // Passinhos. Cada perna alterna BALANÇO (no ar, mirando onde vai pisar) e
-      // APOIO (pegada cravada no MUNDO, o corpo passa por cima dela).
+      // 🦿 PERNAS POR MOTOR DE JUNTA, no esquema do SIMBICON (SIGGRAPH 2007;
+      // referência de código: mfirmin/SimbiconJS).
       //
-      // Antes o alvo do pé era relativo ao quadril nos dois momentos, então ele
-      // andava junto com o corpo e nunca ficava parado no chão — patinação por
-      // construção. E o alvo vertical era surfaceY+0.14 pros dois pés ao mesmo
-      // tempo, o que erguia os dois juntos: 8.5 cm de chão andando, o "flutuando".
+      // O que havia antes: mola empurrando o PÉ pra uma coordenada do mundo. Não
+      // fecha — mola não garante posição, e o pé de apoio escorregava a 81% da
+      // velocidade do corpo com qualquer ajuste que eu tentasse (cadência,
+      // gatilho por distância, controle de coxa: todos medidos, todos piores).
+      //
+      // Agora: máquina de estados de marcha (uma perna apoia, a outra balança) e
+      // ÂNGULO de quadril/joelho imposto por motor de junta, que é o que o
+      // esqueleto entrega de verdade. O alvo do quadril que balança leva a
+      // realimentação de equilíbrio do SIMBICON:  alvo = base + cd*d + cv*v
+      // com d = distância do centro de massa ao pé de apoio, medida no eixo de
+      // marcha, e v = velocidade do centro de massa no mesmo eixo. É isso que faz
+      // o pé pousar onde MANTÉM O CORPO EM PÉ, em vez de num offset chutado.
       if (standing) {
         const andando = mlen > 0.01;
-        // Cadência e passada acompanham a velocidade REAL. Fixo em 8 rad/s com
-        // passo de 0.2, o pé cobria 0.56 m/s enquanto o corpo ia a 3.7 — 6.6x de
-        // descompasso, e nenhuma pegada segura isso. Em ~1 m/s dá os mesmos 8 de
-        // antes, então andar devagar continua igual.
         const vel = Math.hypot(pv.x, pv.z);
-        const amp = clamp(0.16 + vel * 0.06, 0.16, 0.34);       // passo cresce ao correr
-        this.gaitT += dt * (andando ? clamp(vel * 7.2, 5, 20) : 0);
         const fwdX = Math.sin(this.heading), fwdZ = Math.cos(this.heading);
-        const latX = Math.cos(this.heading), latZ = -Math.sin(this.heading);
-        this._pegada ??= [null, null];
-        for (let lado = 0; lado < 2; lado++) {
-          const calf = this.parts[lado === 0 ? 'calfL' : 'calfR'];
-          const fase = this.gaitT + (lado === 0 ? 0 : Math.PI);
-          const s = Math.sin(fase);
-          const noAr = andando && s > 0; // meio ciclo no ar, meio apoiando
-          const latOff = lado === 0 ? -0.11 : 0.11;
-          const cp = calf.translation();
-          const ponta = qrot(calf.rotation(), [0, -0.17, 0]);
-          const pex = cp.x + ponta[0], pez = cp.z + ponta[2];
-          let alvoX, alvoZ, ergue;
-          if (!andando) {
-            this._pegada[lado] = null;
-            alvoX = pp.x + latX * latOff;
-            alvoZ = pp.z + latZ * latOff;
-            ergue = 0;
-          } else if (noAr) {
-            // BALANÇO: mira à frente do quadril, já descontando o quanto o corpo
-            // ainda anda até o pé encostar (senão pisa sempre atrás e arrasta)
-            this._pegada[lado] = null;
-            alvoX = pp.x + latX * latOff + fwdX * amp * 1.1 + pv.x * 0.12;
-            alvoZ = pp.z + latZ * latOff + fwdZ * amp * 1.1 + pv.z * 0.12;
-            ergue = s * 0.13;
-          } else {
-            // APOIO: crava a pegada na 1ª vez e segura ali. Se o corpo já passou
-            // longe demais, solta e repisa — senão a perna estica e vira freio.
-            const marca = this._pegada[lado];
-            if (marca && Math.hypot(marca.x - pp.x, marca.z - pp.z) > 0.35 + amp * 1.6) this._pegada[lado] = null;
-            this._pegada[lado] ??= { x: pex, z: pez };
-            alvoX = this._pegada[lado].x;
-            alvoZ = this._pegada[lado].z;
-            ergue = 0;
-          }
-          // 0.045: a ponta encosta de verdade. O 0.14 antigo era alto demais e
-          // segurava os dois pés no ar mesmo em apoio.
-          const apoiando = andando && !noAr;
-          // pé de apoio empurra CONTRA o chão (alvo abaixo da superfície) pra
-          // encostar de verdade; no balanço ele sobe. Antes os dois ficavam a
-          // surfaceY+0.14 ao mesmo tempo e o boneco pairava.
-          const alvoY = surfaceY + (apoiando ? -0.02 : 0.045) + ergue;
-          const cv = calf.linvel();
-          const fx2 = clamp((alvoX - pex) * 26 - cv.x * 3, -18, 18);
-          const fy2 = clamp((alvoY - (cp.y + ponta[1])) * 22 - cv.y * 4, apoiando ? -20 : -10, 14);
-          const fz2 = clamp((alvoZ - pez) * 26 - cv.z * 3, -18, 18);
-          calf.applyImpulse({ x: fx2 * dt, y: fy2 * dt, z: fz2 * dt }, true);
+        let mTot = 0, cmF = 0, cvF = 0;
+        for (const spec of PARTS) {
+          const b = this.parts[spec.name], t = b.translation(), v2 = b.linvel();
+          mTot += spec.mass;
+          cmF += (t.x * fwdX + t.z * fwdZ) * spec.mass;
+          cvF += (v2.x * fwdX + v2.z * fwdZ) * spec.mass;
         }
+        cmF /= mTot; cvF /= mTot;
+        const PASSO_T = clamp(SIMB.passo - vel * 0.06, 0.20, 0.46);
+        this._simT = (this._simT ?? 0) + (andando ? dt : 0);
+        if (!andando) { this._simT = 0; this._simLado = 0; }
+        else if (this._simT >= PASSO_T) { this._simT -= PASSO_T; this._simLado = 1 - (this._simLado ?? 0); }
+        const bal = this._simLado ?? 0;
+        const apoioCalf = this.parts[bal === 0 ? 'calfR' : 'calfL'];
+        const ac = apoioCalf.translation();
+        const d = cmF - (ac.x * fwdX + ac.z * fwdZ);
+        const fb = andando ? (SIMB.cd * d + SIMB.cv * cvF) : 0;
+        const mot = (chave, alvo, k) => {
+          const j = this.juntas?.[chave];
+          if (j && j.configureMotorPosition) j.configureMotorPosition(alvo, k, k * SIMB.amort);
+        };
+        const L = bal === 0, s0 = L ? 'L' : 'R', s1 = L ? 'R' : 'L';
+        if (andando) {
+          const t01 = this._simT / PASSO_T;                 // 0..1 dentro do passo
+          const arco = Math.sin(Math.PI * t01);             // sobe e desce no balanço
+          mot(`pelvis>thigh${s0}`, SIMB.qBal * arco + fb, SIMB.kQ);   // quadril que balança
+          mot(`thigh${s0}>calf${s0}`, SIMB.jBal * arco, SIMB.kJ);     // joelho dobra no balanço
+          mot(`pelvis>thigh${s1}`, SIMB.qApoio, SIMB.kQ);             // quadril de apoio
+          mot(`thigh${s1}>calf${s1}`, SIMB.jApoio, SIMB.kJ);          // joelho de apoio estende
+        } else {
+          for (const l of ['L', 'R']) { mot(`pelvis>thigh${l}`, 0, SIMB.kQ); mot(`thigh${l}>calf${l}`, SIMB.jApoio, SIMB.kJ); }
+        }
+        this.gaitT += dt * (andando ? clamp(vel * 7.2, 5, 20) : 0); // ritmo dos braços
         // Braços balançam no ritmo da passada (fase oposta à perna do mesmo lado)
         if (andando) {
           for (let lado = 0; lado < 2; lado++) {
