@@ -79,9 +79,12 @@ const ANTIGRAV = {
   // pode cair: menos antigravidade = o tronco afunda no passo, assenta na
   // parada e o golpe tem onde repercutir. Verificado que continua em pé até
   // 0.22, mas aí o pé começa a enterrar; 0.45 é o passo firme sem estragar.
-  pelvis: 0.45, torso: 0.42, head: 0.40,
-  upperArmL: 0.24, upperArmR: 0.24, forearmL: 0.2, forearmR: 0.2,
-  thighL: 0.15, thighR: 0.15, calfL: 0.15, calfR: 0.15,
+  // Baixou de novo (0.45 -> 0.30) depois que a perna passou a ser motorizada
+  // e sustentar de verdade. Varrido: o boneco fica em pé até 0.08, e 0.30 é o
+  // melhor conjunto (patinação 36%, pé a 0.8 cm). Menos muleta = mais peso.
+  pelvis: 0.30, torso: 0.28, head: 0.26,
+  upperArmL: 0.18, upperArmR: 0.18, forearmL: 0.15, forearmR: 0.15,
+  thighL: 0.1, thighR: 0.1, calfL: 0.1, calfR: 0.1,
 };
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
