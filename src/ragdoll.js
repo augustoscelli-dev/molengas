@@ -352,7 +352,18 @@ export class Ragdoll {
       }
     }
     // Fim do nocaute: zera o dano pra não cair de novo na hora e levanta
-    if (this.downUntil && now >= this.downUntil) { this.downUntil = 0; this.dano = 0.5; this.hoverBlockUntil = now; }
+    if (this.downUntil && now >= this.downUntil) {
+      this.downUntil = 0; this.dano = 0.5; this.hoverBlockUntil = now;
+      // 🛡️ INVENCIBILIDADE AO LEVANTAR. Sem isto dava pra travar alguém no chão
+      // pra sempre: golpe em quem está caído empurra o stunUntil PRA ALÉM do fim
+      // do nocaute, então o cara acordava já atordoado, levava outro, e nunca
+      // recuperava o controle. Reusa a janela da esquiva, que o soco já respeita
+      // (ver isEsquivando no acerto), então o golpe atravessa em vez de prender.
+      // NÃO protege quem está caído — agarrar e arremessar o nocauteado continua
+      // valendo, que é a jogada do jogo; protege só o instante de se levantar.
+      this.esquivaUntil = Math.max(this.esquivaUntil, now + 1.2);
+      this.stunUntil = Math.min(this.stunUntil, now); // limpa stun herdado do chão
+    }
     // recuperação gradual: dano de combo esvai, fôlego volta (não some no nocaute)
     if (!this.isDowned(now)) this.dano = Math.max(0, this.dano - 0.12 * dt);
     this.folego = Math.min(1, this.folego + 0.22 * dt);
