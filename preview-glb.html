@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8">
+<title>Preview GLB — MOLENGAS</title>
+<style>html,body{margin:0;height:100%;background:#0b0f1e;overflow:hidden}canvas{display:block}</style>
+<script type="importmap">{ "imports": { "three": "./libs/three.module.js" } }</script>
+</head>
+<body>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from './libs/jsm/loaders/GLTFLoader.js';
+
+const W = 900, H = 900;
+const scene = new THREE.Scene();
+
+// Fundo em gradiente (vibe Pacific Rim / hangar)
+const bgC = document.createElement('canvas'); bgC.width = 4; bgC.height = 256;
+const bg = bgC.getContext('2d');
+const grd = bg.createLinearGradient(0,0,0,256);
+grd.addColorStop(0,'#12203a'); grd.addColorStop(.5,'#0c1526'); grd.addColorStop(1,'#070b16');
+bg.fillStyle = grd; bg.fillRect(0,0,4,256);
+const bgTex = new THREE.CanvasTexture(bgC); bgTex.colorSpace = THREE.SRGBColorSpace;
+scene.background = bgTex;
+
+const camera = new THREE.PerspectiveCamera(48, W/H, 0.1, 200);
+camera.position.set(0, 1.65, 4.3);
+camera.lookAt(0, 1.15, 0);
+
+const r3 = new THREE.WebGLRenderer({ antialias:true, preserveDrawingBuffer:true });
+r3.setSize(W, H); r3.setPixelRatio(1);
+r3.shadowMap.enabled = true; r3.shadowMap.type = THREE.PCFSoftShadowMap;
+r3.toneMapping = THREE.ACESFilmicToneMapping;   // igual ao jogo
+r3.toneMappingExposure = 1.12;                   // igual ao jogo
+document.body.appendChild(r3.domElement);
+
+// Luzes iguais ao jogo (src/main.js)
+scene.add(new THREE.HemisphereLight(0xccccff, 0x443344, 1.05));
+const rim = new THREE.DirectionalLight(0x7f9dff, 0.9); rim.position.set(-4,5,-7); scene.add(rim);
+const sun = new THREE.DirectionalLight(0xffffff, 1.6); sun.position.set(6,12,5);
+sun.castShadow = true; sun.shadow.mapSize.set(2048,2048);
+sun.shadow.camera.left=-6; sun.shadow.camera.right=6; sun.shadow.camera.top=6; sun.shadow.camera.bottom=-6;
+scene.add(sun);
+// Acentos neon sutis (não muda o jogo — só realça o metal no preview)
+const amber = new THREE.PointLight(0xffb020, 0.6, 20); amber.position.set(3,1.5,3); scene.add(amber);
+const cyan  = new THREE.PointLight(0x37e5ff, 0.7, 20); cyan.position.set(-3,2.5,-2); scene.add(cyan);
+
+// Chão que recebe sombra
+const ground = new THREE.Mesh(
+  new THREE.CircleGeometry(6, 48),
+  new THREE.MeshStandardMaterial({ color:0x0c1526, roughness:.9, metalness:.1 })
+);
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+const gridRing = new THREE.Mesh(
+  new THREE.RingGeometry(1.7,1.74,64),
+  new THREE.MeshBasicMaterial({ color:0x1f5c72, transparent:true, opacity:.6 })
+);
+gridRing.rotation.x = -Math.PI/2; gridRing.position.y = .01; scene.add(gridRing);
+
+const pivot = new THREE.Group(); scene.add(pivot);
+
+let outlineMeshes = [];
+function addOutline(model){
+  const om = new THREE.MeshBasicMaterial({ color:0x120b22, side:THREE.BackSide });
+  const targets = [];
+  model.traverse(o=>{ if(o.isMesh && !o.__outline) targets.push(o); }); // coleta 1º
+  for(const o of targets){ const c=new THREE.Mesh(o.geometry, om); c.scale.setScalar(1.035); c.__outline=true; c.visible=false; o.add(c); outlineMeshes.push(c); }
+}
+window.setOutline = (on)=>{ outlineMeshes.forEach(m=>m.visible=on); };
+
+const Q = new URLSearchParams(location.search);
+// aponta pro -low: o jaeger.glb original tem 7.4 MB e era a ÚNICA coisa no
+// projeto que ainda o referenciava. O jogo nunca carregou ele.
+const MODEL = Q.get('m') || './assets/modelos/jaeger-low.glb';
+const CENA = Q.has('cena'); // enquadra a cena/diorama inteiro (nao personagem)
+if (CENA) { ground.visible = false; gridRing.visible = false; }
+const loader = new GLTFLoader();
+loader.load(MODEL, (gltf)=>{
+  const model = gltf.scene;
+  // stats
+  let tris=0, meshes=0; const mats=new Set();
+  model.traverse(o=>{ if(o.isMesh){ meshes++; o.castShadow=true; o.receiveShadow=true;
+    const g=o.geometry; const idx=g.index? g.index.count : (g.attributes.position? g.attributes.position.count:0);
+    tris += idx/3; if(o.material){ (Array.isArray(o.material)?o.material:[o.material]).forEach(m=>mats.add(m.type||'?')); }
+  }});
+  // centro + escala
+  const box = new THREE.Box3().setFromObject(model);
+  const size = new THREE.Vector3(), center = new THREE.Vector3();
+  box.getSize(size); box.getCenter(center);
+  let s = 1;
+  if (CENA) {
+    const maxd = Math.max(size.x, size.y, size.z) || 1; s = 4 / maxd;
+    model.scale.setScalar(s);
+    const b2 = new THREE.Box3().setFromObject(model), c2 = new THREE.Vector3(); b2.getCenter(c2);
+    model.position.sub(c2);
+    const r = 4 * 0.6, dist = r / Math.sin((48 * Math.PI / 180) / 2) * 1.2;
+    camera.position.set(dist * 0.55, dist * 0.42, dist * 0.85); camera.lookAt(0, 0, 0);
+  } else {
+    s = 2.4 / (size.y || 1);
+    model.scale.setScalar(s);
+    model.position.set(-center.x * s, -box.min.y * s, -center.z * s);
+  }
+  pivot.add(model);
+
+  window.__stats = {
+    triangulos: Math.round(tris), meshes, materiais:[...mats],
+    dim: { x:+(size.x).toFixed(3), y:+(size.y).toFixed(3), z:+(size.z).toFixed(3) },
+    animacoes: gltf.animations? gltf.animations.length : 0,
+    escalaAplicada:+s.toFixed(4),
+  };
+  if (!CENA) { try { addOutline(model); window.setOutline(false); } catch(e){ console.log('outline falhou:', e); } }
+  window.__ready = true;
+}, undefined, (err)=>{ window.__error = String(err); });
+
+let auto = true, t = 0;
+window.setAngle = (deg)=>{ auto=false; pivot.rotation.y = deg*Math.PI/180; };
+window.setAuto = (on)=>{ auto=on; };
+function loop(){
+  requestAnimationFrame(loop);
+  if(auto){ t += 1/60; pivot.rotation.y = t*(Math.PI*2/6); } // 1 volta a cada 6s
+  r3.render(scene, camera);
+}
+loop();
+</script>
+</body>
+</html>

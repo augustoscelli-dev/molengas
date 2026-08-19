@@ -1,0 +1,14 @@
+Fontes usadas no MOLENGAS (embutidas pra funcionar offline)
+============================================================
+
+- Fredoka  — UI/textos      (fredoka-latin.woff2, fredoka-latinext.woff2)
+- Titan One — títulos        (titanone-latin.woff2)
+
+Ambas são do Google Fonts e licenciadas sob a SIL Open Font License 1.1
+(OFL), que permite uso, incorporação e redistribuição livres, inclusive
+comercial. Apenas os subconjuntos latino/latino-estendido foram baixados
+pra manter os arquivos pequenos (~45 KB no total).
+
+Fredoka:  https://fonts.google.com/specimen/Fredoka
+Titan One: https://fonts.google.com/specimen/Titan+One
+Licença OFL: https://openfontlicense.org

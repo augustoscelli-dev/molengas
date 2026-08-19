@@ -3,14 +3,15 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MOLENGAS!</title>
-<meta name="description" content="Briga de bonecos molengas estilo Gang Beasts — direto no navegador. Soque, agarre e jogue os amigos pra fora da arena!">
+<title>WOBBLERS!</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🥊</text></svg>">
+<meta name="description" content="Wobblers — briga de bonecos molengas estilo Gang Beasts, direto no navegador. Soque, agarre e jogue os amigos pra fora da arena!">
 <meta name="theme-color" content="#141433">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🥊</text></svg>">
 <link rel="manifest" href="manifest.json">
 <meta property="og:type" content="website">
-<meta property="og:title" content="MOLENGAS! 🥊">
-<meta property="og:description" content="Briga de bonecos molengas estilo Gang Beasts — jogue agora no navegador, de graça!">
+<meta property="og:title" content="WOBBLERS! 🥊">
+<meta property="og:description" content="Wobblers — briga de bonecos molengas estilo Gang Beasts. Jogue agora no navegador, de graça!">
 <meta property="og:url" content="https://augustoscelli-dev.github.io/molengas/">
 <meta property="og:image" content="https://augustoscelli-dev.github.io/molengas/assets/capa.jpg">
 <meta name="twitter:card" content="summary_large_image">
@@ -20,7 +21,19 @@
   }
 </script>
 <style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #141433; }
+  /* Fontes locais (OFL, embutidas — funcionam offline). Fredoka = UI, Titan One = títulos. */
+  @font-face { font-family: 'Fredoka'; font-weight: 400 700; font-display: swap;
+    src: url('assets/fontes/fredoka-latin.woff2') format('woff2');
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215; }
+  @font-face { font-family: 'Fredoka'; font-weight: 400 700; font-display: swap;
+    src: url('assets/fontes/fredoka-latinext.woff2') format('woff2');
+    unicode-range: U+0100-024F, U+1E00-1EFF, U+2C60-2C7F, U+A720-A7FF; }
+  @font-face { font-family: 'Titan One'; font-weight: 400; font-display: swap;
+    src: url('assets/fontes/titanone-latin.woff2') format('woff2'); }
+  :root { --f-ui: 'Fredoka', "Segoe UI", system-ui, sans-serif;
+          --f-disp: 'Titan One', 'Fredoka', "Segoe UI", system-ui, sans-serif; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #141433;
+    font-family: var(--f-ui); }
   canvas { display: block; }
   #hud {
     position: fixed; inset: 0; pointer-events: none;
@@ -29,85 +42,489 @@
   }
   #placar {
     position: absolute; top: 14px; left: 0; right: 0;
-    text-align: center; font-size: 30px; font-weight: 800; letter-spacing: 1px;
+    text-align: center; font-family: var(--f-disp); font-size: 30px; letter-spacing: 1px;
   }
   #msg {
     position: absolute; top: 34%; left: 0; right: 0; display: none;
-    text-align: center; font-size: 56px; font-weight: 900; letter-spacing: 2px;
-    -webkit-text-stroke: 2px rgba(0,0,0,.35);
+    text-align: center; font-family: var(--f-disp); font-size: clamp(38px, 7vw, 58px);
+    letter-spacing: 1px; -webkit-text-stroke: 2px rgba(0,0,0,.35);
+    filter: drop-shadow(0 4px 10px rgba(0,0,0,.45));
   }
-  #msg .sub { font-size: 20px; font-weight: 600; -webkit-text-stroke: 0; margin-top: 10px; opacity: .9; }
+  #msg .sub { font-family: var(--f-ui); font-size: clamp(15px, 2.4vw, 20px); font-weight: 600;
+    -webkit-text-stroke: 0; margin-top: 10px; opacity: .92; filter: none; }
+  /* Título "MELHOR JOGADA" com o mesmo degradê dourado da vitória */
+  #msg .mj-tit { background: linear-gradient(180deg, #ffe27a 0%, #ff9d3c 50%, #ff3d8b 100%);
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+    -webkit-text-stroke: 2px #2a1030; }
   #controles {
-    position: absolute; bottom: 12px; left: 0; right: 0;
-    display: flex; justify-content: space-between; padding: 0 24px;
-    font-size: 14px; font-weight: 600; opacity: .85;
+    position: absolute; bottom: 10px; left: 0; right: 0; pointer-events: none;
+    display: flex; justify-content: space-between; align-items: flex-end; gap: 12px;
+    padding: 0 14px; font-size: 12.5px; font-weight: 600;
   }
-  #controles .p1 { color: #ff9a9a; } #controles .p2 { color: #9ac8ff; }
+  #controles .p1, #controles .p2 { max-width: 46%; padding: 7px 12px; border-radius: 13px;
+    background: rgba(12,10,26,.44); backdrop-filter: blur(3px); line-height: 1.4;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.08); }
+  #controles .p1 { color: #ffb3b3; } #controles .p2 { color: #aad2ff; text-align: right; }
   .retrato { width: 40px; height: 40px; border-radius: 50%; vertical-align: middle;
     margin: 0 10px; border: 2px solid rgba(255,255,255,.6); object-fit: cover; }
-  #selecao {
-    position: fixed; inset: 0; z-index: 5; display: flex; flex-direction: column;
-    align-items: center; justify-content: center; gap: 26px;
-    background: rgba(12,10,32,.82); color: #fff;
-    font-family: "Segoe UI", system-ui, sans-serif; text-shadow: 0 2px 0 rgba(0,0,0,.55);
-  }
-  .sel-titulo { font-size: 64px; font-weight: 900; letter-spacing: 3px;
-    -webkit-text-stroke: 2px rgba(0,0,0,.35); }
-  .sel-paineis { display: flex; align-items: center; gap: 40px; }
-  .sel-painel { display: flex; flex-direction: column; align-items: center; gap: 10px;
-    padding: 18px 26px; border-radius: 18px; border: 4px solid rgba(255,255,255,.25);
-    background: rgba(255,255,255,.06); }
-  .sel-painel.confirmado { border-color: #7ed957; box-shadow: 0 0 22px rgba(126,217,87,.45); }
-  .sel-painel.vazio { opacity: .45; border-style: dashed; }
-  .sel-painel img { width: 150px; height: 150px; border-radius: 50%; object-fit: cover;
-    border: 3px solid rgba(255,255,255,.5); }
-  .sel-vs { font-size: 42px; font-weight: 900; opacity: .85; }
-  .sel-nome { font-size: 24px; font-weight: 800; letter-spacing: 1px; }
-  .sel-dica { font-size: 13px; font-weight: 600; opacity: .75; }
-  #sel-mapa { text-align: center; }
+  /* Cartão do lutador no placar: retrato + score + barras de dano/fôlego */
+  #placar { display: flex; justify-content: center; align-items: flex-start; gap: 34px; }
+  .pcard { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .pcard .pdev { display: flex; align-items: center; gap: 6px; }
+  .pcard .parma { font-size: 20px; line-height: 1; filter: drop-shadow(0 1px 1px rgba(0,0,0,.6)); }
+  .pbar { width: 88px; height: 7px; border-radius: 4px; background: rgba(0,0,0,.4);
+    border: 1px solid rgba(255,255,255,.35); overflow: hidden; box-shadow: 0 1px 0 rgba(0,0,0,.4); }
+  .pbar i { display: block; height: 100%; width: 0%; transition: width .08s linear; }
+  .pbar.ko i  { background: linear-gradient(90deg,#ffd34a,#ff7a2f); }
+  .pbar.fol i { background: linear-gradient(90deg,#7ed957,#37c0a8); }
+  .pcard.down .pbar.ko { animation: kopulse .5s infinite; border-color:#ff5a4a; }
+  @keyframes kopulse { 0%,100%{ box-shadow:0 0 0 rgba(255,60,50,0);} 50%{ box-shadow:0 0 10px rgba(255,60,50,.9);} }
+  /* Tela de vitória */
+  .vitoria { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  .vit-retrato { width: 132px; height: 132px; border-radius: 50%; object-fit: cover;
+    border: 5px solid #ffd94a; box-shadow: 0 0 34px rgba(255,217,74,.7); animation: vitpop .5s ease-out; }
+  @keyframes vitpop { 0% { transform: scale(.2) rotate(-25deg); opacity: 0; } 70% { transform: scale(1.12) rotate(6deg); } 100% { transform: scale(1) rotate(0); } }
+  .vit-tit { font-family: var(--f-disp); font-size: clamp(32px, 6vw, 48px); letter-spacing: 1px;
+    background: linear-gradient(180deg, #ffe27a 0%, #ff9d3c 50%, #ff3d8b 100%);
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+    -webkit-text-stroke: 2px #2a1030; filter: drop-shadow(0 4px 12px rgba(255,61,139,.45)); }
+  .vit-stats { display: flex; flex-direction: column; gap: 5px; font-size: 15px; font-weight: 600;
+    background: rgba(0,0,0,.32); border: 1px solid rgba(255,255,255,.18); border-radius: 12px; padding: 12px 18px; -webkit-text-stroke: 0; }
+  .vit-linha { display: flex; justify-content: space-between; gap: 22px; opacity: .85; }
+  .vit-linha.mvp { opacity: 1; color: #ffe06a; }
+  .vit-linha .vl-nome { font-weight: 800; }
+  .vit-dica { font-size: 15px; font-weight: 600; opacity: .8; margin-top: 6px; -webkit-text-stroke: 0; }
+  .confete { position: fixed; top: -14px; width: 10px; height: 14px; z-index: 6; pointer-events: none;
+    border-radius: 2px; animation: cair linear forwards; }
+  @keyframes cair { 0% { transform: translateY(0) rotate(0); opacity: 1; }
+    100% { transform: translateY(102vh) rotate(720deg); opacity: .9; } }
+  /* Controles de toque (celular) */
+  #touch { position: fixed; inset: 0; z-index: 7; display: none; pointer-events: none;
+    font-family: "Segoe UI", system-ui, sans-serif; -webkit-user-select: none; user-select: none;
+    touch-action: none; }
+  #touch-base { position: absolute; left: 26px; bottom: 26px; width: 130px; height: 130px;
+    border-radius: 50%; background: rgba(255,255,255,.09); border: 2px solid rgba(255,255,255,.28);
+    pointer-events: none; }
+  #touch-knob { position: absolute; left: 50%; top: 50%; width: 60px; height: 60px; margin: -30px;
+    border-radius: 50%; background: rgba(255,255,255,.32); border: 2px solid rgba(255,255,255,.6); }
+  #touch-botoes { position: absolute; right: 20px; bottom: 22px; display: grid;
+    grid-template-columns: 76px 76px; grid-gap: 12px; pointer-events: none; }
+  .tbtn { width: 76px; height: 76px; border-radius: 50%; pointer-events: auto;
+    display: flex; align-items: center; justify-content: center; flex-direction: column;
+    font-weight: 800; font-size: 13px; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.6);
+    border: 2px solid rgba(255,255,255,.5); background: rgba(0,0,0,.34);
+    -webkit-tap-highlight-color: transparent; }
+  .tbtn .ic { font-size: 26px; line-height: 1; }
+  .tbtn:active { background: rgba(255,255,255,.28); transform: scale(.94); }
+  .tbtn.soco { background: rgba(255,80,80,.42); }
+  .tbtn.pulo { background: rgba(120,200,255,.40); }
+  .tbtn.agarra { background: rgba(126,217,87,.40); }
+  .tbtn.esquiva { background: rgba(102,224,255,.38); }
+  /* Botões de toque do lobby online (pra hospedar/começar no celular) */
+  #compartilhar { position: fixed; top: 60px; left: 50%; transform: translateX(-50%); z-index: 9;
+    pointer-events: auto; display: flex; align-items: center; gap: 8px; max-width: min(92vw, 560px);
+    padding: 7px 8px 7px 14px; border-radius: 999px; border: 1px solid rgba(255,255,255,.22);
+    background: rgba(18,14,34,.72); backdrop-filter: blur(6px); color: #fff;
+    font-family: "Segoe UI", system-ui, sans-serif; font-size: 14px; text-shadow: 0 1px 2px rgba(0,0,0,.5); }
+  #compartilhar .cp-ic { font-size: 15px; }
+  #compartilhar .cp-lbl { opacity: .82; white-space: nowrap; }
+  #compartilhar .cp-link { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    max-width: 46vw; color: #7ee0ff; }
+  #cp-btn { border: 0; border-radius: 999px; cursor: pointer; font-weight: 800; font-size: 13px;
+    padding: 7px 14px; background: #ff3d8b; color: #fff; -webkit-tap-highlight-color: transparent;
+    flex: none; transition: background .15s, transform .1s; }
+  #cp-btn:hover { background: #ff5c9f; }
+  #cp-btn:active { transform: scale(.94); }
+  #cp-btn.ok { background: #46d38a; color: #0d2a1a; }
+  @media (max-width: 560px) { #compartilhar .cp-lbl { display: none; } #compartilhar .cp-link { max-width: 52vw; } }
+  /* Provocações no celular (só online): coluninha de emojis à direita, acima dos botões */
+  #touch-gritos { position: absolute; right: 24px; top: 84px; display: none; flex-direction: column;
+    gap: 10px; pointer-events: none; }
+  .tgrito { width: 46px; height: 46px; border-radius: 50%; pointer-events: auto; font-size: 24px;
+    display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.35);
+    border: 2px solid rgba(255,255,255,.3); -webkit-tap-highlight-color: transparent; }
+  .tgrito:active { transform: scale(.9); background: rgba(255,255,255,.25); }
+  #online-acoes { position: fixed; left: 0; right: 0; bottom: 120px; z-index: 8;
+    display: none; justify-content: center; flex-wrap: wrap; gap: 10px; pointer-events: none;
+    font-family: "Segoe UI", system-ui, sans-serif; }
+  .oa-btn { pointer-events: auto; border: 2px solid rgba(255,255,255,.5); border-radius: 12px;
+    background: rgba(0,0,0,.42); color: #fff; font-weight: 800; font-size: 15px; padding: 12px 16px;
+    text-shadow: 0 1px 2px rgba(0,0,0,.6); -webkit-tap-highlight-color: transparent; }
+  .oa-btn:active { transform: scale(.95); background: rgba(255,255,255,.24); }
+  .oa-btn.oa-go { background: rgba(126,217,87,.5); font-size: 17px; }
+  /* ---------- Tela de título (cartoon arcade) ---------- */
+  #titulo { position: fixed; inset: 0; z-index: 6; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: clamp(14px, 3vh, 30px);
+    font-family: var(--f-ui); color: #fff; overflow: hidden;
+    background: linear-gradient(180deg, #1a1140 0%, #120b2e 60%, #1d1038 100%); }
+  #titulo::before { /* sunburst girando devagar */
+    content: ''; position: absolute; left: 50%; top: 40%; width: 240vmax; height: 240vmax;
+    margin: -120vmax 0 0 -120vmax; border-radius: 50%;
+    background: repeating-conic-gradient(rgba(255,255,255,.05) 0deg 11deg, transparent 11deg 24deg);
+    animation: tit-girar 70s linear infinite; }
+  #titulo::after { content: ''; position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(900px 560px at 50% 38%, rgba(255,61,139,.30), transparent 65%),
+                radial-gradient(760px 500px at 50% 112%, rgba(60,224,211,.26), transparent 60%); }
+  @keyframes tit-girar { to { transform: rotate(360deg); } }
+  #titulo > * { position: relative; z-index: 1; }
+  .tit-logo { display: flex; font-family: var(--f-disp); line-height: .95; letter-spacing: 2px;
+    font-size: clamp(58px, 14vw, 148px); user-select: none; }
+  .tit-logo span { display: inline-block; -webkit-text-stroke: 4px #2a1030;
+    text-shadow: 0 6px 0 rgba(42,16,48,.9); filter: drop-shadow(0 12px 24px rgba(0,0,0,.45));
+    animation: tit-wobble 2.4s ease-in-out infinite; }
+  .tit-logo span:nth-child(1) { color: #ff5252; }
+  .tit-logo span:nth-child(2) { color: #ffd94a; animation-delay: .12s; }
+  .tit-logo span:nth-child(3) { color: #7ed957; animation-delay: .24s; }
+  .tit-logo span:nth-child(4) { color: #66e0ff; animation-delay: .36s; }
+  .tit-logo span:nth-child(5) { color: #c77dff; animation-delay: .48s; }
+  .tit-logo span:nth-child(6) { color: #ff9a3c; animation-delay: .60s; }
+  .tit-logo span:nth-child(7) { color: #ff5a99; animation-delay: .72s; }
+  .tit-logo span:nth-child(8) { color: #55e6c6; animation-delay: .84s; }
+  .tit-logo span:nth-child(9) { color: #ffd94a; animation-delay: .96s; }
+  @keyframes tit-wobble { 0%, 100% { transform: rotate(-4deg) translateY(0); }
+    50% { transform: rotate(4deg) translateY(-10px); } }
+  .tit-botoes { display: flex; flex-direction: column; align-items: center; gap: 14px; margin-top: 14px; }
+  .tit-btn { font-family: var(--f-disp); letter-spacing: 1px; cursor: pointer; color: #2a1030;
+    border: 4px solid #2a1030; border-radius: 999px; padding: 13px 46px;
+    font-size: clamp(19px, 3.2vw, 28px); -webkit-tap-highlight-color: transparent;
+    box-shadow: 0 7px 0 #2a1030, 0 16px 30px rgba(0,0,0,.42);
+    transition: transform .12s cubic-bezier(.2,1.4,.4,1), box-shadow .12s; }
+  .tit-btn:hover { transform: translateY(-3px) rotate(-1.5deg) scale(1.04); }
+  .tit-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #2a1030, 0 6px 14px rgba(0,0,0,.42); }
+  #tit-jogar { background: linear-gradient(180deg, #ffe27a, #ffb03c); }
+  #tit-online { background: linear-gradient(180deg, #55e6c6, #16b79b); }
+  .tit-btn-mini { font-size: clamp(14px, 2.2vw, 18px); padding: 9px 30px;
+    background: linear-gradient(180deg, #d9b8ff, #a86ef0); }
+  .tit-rodape { font-size: 13px; font-weight: 600; opacity: .75; color: #d9cff0; }
+  /* ---------- Como jogar (ajuda) ---------- */
+  #ajuda { position: fixed; inset: 0; z-index: 8; display: none; align-items: center;
+    justify-content: center; padding: 18px; font-family: var(--f-ui);
+    background: rgba(10,6,26,.78); backdrop-filter: blur(4px); }
+  .aj-card { max-width: 700px; max-height: 86vh; overflow-y: auto; color: #efe9ff;
+    background: linear-gradient(180deg, #241a4a, #180f36); border: 3px solid rgba(255,255,255,.18);
+    border-radius: 24px; padding: 24px 28px; box-shadow: 0 20px 60px rgba(0,0,0,.5);
+    display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
+  .aj-tit { font-family: var(--f-disp); font-size: clamp(24px, 4vw, 32px); color: #ffd94a;
+    text-shadow: 0 3px 0 rgba(0,0,0,.4); }
+  .aj-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; }
+  @media (max-width: 560px) { .aj-grid { grid-template-columns: 1fr; } }
+  .aj-sec { font-size: 14px; line-height: 1.55; background: rgba(0,0,0,.25);
+    border-radius: 14px; padding: 10px 14px; width: 100%; box-sizing: border-box; }
+  .aj-sec b { color: #ffd94a; }
+  #vit-baixar { pointer-events: auto; cursor: pointer; font-family: var(--f-disp);
+    font-size: clamp(13px, 2vw, 16px); letter-spacing: .5px; color: #2a1030;
+    border: 3px solid #2a1030; border-radius: 999px; padding: 9px 24px; margin-top: 10px;
+    background: linear-gradient(180deg, #ffe27a, #ffb03c);
+    box-shadow: 0 5px 0 #2a1030, 0 10px 20px rgba(0,0,0,.4);
+    transition: transform .12s cubic-bezier(.2,1.4,.4,1); -webkit-tap-highlight-color: transparent; }
+  #vit-baixar:hover { transform: translateY(-2px) rotate(-1deg); }
+  #vit-baixar:active { transform: translateY(3px); box-shadow: 0 2px 0 #2a1030; }
+  #vit-baixar:disabled { opacity: .7; cursor: wait; transform: none; }
+  /* ---------- Loja 🛒 ---------- */
+  #loja { position: fixed; inset: 0; z-index: 8; display: none; align-items: center;
+    justify-content: center; padding: 18px; font-family: var(--f-ui);
+    background: rgba(10,6,26,.78); backdrop-filter: blur(4px); }
+  .lj-sub { font-size: 13px; color: #b0a6c8; }
+  .lj-tit { font-family: var(--f-disp); font-size: 17px; color: #ffd94a; margin-top: 6px;
+    text-shadow: 0 2px 0 rgba(0,0,0,.4); }
+  .lj-tit small { font-family: var(--f-ui); font-size: 11px; color: #b0a6c8; font-weight: 600; }
+  .lj-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+    gap: 10px; width: 100%; }
+  .lj-card { background: rgba(0,0,0,.28); border: 2px solid rgba(255,255,255,.14);
+    border-radius: 14px; padding: 10px 8px 9px; display: flex; flex-direction: column;
+    align-items: center; gap: 6px; text-align: center; }
+  .lj-card img { width: 62px; height: 62px; border-radius: 50%; object-fit: cover;
+    border: 3px solid rgba(255,255,255,.35); }
+  .lj-swatch { width: 56px; height: 56px; border-radius: 50%; border: 3px solid rgba(255,255,255,.35); }
+  .lj-nome { font-family: var(--f-disp); font-size: 13px; letter-spacing: .4px; }
+  .lj-btn { font-family: var(--f-disp); font-size: 12.5px; cursor: pointer; color: #2a1030;
+    border: 2px solid #2a1030; border-radius: 999px; padding: 5px 14px;
+    background: linear-gradient(180deg, #ffe27a, #ffb03c); box-shadow: 0 3px 0 #2a1030;
+    -webkit-tap-highlight-color: transparent; }
+  .lj-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 #2a1030; }
+  .lj-btn:disabled { opacity: .45; cursor: not-allowed; }
+  .lj-card.tenho { border-color: #6ee787; }
+  .lj-card.tenho .lj-btn { background: linear-gradient(180deg, #8af0b0, #4ec97e); cursor: default; }
+  /* ---------- Carreira 📊 ---------- */
+  #carreira { position: fixed; inset: 0; z-index: 8; display: none; align-items: center;
+    justify-content: center; padding: 18px; font-family: var(--f-ui);
+    background: rgba(10,6,26,.78); backdrop-filter: blur(4px); }
+  .car-num { background: rgba(0,0,0,.28); border: 2px solid rgba(255,255,255,.14);
+    border-radius: 12px; padding: 9px 6px; text-align: center; }
+  .car-num b { display: block; font-family: var(--f-disp); font-size: 20px; color: #ffd94a; }
+  .car-num span { font-size: 11px; color: #b0a6c8; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+  .car-q { display: flex; align-items: center; gap: 10px; background: rgba(0,0,0,.25);
+    border: 2px solid rgba(255,255,255,.12); border-radius: 12px; padding: 8px 14px; font-size: 13.5px; }
+  .car-q.tenho { border-color: #ffd94a; background: rgba(255,217,74,.08); }
+  .car-q .cq-ico { font-size: 20px; }
+  .car-q b { font-family: var(--f-disp); letter-spacing: .3px; }
+  .car-q small { color: #b0a6c8; }
+  .car-q .cq-premio { margin-left: auto; font-weight: 800; color: #ffd94a; white-space: nowrap; }
+  .car-q:not(.tenho) { opacity: .62; }
+  .moeda-toast { position: fixed; top: 68px; right: 18px; z-index: 30; pointer-events: none;
+    font-family: var(--f-disp); font-size: 17px; color: #4a3608; padding: 9px 18px;
+    border-radius: 999px; border: 3px solid #2a1030; background: linear-gradient(180deg, #ffe27a, #ffb03c);
+    box-shadow: 0 4px 0 #2a1030, 0 10px 24px rgba(0,0,0,.4);
+    animation: moedaPop .5s cubic-bezier(.2,1.4,.4,1) both, moedaSome .5s ease 2s both; }
+  @keyframes moedaPop { 0% { transform: translateY(-18px) scale(.6); opacity: 0; }
+    100% { transform: none; opacity: 1; } }
+  @keyframes moedaSome { to { opacity: 0; transform: translateY(-12px); } }
+  /* roster com muitos bonecos comprados: cards menores e quebrando linha */
+  .sel-roster { flex-wrap: wrap; justify-content: center; }
+  .sel-roster.muitos .sel-card { width: clamp(96px, 11vw, 132px); }
+  .sel-roster.muitos .sel-card-nome { font-size: 13px; }
+  .sel-roster.muitos .sel-card-classe { display: none; }
+  #ajuda-fechar { align-self: center; margin-top: 4px; }
+  /* ---------- Seleção de personagens (palco 3D + cards) ---------- */
+  #selecao { position: fixed; inset: 0; z-index: 5; display: flex; flex-direction: column;
+    align-items: center; justify-content: space-between; padding: 14px 12px 16px;
+    color: #fff; font-family: var(--f-ui); pointer-events: none;
+    /* faixas translúcidas em cima/embaixo — o palco 3D aparece no meio */
+    background: linear-gradient(180deg, rgba(16,10,38,.85) 0%, transparent 22%),
+                linear-gradient(0deg, rgba(12,7,30,.92) 0%, rgba(12,7,30,.6) 26%, transparent 46%); }
+  #selecao > * { pointer-events: auto; }
+  .sel-titulo-mini { font-family: var(--f-disp); font-size: clamp(24px, 5vw, 42px);
+    color: #ffd94a; letter-spacing: 1px; -webkit-text-stroke: 2px #2a1030;
+    text-shadow: 0 4px 0 rgba(42,16,48,.85); transform: rotate(-1.5deg);
+    animation: tituloPop .5s cubic-bezier(.2,1.4,.4,1) both; }
+  @keyframes tituloPop { 0% { transform: rotate(-1.5deg) scale(.6); opacity: 0; }
+    100% { transform: rotate(-1.5deg) scale(1); opacity: 1; } }
+  .sel-baixo { display: flex; flex-direction: column; align-items: center; gap: 10px; width: 100%; }
+  .sel-chips { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+  .sel-chip { font-size: 12px; font-weight: 700; padding: 4px 12px; border-radius: 999px;
+    background: rgba(0,0,0,.42); border: 2px solid var(--cj, rgba(255,255,255,.22)); color: #efe9ff; }
+  .sel-chip.vazio { border-style: dashed; opacity: .55; }
+  .sel-roster { display: flex; gap: clamp(16px, 3.5vw, 40px); align-items: flex-end; margin-top: 12px; }
+  .sel-card { position: relative; width: clamp(140px, 21vw, 210px); cursor: pointer;
+    border-radius: 20px; border: 4px solid rgba(255,255,255,.22);
+    background: linear-gradient(180deg, rgba(44,30,88,.94), rgba(24,15,54,.96));
+    padding: 10px 10px 9px; display: flex; flex-direction: column; align-items: center; gap: 5px;
+    box-shadow: 0 12px 30px rgba(0,0,0,.4);
+    transition: transform .16s cubic-bezier(.2,1.3,.4,1), border-color .16s, box-shadow .16s; }
+  .sel-card:hover { transform: translateY(-4px); }
+  .sel-card.sob { border-color: #fff; transform: translateY(-7px) scale(1.04);
+    box-shadow: 0 0 0 3px rgba(255,255,255,.25), 0 16px 36px rgba(0,0,0,.45); }
+  .sel-card img { width: 100%; aspect-ratio: 1; border-radius: 14px; object-fit: cover;
+    background: rgba(0,0,0,.25); }
+  .sel-card-nome { font-family: var(--f-disp); font-size: clamp(17px, 2.5vw, 24px);
+    letter-spacing: .5px; text-shadow: 0 2px 0 rgba(0,0,0,.45); }
+  .sel-card-classe { font-size: 11px; font-weight: 800; letter-spacing: .6px; padding: 2px 10px;
+    border-radius: 999px; background: rgba(255,255,255,.14); color: #ffe9b0; }
+  .sel-badges { position: absolute; top: -15px; left: -10px; right: -10px; display: flex;
+    justify-content: center; gap: 6px; pointer-events: none; }
+  .sel-badge { font-family: var(--f-disp); font-size: 13px; padding: 3px 10px; border-radius: 999px;
+    border: 3px solid #2a1030; box-shadow: 0 3px 0 rgba(0,0,0,.4); color: #fff;
+    animation: badgePula .5s cubic-bezier(.2,1.4,.4,1) both; }
+  @keyframes badgePula { 0% { transform: translateY(8px) scale(.5); opacity: 0; }
+    100% { transform: translateY(0) scale(1); opacity: 1; } }
+  .sel-badge.pj0 { background: #ff5252; } .sel-badge.pj1 { background: #40a0ff; }
+  .sel-badge.pj2 { background: #ffd94a; color: #4a3608; } .sel-badge.pj3 { background: #7ed957; color: #123312; }
+  .sel-badge.conf::after { content: ' ✔'; }
+  .sel-nome { font-family: var(--f-disp); font-size: clamp(18px, 2.6vw, 24px); letter-spacing: .5px;
+    text-shadow: 0 2px 0 rgba(0,0,0,.4); }
+  .sel-dica { font-size: 13px; font-weight: 600; opacity: .85; color: #e7dffb;
+    background: rgba(0,0,0,.34); padding: 4px 12px; border-radius: 999px; }
+  #sel-mapa, #sel-modo { display: none; flex-direction: column; align-items: center; gap: 10px;
+    width: 100%; max-width: 1120px; }
+  #selecao.fase-mapa #sel-mapa { display: flex; }
+  #selecao.fase-modo #sel-modo { display: flex; }
+  #selecao.fase-mapa .sel-roster, #selecao.fase-modo .sel-roster,
+  #selecao.fase-mapa #sel-rodape-dica, #selecao.fase-modo #sel-rodape-dica { display: none; }
+  #sel-mapa .sel-nome { font-size: clamp(17px, 2.4vw, 22px); }
+  /* carrossel coverflow: o mapa escolhido GIGANTE no centro, vizinhos espiando dos lados */
+  #mapa-grid { position: relative; width: 100%; height: clamp(240px, 42vh, 360px);
+    perspective: 1100px; margin-bottom: 10px; }
+  .mapa-card { position: absolute; left: 50%; top: 50%; width: clamp(300px, 44vw, 520px);
+    border-radius: 18px; overflow: hidden; border: 4px solid rgba(255,255,255,.18); cursor: pointer;
+    background: #1a1236; box-shadow: 0 14px 34px rgba(0,0,0,.45);
+    transform: translate(-50%, -50%);
+    transition: transform .38s cubic-bezier(.2,.9,.3,1), opacity .38s, border-color .3s, filter .38s; }
+  .mapa-card img { width: 100%; aspect-ratio: 26/15; object-fit: cover; display: block; }
+  .mapa-card .mc-nome { position: absolute; left: 0; right: 0; bottom: 0; padding: 28px 14px 10px;
+    font-family: var(--f-disp); font-size: 15px; letter-spacing: .5px; text-align: center;
+    background: linear-gradient(transparent, rgba(10,6,26,.92)); text-shadow: 0 2px 0 rgba(0,0,0,.55); }
+  .mapa-card:not(.sel) { filter: saturate(.7) brightness(.7); }
+  .mapa-card.sel { border-color: #ffd94a;
+    box-shadow: 0 0 0 3px rgba(255,217,74,.35), 0 22px 50px rgba(0,0,0,.55); }
+  .mapa-card.sel .mc-nome { font-size: clamp(20px, 3vw, 28px); text-align: left; padding-left: 18px; }
+  /* cards de modo de jogo */
+  #modo-grid { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; padding-top: 16px; }
+  .modo-card { width: clamp(124px, 14vw, 158px); border-radius: 16px; cursor: pointer; text-align: center;
+    border: 4px solid rgba(255,255,255,.18);
+    background: linear-gradient(180deg, rgba(44,30,88,.94), rgba(24,15,54,.96));
+    padding: 12px 10px; display: flex; flex-direction: column; align-items: center; gap: 5px;
+    box-shadow: 0 8px 20px rgba(0,0,0,.4);
+    transition: transform .15s cubic-bezier(.2,1.3,.4,1), border-color .15s, box-shadow .15s; }
+  .modo-card:hover { transform: translateY(-3px); }
+  .modo-card .mo-ico { font-size: 30px; line-height: 1.1; }
+  .modo-card .mo-nome { font-family: var(--f-disp); font-size: 14.5px; letter-spacing: .4px;
+    text-shadow: 0 2px 0 rgba(0,0,0,.45); }
+  .modo-card .mo-desc { font-size: 11.5px; font-weight: 600; opacity: .8; line-height: 1.3; }
+  .modo-card.sel { border-color: #ffd94a; transform: translateY(-5px) scale(1.05);
+    box-shadow: 0 0 0 3px rgba(255,217,74,.35), 0 14px 30px rgba(0,0,0,.5); }
+  .sel-extras { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+  .sel-extras b { color: #ffd94a; }
+  /* no menu, o HUD da luta (placar/controles/mapa/toque) fica escondido */
+  body.menu #placar, body.menu #controles, body.menu #mapa,
+  body.menu #touch, body.menu #touch-esq, body.menu #touch-dir, body.menu #touch-gritos { display: none !important; }
+  /* Letterbox de cinema durante o replay da melhor jogada */
+  body::before, body::after { content: ''; position: fixed; left: 0; right: 0; height: 0;
+    background: #000; z-index: 40; pointer-events: none; transition: height .55s ease; }
+  body::before { top: 0; } body::after { bottom: 0; }
+  body.cine::before, body.cine::after { height: 7vh; }
+  /* Tutorial: cartão de passo no rodapé + pulso no botão do título */
+  #tut { position: fixed; left: 50%; bottom: 9vh; transform: translateX(-50%); z-index: 30;
+    background: rgba(13, 10, 32, .88); border: 2px solid #ffb52e; border-radius: 14px;
+    padding: 12px 26px; text-align: center; color: #fff; font-family: inherit;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, .5); pointer-events: none; }
+  #tut .tut-passo { font-size: 11px; letter-spacing: 2px; color: #ffb52e; margin-bottom: 4px; }
+  #tut .tut-txt { font-size: 22px; }
+  #tut .tut-como { font-size: 13px; opacity: .75; margin-top: 3px; }
+  @keyframes tutPulsa { 0%, 100% { box-shadow: 0 0 0 0 rgba(255, 181, 46, .7); } 60% { box-shadow: 0 0 0 12px rgba(255, 181, 46, 0); } }
+  .tit-btn.pulsa { animation: tutPulsa 1.6s infinite; }
+  /* TORNEIO: árvore de chaves */
+  #chave { position: fixed; inset: 0; z-index: 35; display: flex; align-items: center; justify-content: center;
+    background: rgba(10, 8, 26, .78); backdrop-filter: blur(3px); }
+  .ch-card { background: rgba(16, 12, 40, .95); border: 2px solid #ffb52e; border-radius: 18px;
+    padding: 22px 30px; max-width: 92vw; max-height: 88vh; overflow: auto; text-align: center; color: #fff;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, .6); }
+  .ch-tit { font-size: 30px; font-weight: 900; letter-spacing: 3px; color: #ffb52e; margin-bottom: 12px; }
+  .ch-grade { display: flex; gap: 26px; align-items: center; justify-content: center; margin: 8px 0 14px; }
+  .ch-col { display: flex; flex-direction: column; gap: 14px; justify-content: space-around; }
+  .ch-rot { font-size: 11px; letter-spacing: 2px; opacity: .6; }
+  .ch-luta { border: 1px solid rgba(255, 255, 255, .25); border-radius: 10px; overflow: hidden; min-width: 168px; }
+  .ch-luta.ch-ativa { border-color: #ffb52e; box-shadow: 0 0 14px rgba(255, 181, 46, .5); }
+  .ch-nome { padding: 6px 12px; font-size: 14px; text-align: left; background: rgba(255, 255, 255, .04); }
+  .ch-nome + .ch-nome { border-top: 1px solid rgba(255, 255, 255, .12); }
+  .ch-nome.ch-venceu { color: #7ed957; font-weight: 700; }
+  .ch-nome.ch-vazio { opacity: .35; }
+  .ch-prox { font-size: 18px; margin: 8px 0 4px; }
+  .ch-campeao { font-size: 24px; margin: 10px 0 4px; color: #ffd94a; }
+  .ch-dica { font-size: 12.5px; opacity: .7; }
+  .ch-ns { display: flex; gap: 16px; justify-content: center; margin: 16px 0; }
+  .ch-ns .tit-btn { min-width: 84px; font-size: 26px; }
 </style>
 </head>
 <body>
+<div id="titulo" style="display:none">
+  <div class="tit-logo" aria-label="WOBBLERS!">
+    <span>W</span><span>O</span><span>B</span><span>B</span><span>L</span><span>E</span><span>R</span><span>S</span><span>!</span>
+  </div>
+  <div class="tit-botoes">
+    <button class="tit-btn" id="tit-jogar" type="button">🎮 JOGAR</button>
+    <button class="tit-btn" id="tit-online" type="button">🌐 JOGAR ONLINE</button>
+    <button class="tit-btn tit-btn-mini" id="tit-torneio" type="button">🏆 TORNEIO</button>
+    <button class="tit-btn tit-btn-mini" id="tit-tutorial" type="button">🎓 TUTORIAL</button>
+    <button class="tit-btn tit-btn-mini" id="tit-ajuda" type="button">❓ COMO JOGAR</button>
+    <button class="tit-btn tit-btn-mini" id="tit-loja" type="button">🛒 LOJA &nbsp;·&nbsp; <span id="tit-moedas">0</span> 🪙</button>
+    <button class="tit-btn tit-btn-mini" id="tit-carreira" type="button">📊 CARREIRA</button>
+  </div>
+  <div class="tit-rodape">ENTER começa &nbsp;·&nbsp; até 4 no mesmo PC &nbsp;·&nbsp; até 20 online</div>
+</div>
+<div id="loja" style="display:none">
+  <div class="aj-card" style="max-width:860px">
+    <div class="aj-tit" style="display:flex;align-items:center;gap:14px;width:100%">🛒 LOJA
+      <span id="loja-saldo" style="margin-left:auto;font-size:.8em">🪙 0</span></div>
+    <div class="lj-sub">moedas de brincadeira — ganhe jogando: <b>+5</b> por round vencido ·
+      <b>+20</b> por partida · <b>+25</b> vencendo online</div>
+    <div class="lj-tit">🎨 TINTAS ESPECIAIS <small>(brilham de verdade — valem online também)</small></div>
+    <div id="loja-tintas" class="lj-grid"></div>
+    <div class="lj-tit">🧸 NOVOS LUTADORES <small>— em produção no Meshy 🔜 (guarde suas moedas!)</small></div>
+    <button class="tit-btn tit-btn-mini" id="loja-fechar" type="button">FECHAR (ESC)</button>
+  </div>
+</div>
+<div id="carreira" style="display:none">
+  <div class="aj-card" style="max-width:820px">
+    <div class="aj-tit">📊 SUA CARREIRA</div>
+    <div id="car-stats" class="lj-grid" style="grid-template-columns:repeat(auto-fill,minmax(105px,1fr))"></div>
+    <div class="lj-tit">🏅 CONQUISTAS <small>(cada uma paga moedas da loja)</small></div>
+    <div id="car-conq" style="display:flex;flex-direction:column;gap:7px;width:100%"></div>
+    <button class="tit-btn tit-btn-mini" id="carreira-fechar" type="button">FECHAR (ESC)</button>
+  </div>
+</div>
+<div id="ajuda" style="display:none">
+  <div class="aj-card">
+    <div class="aj-tit">❓ COMO JOGAR</div>
+    <div class="aj-grid">
+      <div class="aj-sec"><b>🔴 Jogador 1</b><br>WASD anda · F soco · G agarra<br>ESPAÇO pula (2×) · SHIFT esquiva · T emote</div>
+      <div class="aj-sec"><b>🔵 Jogador 2</b><br>Setas andam · K soco · L agarra<br>ENTER pula (2×) · ⇧ esquiva · O emote</div>
+    </div>
+    <div class="aj-sec"><b>💥 Golpes especiais</b> — investida: toque duplo na direção · cabeçada: agarrar + soco ·
+      chute: andar pra trás + soco · voadora: soco no ar · <b>SOCÃO:</b> segure o soco carregando e solte!</div>
+    <div class="aj-sec"><b>🔫 Armas</b> — pega com <b>agarrar</b>, usa com <b>soco</b> e arremessa soltando o agarrar.
+      Bomba: o pavio acende na mão — jogue no rival antes de explodir! 🛡️ Escudo absorve um golpe inteiro.</div>
+    <div class="aj-sec"><b>🎮 Controle</b> — analógico anda · A pula/confirma · X soca · B agarra · LT esquiva (até 4 controles).</div>
+    <div class="aj-sec"><b>🏆 Modos</b> — Melhor de 5/3 · Morte Súbita 💀 · CAOS ⚔️ (armas sem parar) ·
+      REI DO MORRO 👑 (domine o centro 10s) · DUPLAS 2v2 🤝 (você + aliado, sem fogo amigo).
+      No online o host ainda liga <b>TIMES 🔴🔵</b> (até 10x10!) no Y e troca a arena no B —
+      inclusive o <b>ABISMO 🕳️</b>, onde cair no buraco é adeus.</div>
+    <div class="aj-sec"><b>🌐 Online</b> — no PC que hospeda, rode <b>servidor-online.bat</b> (mesma rede) ou
+      <b>jogar-online-internet.bat</b> (internet) e mande o link pros amigos. Até 20 jogadores!</div>
+    <button class="tit-btn tit-btn-mini" id="ajuda-fechar" type="button">FECHAR (ESC)</button>
+  </div>
+</div>
 <div id="selecao" style="display:none">
-  <div class="sel-titulo">MOLENGAS!</div>
-  <div class="sel-paineis">
-    <div class="sel-painel" id="sel-p0">
-      <img id="sel-img0" alt="">
-      <div class="sel-nome" id="sel-nome0"></div>
-      <div class="sel-dica">🔴 A · D muda &nbsp;·&nbsp; F confirma</div>
+  <div class="sel-titulo-mini" id="sel-tit">ESCOLHA SEU LUTADOR</div>
+  <div class="sel-baixo">
+    <div class="sel-chips" id="sel-chips"></div>
+    <div class="sel-roster" id="sel-roster"></div>
+    <div id="sel-mapa">
+      <div id="mapa-grid"></div>
+      <span id="sel-mapa-nome" style="display:none"></span>
+      <div class="sel-dica" id="sel-mapa-desc"></div>
+      <div class="sel-dica">🔴 A · D navega &nbsp;·&nbsp; X sorteia 🎲 &nbsp;·&nbsp; F confirma &nbsp;·&nbsp; ESC volta</div>
     </div>
-    <div class="sel-painel" id="sel-p1">
-      <img id="sel-img1" alt="">
-      <div class="sel-nome" id="sel-nome1"></div>
-      <div class="sel-dica">← · → muda &nbsp;·&nbsp; K confirma 🔵</div>
+    <div id="sel-modo">
+      <span id="sel-modo-nome" style="display:none"></span>
+      <div id="modo-grid"></div>
+      <div class="sel-extras">
+        <span class="sel-dica">🤖 BOTS (V): <b id="sel-nivel"></b></span>
+        <span class="sel-dica">🎉 EXTRA (G): <b id="sel-modif"></b></span>
+      </div>
+      <div class="sel-dica">🔴 A · D modo &nbsp;·&nbsp; V bots &nbsp;·&nbsp; G extra &nbsp;·&nbsp; C bot 🤖 &nbsp;·&nbsp; F começa! &nbsp;·&nbsp; ESC volta</div>
     </div>
-    <div class="sel-painel" id="sel-p2">
-      <img id="sel-img2" alt="">
-      <div class="sel-nome" id="sel-nome2"></div>
-      <div class="sel-dica">🎮 3: aperte A pra entrar</div>
-    </div>
-    <div class="sel-painel" id="sel-p3">
-      <img id="sel-img3" alt="">
-      <div class="sel-nome" id="sel-nome3"></div>
-      <div class="sel-dica">🎮 4: aperte A pra entrar</div>
-    </div>
+    <div class="sel-dica" id="sel-rodape-dica">🔴 A·D muda · W·S pinta 🎨 · F confirma &nbsp;·&nbsp; 🔵 ←·→ muda · ↑·↓ pinta · K confirma &nbsp;·&nbsp; 🎮 A entra &nbsp;·&nbsp; C bot 🤖</div>
   </div>
-  <div id="sel-mapa" style="display:none">
-    <div class="sel-nome">MAPA: <span id="sel-mapa-nome"></span></div>
-    <div class="sel-dica">🔴 A · D muda mapa &nbsp;·&nbsp; C adiciona bot 🤖 &nbsp;·&nbsp; F começa a luta!</div>
-  </div>
-  <div class="sel-dica">🎮 controles: analógico anda · A pula/confirma · X soca · B agarra</div>
-  <div class="sel-dica">🌐 online (LAN): rode <b>servidor-online.bat</b> e cada jogador abre o endereço que aparecer</div>
 </div>
 <div id="hud">
   <div id="placar"></div>
+  <div id="compartilhar" style="display:none;">
+    <span class="cp-ic">🔗</span>
+    <span class="cp-lbl">chamar a galera:</span>
+    <span id="cp-link" class="cp-link"></span>
+    <button id="cp-btn" type="button">copiar</button>
+  </div>
   <div id="msg"></div>
   <div id="debug" style="position:absolute;top:70px;left:16px;font:13px monospace;color:#9f9;display:none;"></div>
-  <div id="mapa" style="position:absolute;bottom:38px;left:0;right:0;text-align:center;font-size:13px;font-weight:600;opacity:.75;"></div>
+  <div id="mapa" style="position:absolute;bottom:56px;left:0;right:0;text-align:center;font-size:13px;font-weight:600;opacity:.8;"></div>
   <div id="versao" style="position:absolute;top:14px;right:16px;font:12px monospace;opacity:.55;"></div>
   <div id="controles">
-    <div class="p1">🔴 WASD anda &nbsp;·&nbsp; F soco &nbsp;·&nbsp; G agarra &nbsp;·&nbsp; ESPAÇO pula &nbsp;·&nbsp; 1 fantasia</div>
-    <div class="p2">2 fantasia &nbsp;·&nbsp; SETAS anda &nbsp;·&nbsp; K soco &nbsp;·&nbsp; L agarra &nbsp;·&nbsp; ENTER pula 🔵</div>
+    <div class="p1">🔴 WASD anda &nbsp;·&nbsp; F soco &nbsp;·&nbsp; G agarra &nbsp;·&nbsp; ESPAÇO pula (2×) &nbsp;·&nbsp; SHIFT esquiva &nbsp;·&nbsp; 1 fantasia</div>
+    <div class="p2">2 fantasia &nbsp;·&nbsp; SETAS anda &nbsp;·&nbsp; K soco &nbsp;·&nbsp; L agarra &nbsp;·&nbsp; ENTER pula (2×) &nbsp;·&nbsp; ⇧ esquiva 🔵</div>
+  </div>
+</div>
+<div id="online-acoes">
+  <div class="oa-btn oa-go" data-act="comecar">▶ COMEÇAR</div>
+  <div class="oa-btn" data-act="lutador">TROCA 🤖↔🦖</div>
+  <div class="oa-btn" data-act="modo">Sala</div>
+  <div class="oa-btn" data-act="pontos">Pontos</div>
+  <div class="oa-btn" data-act="arena">Arena</div>
+  <div class="oa-btn" data-act="morro">👑</div>
+  <div class="oa-btn" data-act="times">🔴🔵</div>
+</div>
+<div id="touch">
+  <div id="touch-gritos">
+    <div class="tgrito" data-grito="0">😂</div>
+    <div class="tgrito" data-grito="1">💀</div>
+    <div class="tgrito" data-grito="2">😱</div>
+    <div class="tgrito" data-grito="3">❤️</div>
+  </div>
+  <div id="touch-base"><div id="touch-knob"></div></div>
+  <div id="touch-botoes">
+    <div class="tbtn esquiva" data-btn="esquiva"><span class="ic">💨</span>ESQUIVA</div>
+    <div class="tbtn pulo" data-btn="jump"><span class="ic">⬆️</span>PULO</div>
+    <div class="tbtn agarra" data-btn="grab"><span class="ic">✊</span>AGARRA</div>
+    <div class="tbtn soco" data-btn="punch"><span class="ic">🥊</span>SOCO</div>
   </div>
 </div>
 <div id="carregando" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;font-family:sans-serif;font-size:28px;font-weight:700;">CARREGANDO…</div>
@@ -136,6 +553,8 @@
     });
   }
 </script>
+<div id="tut" style="display:none"></div>
+<div id="chave" style="display:none"></div>
 <script type="importmap">{ "imports": { "three": "./libs/three.module.js" } }</script>
 <script type="module" src="src/main.js"></script>
 </body>

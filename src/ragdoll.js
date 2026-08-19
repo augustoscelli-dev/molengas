@@ -1,6 +1,7 @@
 // Ragdoll ativo (física pura, sem DOM/three) — recebe o módulo RAPIER e o world.
 // O boneco fica em pé por "molas de marionete": uma corda invisível puxa a cabeça
 // pra cima e o quadril flutua na altura certa. Nocaute = desligar as molas.
+import { AJUSTES } from './ajustes.js';
 
 export const PARTS = [
   { name: 'pelvis',    shape: 'capsule', hh: 0.06, r: 0.14,  off: [0, 0.95, 0],      mass: 6 },
@@ -16,27 +17,77 @@ export const PARTS = [
   { name: 'calfR',     shape: 'capsule', hh: 0.12, r: 0.06,  off: [0.10, 0.22, 0],   mass: 1.5 },
 ];
 
+// Cada junta agora tem CURSO. Antes era tudo `spherical`, que prende dois pontos
+// e libera 360° nos três eixos — o cotovelo dobrava pro lado errado, o joelho
+// invertia e o braço girava infinito (era ele que parecia cata-vento em jogo).
+//
+//   eixo   = eixo da dobradiça / do giro principal
+//   limite = [min, max] em radianos, ou null pra junta sem curso definido
+//   trava  = graus de liberdade CONGELADOS (junta generic); a torção entra aqui
+//
+// Pegadinha do Rapier: JointData.revolute ignora os campos limits/limitsEnabled
+// do descritor. O limite só pega chamando setLimits() na junta JÁ CRIADA.
+// E `spherical` não aceita limite nem motor — foram removidos no alpha e seguem
+// sem funcionar, por isso a mudança é de TIPO de junta, não de parâmetro.
 const JOINTS = [
-  ['pelvis', 'torso',     [0, 0.17, 0],      [0, -0.16, 0]],
-  ['torso',  'head',      [0, 0.18, 0],      [0, -0.16, 0]],
-  ['torso',  'upperArmL', [-0.27, 0.11, 0],  [0, 0.12, 0]],
-  ['torso',  'upperArmR', [0.27, 0.11, 0],   [0, 0.12, 0]],
-  ['upperArmL', 'forearmL', [0, -0.13, 0],   [0, 0.13, 0]],
-  ['upperArmR', 'forearmR', [0, -0.13, 0],   [0, 0.13, 0]],
-  ['pelvis', 'thighL',    [-0.10, -0.16, 0], [0, 0.20, 0]],
-  ['pelvis', 'thighR',    [0.10, -0.16, 0],  [0, 0.20, 0]],
-  ['thighL', 'calfL',     [0, -0.18, 0],     [0, 0.16, 0]],
-  ['thighR', 'calfR',     [0, -0.18, 0],     [0, 0.16, 0]],
+  // ombro/quadril/pescoço: 2 eixos livres, TORÇÃO travada
+  ['pelvis', 'torso',     [0, 0.17, 0],      [0, -0.16, 0],  'gen', [0, 1, 0], [-0.5, 0.5]],
+  ['torso',  'head',      [0, 0.18, 0],      [0, -0.16, 0],  'gen', [0, 1, 0], [-0.7, 0.7]],
+  ['torso',  'upperArmL', [-0.27, 0.11, 0],  [0, 0.12, 0],   'gen', [0, 1, 0], null],
+  ['torso',  'upperArmR', [0.27, 0.11, 0],   [0, 0.12, 0],   'gen', [0, 1, 0], null],
+  // quadril vira DOBRADIÇA pra poder receber motor de ângulo: junta 'generic'
+  // não expõe configureMotorPosition, e é o quadril que leva a realimentação de
+  // equilíbrio do SIMBICON. Custo: a perna não abre pro lado — mas o boneco
+  // sempre anda na direção que encara, então perna frente/trás basta.
+  ['pelvis', 'thighL',    [-0.10, -0.16, 0], [0, 0.20, 0],   'hinge', [1, 0, 0], [-1.5, 1.5]],
+  ['pelvis', 'thighR',    [0.10, -0.16, 0],  [0, 0.20, 0],   'hinge', [1, 0, 0], [-1.5, 1.5]],
+  // cotovelo/joelho: dobradiça de eixo único, dobra pra um lado só
+  ['upperArmL', 'forearmL', [0, -0.13, 0],   [0, 0.13, 0],   'hinge', [1, 0, 0], [-0.15, 2.4]], // sinal do curso descoberto por teste: invertido, o braço fica dobrado e o soco não alcança
+  ['upperArmR', 'forearmR', [0, -0.13, 0],   [0, 0.13, 0],   'hinge', [1, 0, 0], [-0.15, 2.4]],
+  ['thighL', 'calfL',     [0, -0.18, 0],     [0, 0.16, 0],   'hinge', [1, 0, 0], [-1.1, 1.1]],
+  ['thighR', 'calfR',     [0, -0.18, 0],     [0, 0.16, 0],   'hinge', [1, 0, 0], [-1.1, 1.1]],
 ];
 
 // Limites da plataforma — fora disso as molas desligam e o boneco despenca.
 export const ARENA = { halfX: 5.5, halfZ: 4.0 };
 
+// Dano acumulado que derruba (nocaute). Estava espalhado como "4" em 17 lugares
+// entre cliente e servidor; virou constante pra os dois não descolarem. Subir
+// RECALIBRADO depois das pernas motorizadas: com o corpo mais estável o dano
+// acumulava muito mais devagar, e com 26 o nocaute levava 78s. Como o jogo é
+// "nocauteia -> agarra -> carrega -> joga fora", nocaute raro = a jogada
+// central quase não acontece. Com 8 o nocaute vem a cada ~16s.
+// O dano decai 0.12/s: trocação parada não acumula, precisa de pressão contínua.
+// Ganhos do controlador de marcha (ver bloco das pernas em update()). Ficam
+// juntos aqui porque são varridos como conjunto: mexer num sem medir os outros
+// não diz nada num sistema com realimentação.
+export const SIMB = {
+  cd: -2.2, cv: -0.2,   // realimentação de equilíbrio (valores do SimbiconJS,
+                        // e varridos aqui também: -2.2/-0.2 é o ótimo nosso)
+  qBal: -0.55, jBal: 0.5,
+  qApoio: 0.25, jApoio: 0.12,
+  kQ: 11000, kJ: 4500, amort: 0.12,   // varridos: patinação cai até ~40% e platô
+  passo: 0.46,
+};
+
+export const DANO_KO = 8;
+
 // Fração do peso de cada parte que é "segurada" pela marionete enquanto em pé.
 const ANTIGRAV = {
-  pelvis: 0.8, torso: 0.8, head: 0.8,
-  upperArmL: 0.5, upperArmR: 0.5, forearmL: 0.5, forearmR: 0.5,
-  thighL: 0.25, thighR: 0.25, calfL: 0.25, calfR: 0.25,
+  // Era 0.8 no miolo: 80% da gravidade anulada deixava o corpo sem peso, e o
+  // boneco lia como marionete em vez de corpo. Menos anti-gravidade = o tronco
+  // afunda no passo, assenta na parada, e o golpe tem onde repercutir.
+  // Era 0.8 no miolo, quando o esqueleto não tinha junta e precisava ser
+  // segurado no ar. Com curso nas juntas o corpo se sustenta, então a muleta
+  // pode cair: menos antigravidade = o tronco afunda no passo, assenta na
+  // parada e o golpe tem onde repercutir. Verificado que continua em pé até
+  // 0.22, mas aí o pé começa a enterrar; 0.45 é o passo firme sem estragar.
+  // Baixou de novo (0.45 -> 0.30) depois que a perna passou a ser motorizada
+  // e sustentar de verdade. Varrido: o boneco fica em pé até 0.08, e 0.30 é o
+  // melhor conjunto (patinação 36%, pé a 0.8 cm). Menos muleta = mais peso.
+  pelvis: 0.30, torso: 0.28, head: 0.26,
+  upperArmL: 0.18, upperArmR: 0.18, forearmL: 0.15, forearmR: 0.15,
+  thighL: 0.1, thighR: 0.1, calfL: 0.1, calfR: 0.1,
 };
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -56,9 +107,10 @@ const qrot = (q, v) => {
 };
 
 export class Ragdoll {
-  constructor(R, world, { x = 0, z = 0, heading = 0, memberships, filter }) {
+  constructor(R, world, { x = 0, z = 0, heading = 0, memberships, filter, owner = null, onCollider = null }) {
     this.R = R;
     this.world = world;
+    this.owner = owner; // id do dono (pra filtro de contato: partes do mesmo dono não colidem)
     this.spawn = { x, z };
     this.heading0 = heading;
     this.heading = heading;
@@ -66,14 +118,24 @@ export class Ragdoll {
     this.rivals = []; // outros lutadores (briga livre: pode ter até 3)
     this.props = []; // corpos agarráveis/socáveis da arena (caixotes, bola…)
     this.stunUntil = 0;
+    this.downUntil = 0;         // nocauteado: desaba mole por um tempo (dá pra arrastar)
+    this.lastKnockdownAt = -10; // pra som/efeito de nocaute
     this.punchReadyAt = 0;
     this.punchUntil = 0;
     this.punchHit = true;
+    // Golpe carregado: toque = soco normal; segurar carrega o SOCÃO (solta no release)
+    this._punchHeld = false;
+    this._carga = 0;        // 0..1 — carga atual (o cliente desenha faíscas)
+    this._cargaDesde = -1;
+    this._cargaGolpe = 0;   // carga do golpe em voo (multiplica o knockback)
     this.jumpReadyAt = 0;
+    this._jumpPrev = false; this._pulosAr = 0; // duplo pulo
     this.hoverBlockUntil = 0;
     this.gaitT = 0;
     this.lastHitLandedAt = -10;
     this.lastPunchStartAt = -10;
+    this.lastCabecadaAt = -10; // cabeçada (agarrar+soco)
+    this.lastChuteAt = -10;    // chute (trás+soco)
     this.lastJumpAt = -10;
     this.lastGrabAt = -10;
     this.lastThrowAt = -10;
@@ -82,9 +144,18 @@ export class Ragdoll {
     this.grabJoints = [null, null];
     this._ray = new R.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: -1, z: 0 });
     this.controle = 1; // 0..1 — mapas de gelo reduzem a tração
+    this.forcaSoco = 1; // multiplicador de força do soco (Kaiju bate mais forte)
+    this.resistencia = 1; // aguenta mais tranco: reduz knockback e acúmulo de dano
+    this.escudo = 0; this.lastEscudoAt = -10;  // power-up escudo 🛡️: absorve o próximo golpe
+    this.buffVel = 1; this.buffVelAte = 0;     // power-up de velocidade (temporário)
+    this.buffForca = 1; this.buffForcaAte = 0; // power-up de força (temporário)
     this.dano = 0; // nocaute acumulativo: apanhar seguido atordoa mais
     this.folego = 1; // cansaço: spam de soco esgota
+    this._agr = null; this._agrAt = -10; // último agressor (pra "melhor jogada")
     this.dashReadyAt = 0;
+    this.esquivaReadyAt = 0;   // cooldown da esquiva
+    this.esquivaUntil = 0;     // janela de invencibilidade (i-frames)
+    this.lastEsquivaAt = -10;
     this.emoteReadyAt = 0;
     this.stats = { socos: 0, acertos: 0, quedas: 0, pendurado: 0, arremessos: 0 };
 
@@ -102,15 +173,30 @@ export class Ragdoll {
         .setFriction(0.7)
         .setRestitution(0.15)
         .setCollisionGroups(groups);
-      world.createCollider(cd, body);
-      this.parts[spec.name] = body;
+      if (owner != null) cd.setActiveHooks(R.ActiveHooks.FILTER_CONTACT_PAIRS);
+      const col = world.createCollider(cd, body);
+      if (onCollider) onCollider(col, spec);
+      body.__rag = this; // quem arremessa precisa achar o corpo INTEIRO do alvo,
+      this.parts[spec.name] = body; // não só o membro que estava agarrado
     }
-    for (const [a, b, aa, ab] of JOINTS) {
-      const data = R.JointData.spherical(
-        { x: aa[0], y: aa[1], z: aa[2] },
-        { x: ab[0], y: ab[1], z: ab[2] },
-      );
-      world.createImpulseJoint(data, this.parts[a], this.parts[b], true);
+    for (const [a, b, aa, ab, tipo, eixo, limite] of JOINTS) {
+      const p1 = { x: aa[0], y: aa[1], z: aa[2] }, p2 = { x: ab[0], y: ab[1], z: ab[2] };
+      const ax = { x: eixo[0], y: eixo[1], z: eixo[2] };
+      let data;
+      if (tipo === 'hinge') {
+        data = R.JointData.revolute(p1, p2, ax);
+      } else {
+        // generic travando as 3 translações + a TORÇÃO em torno do eixo do membro:
+        // sobram 2 eixos de giro, que é o que ombro e quadril de verdade fazem
+        const M = R.JointAxesMask;
+        data = R.JointData.generic(p1, p2, ax, M.LinX | M.LinY | M.LinZ | M.AngY);
+      }
+      const j = world.createImpulseJoint(data, this.parts[a], this.parts[b], true);
+      if (limite && typeof j.setLimits === 'function') j.setLimits(limite[0], limite[1]);
+      // guarda as juntas das PERNAS: são elas que ganham motor de ângulo
+      // (controlar ângulo é o que o esqueleto entrega; empurrar o pé por mola,
+      // que era o que havia antes, não garante posição nenhuma)
+      (this.juntas ??= {})[a + '>' + b] = j;
     }
   }
 
@@ -128,6 +214,16 @@ export class Ragdoll {
     this.releaseGrabs();
   }
 
+  isDowned(now) { return now < this.downUntil; }
+
+  // NOCAUTE: desaba mole por um tempão (o oponente pode agarrar e arrastar).
+  knockdown(now, dur = 3.6) {
+    this.downUntil = Math.max(this.downUntil, now + dur);
+    this.stunUntil = Math.max(this.stunUntil, this.downUntil); // fica mole o tempo todo
+    this.lastKnockdownAt = now;
+    this.releaseGrabs();
+  }
+
   // arremesso=true (soltou de propósito): girando rápido, o que estava
   // agarrado sai voando com força extra proporcional ao giro.
   releaseGrabs(arremesso = false) {
@@ -136,11 +232,34 @@ export class Ragdoll {
       const g = this.grabJoints[i];
       if (!g) continue;
       this.world.removeImpulseJoint(g.j, true);
-      if (arremesso && spin > 2.5 && g.body && !g.chao) {
-        const v = g.body.linvel();
-        const sp = Math.hypot(v.x, v.y, v.z) || 1;
-        const k = Math.min(spin * 1.3, 10);
-        g.body.applyImpulse({ x: (v.x / sp) * k, y: (v.y / sp) * k + spin * 0.35, z: (v.z / sp) * k }, true);
+      if (arremesso && spin > 1.0 && g.body && !g.chao) {
+        // 🥊 ARREMESSO POR CIMA DA CORDA. Com o ringue fechado, esta é a única
+        // forma de tirar o rival da arena — então o lançamento precisa vencer
+        // uma corda de 0.9 m. Medido no harness: impulso vertical ~22 é o
+        // mínimo que passa por cima. Girar mais joga mais longe; giro fraco
+        // (perto de 2.5) só empurra, não ejeta — o arremesso tem que ser
+        // merecido. Vai no tronco+quadril+cabeça pra levantar o corpo inteiro,
+        // senão só o membro agarrado sobe e o resto fica pendurado.
+        // Direção do arremesso = pra onde QUEM ARREMESSA está olhando. Antes
+        // usava a velocidade do corpo agarrado normalizada, mas corpo mole
+        // parado tem velocidade ~0: a direção virava ruído e o rival era
+        // lançado pra qualquer lado, quase sempre de volta pra dentro. Mirar
+        // pelo heading é o que o jogador espera e o que torna a jogada uma
+        // JOGADA, não sorteio.
+        const dirA = [Math.sin(this.heading), Math.cos(this.heading)];
+        // Com o ringue fechado o ARREMESSO é a única forma de pontuar, então
+        // ele precisa ser confiável: a perícia já está em nocautear e agarrar,
+        // não em conseguir rodopiar. Base fixa que vence a corda de 0.9 m
+        // (medido: 22 de impulso vertical é o mínimo que passa), e o giro
+        // adiciona alcance por cima disso.
+        const k = Math.min(6 + spin * 1.8, 16);
+        const alto = 12 + Math.min(spin, 8) * 1.6;
+        const dono = g.body.__rag ?? null;
+        const alvos = dono ? ['torso', 'pelvis', 'head'].map((n) => dono.parts[n]) : [g.body];
+        for (const b of alvos) {
+          if (!b) continue;
+          b.applyImpulse({ x: dirA[0] * k, y: alto, z: dirA[1] * k }, true);
+        }
         this.lastThrowAt = this._now ?? 0;
         this.stats.arremessos++;
       }
@@ -150,6 +269,21 @@ export class Ragdoll {
 
   hangingOnLedge() {
     return this.grabJoints.some((g) => g && g.chao);
+  }
+
+  // Rival que está agarrado agora (pra cabeçada no agarrão), ou null.
+  grabbedRival() {
+    for (const g of this.grabJoints) if (g && g.rival && !g.rival.isDowned(this._now || 0)) return g.rival;
+    for (const g of this.grabJoints) if (g && g.rival) return g.rival;
+    return null;
+  }
+
+  // Ponta do pé (pra chute)
+  footTip(side) {
+    const calf = this.parts[side === 0 ? 'calfL' : 'calfR'];
+    const p = calf.translation();
+    const d = qrot(calf.rotation(), [0, -0.2, 0]);
+    return [p.x + d[0], p.y + d[1], p.z + d[2]];
   }
 
   // Rival mais próximo (pela distância entre troncos)
@@ -194,11 +328,70 @@ export class Ragdoll {
     this.parts.torso.applyImpulse({ x: dir[0] * 6, y: 0.5, z: dir[2] * 6 }, true);
   }
 
+  // Durante a esquiva o lutador fica invencível (golpes e tiros atravessam)
+  isEsquivando(now) { return now < this.esquivaUntil; }
+
+  // Esquiva: rolamento evasivo rápido com breve invencibilidade (i-frames).
+  // Vai pra onde estiver segurando; parado, rola pra trás.
+  esquiva(now, mx = 0, mz = 0) {
+    if (now < this.esquivaReadyAt || this.isStunned(now)) return;
+    this.esquivaReadyAt = now + 1.0;
+    this.lastEsquivaAt = now;
+    this.esquivaUntil = now + 0.4;
+    this.hoverBlockUntil = Math.max(this.hoverBlockUntil, now + 0.12);
+    let dx = mx, dz = mz;
+    const mag = Math.hypot(dx, dz);
+    if (mag > 0.2) { dx /= mag; dz /= mag; }
+    else { dx = -Math.sin(this.heading); dz = -Math.cos(this.heading); } // parado => pra trás
+    const p = this.parts.pelvis, v = p.linvel();
+    p.setLinvel({ x: v.x * 0.3, y: v.y, z: v.z * 0.3 }, true); // corta a velocidade atual pro impulso ser limpo
+    p.applyImpulse({ x: dx * 12, y: 1.5, z: dz * 12 }, true);
+    this.parts.torso.applyImpulse({ x: dx * 6, y: 0.5, z: dz * 6 }, true);
+    p.applyTorqueImpulse({ x: dz * 3, y: 0, z: -dx * 3 }, true); // giro de rolamento
+  }
+
   update(dt, now, input) {
     this._now = now;
     const stunned = this.isStunned(now);
-    // recuperação gradual: dano de combo esvai, fôlego volta
-    this.dano = Math.max(0, this.dano - 0.25 * dt);
+    // Buffs de power-up expiram
+    // Peso do corpo que está no ombro: sem isto a junta não segura os ~30 kg de
+    // um nocauteado (molas de postura desligadas) e ele escorrega pra trás/baixo.
+    for (const g of this.grabJoints) {
+      if (!g || !g.ombro || !g.rival) continue;
+      for (const nome of ['torso', 'pelvis', 'head', 'thighL', 'thighR', 'calfL', 'calfR', 'upperArmL', 'upperArmR', 'forearmL', 'forearmR']) {
+        const b = g.rival.parts[nome];
+        if (b) b.applyImpulse({ x: 0, y: b.mass() * 9.81 * 0.45 * dt, z: 0 }, true);
+      }
+    }
+    if (now > this.buffVelAte) this.buffVel = 1;
+    if (now > this.buffForcaAte) this.buffForca = 1;
+    // 🧯 FREIO DE LANÇAMENTO (ideia do Smash: a velocidade de lançamento decai
+    // 0.051 por frame). O golpe pode dar um tranco forte — que é o que se VÊ —
+    // porque logo depois o freio come a sobra e a distância fica curta. Sem isso
+    // "pancada visível" e "não mandar pra fora" eram o mesmo botão, e um sempre
+    // estragava o outro.
+    if (this._freioAte != null) {
+      const freando = now < this._freioAte;
+      if (freando !== this._freando) {
+        this._freando = freando;
+        for (const pn of ['torso', 'pelvis', 'head']) this.parts[pn]?.setLinearDamping(freando ? 3.4 : 0.3);
+      }
+    }
+    // Fim do nocaute: zera o dano pra não cair de novo na hora e levanta
+    if (this.downUntil && now >= this.downUntil) {
+      this.downUntil = 0; this.dano = 0.5; this.hoverBlockUntil = now;
+      // 🛡️ INVENCIBILIDADE AO LEVANTAR. Sem isto dava pra travar alguém no chão
+      // pra sempre: golpe em quem está caído empurra o stunUntil PRA ALÉM do fim
+      // do nocaute, então o cara acordava já atordoado, levava outro, e nunca
+      // recuperava o controle. Reusa a janela da esquiva, que o soco já respeita
+      // (ver isEsquivando no acerto), então o golpe atravessa em vez de prender.
+      // NÃO protege quem está caído — agarrar e arremessar o nocauteado continua
+      // valendo, que é a jogada do jogo; protege só o instante de se levantar.
+      this.esquivaUntil = Math.max(this.esquivaUntil, now + 1.2);
+      this.stunUntil = Math.min(this.stunUntil, now); // limpa stun herdado do chão
+    }
+    // recuperação gradual: dano de combo esvai, fôlego volta (não some no nocaute)
+    if (!this.isDowned(now)) this.dano = Math.max(0, this.dano - 0.12 * dt);
     this.folego = Math.min(1, this.folego + 0.22 * dt);
     if (this.hangingOnLedge()) this.stats.pendurado += dt;
     const pelvis = this.parts.pelvis;
@@ -208,37 +401,66 @@ export class Ragdoll {
     const surfaceY = toi !== null ? pp.y - toi : 0;
     const grounded = toi !== null && toi < 1.25 && Math.abs(pv.y) < 3;
 
+    // Duplo pulo: 1 pulo extra no ar (detecta o clique, não o segurar).
+    if (grounded) this._pulosAr = 0;
+    const jumpEdge = input.jump && !this._jumpPrev;
+    this._jumpPrev = input.jump;
+    if (jumpEdge && !grounded && !stunned && (this._pulosAr || 0) < 1) {
+      this._pulosAr = (this._pulosAr || 0) + 1;
+      this.lastJumpAt = now;
+      this.hoverBlockUntil = now + 0.35;
+      const v = pelvis.linvel();
+      if (v.y < 0) pelvis.setLinvel({ x: v.x, y: 0, z: v.z }, true); // corta a queda pro pulo dar impulso limpo
+      pelvis.applyImpulse({ x: 0, y: 17, z: 0 }, true);
+      this.parts.torso.applyImpulse({ x: 0, y: 10, z: 0 }, true);
+    }
+
     // "Em pé" = anti-gravidade parcial + molas de marionete + torque de vertical.
     const standing = !stunned && toi !== null && now > this.hoverBlockUntil;
+    // 🔌 MOTOR DAS PERNAS DESLIGA fora do "em pé". O motor do Rapier PERSISTE:
+    // sem zerar a rigidez, o nocauteado continuaria de perna dura, e o corpo
+    // mole (que é o que dá pra agarrar, carregar no ombro e arremessar) sumia.
+    if (this.juntas && this._motorLigado !== standing) {
+      this._motorLigado = standing;
+      if (!standing) {
+        for (const l of ['L', 'R']) {
+          this.juntas[`pelvis>thigh${l}`]?.configureMotorPosition?.(0, 0, 0);
+          this.juntas[`thigh${l}>calf${l}`]?.configureMotorPosition?.(0, 0, 0);
+        }
+      }
+    }
     if (standing) {
       for (const [name, a] of Object.entries(ANTIGRAV)) {
         const b = this.parts[name];
         b.applyImpulse({ x: 0, y: b.mass() * 9.81 * a * dt, z: 0 }, true);
       }
-      // Quadril flutuante (alto o bastante pras pernas ficarem quase esticadas)
-      const f = clamp((1.0 - toi) * 950 - pv.y * 95, -160, 650);
+      // Quadril flutuante. Era 1.0, mas a perna esticada só alcança 0.88 abaixo do
+      // quadril. Com as juntas ganhando curso a perna passou a sustentar de outro
+      // jeito. Remedido de novo ao baixar a antigravidade (corpo mais pesado afunda
+      // mais): 1.03 põe o pé no chão sem enterrar.
+      const f = clamp((1.03 - toi) * 950 - pv.y * 95, -160, 650);
       pelvis.applyImpulse({ x: 0, y: f * dt, z: 0 }, true);
       // Corda na cabeça
       const head = this.parts.head;
       const hp = head.translation();
       const hv = head.linvel();
-      const fx = clamp((pp.x - hp.x) * 240 - hv.x * 18, -220, 220);
-      const fy = clamp((pp.y + 0.68 - hp.y) * 480 - hv.y * 32, -100, 520);
-      const fz = clamp((pp.z - hp.z) * 240 - hv.z * 18, -220, 220);
+      const fx = clamp((pp.x - hp.x) * 130 - hv.x * 8, -220, 220);
+      const fy = clamp((pp.y + 0.68 - hp.y) * 300 - hv.y * 17, -100, 520);
+      const fz = clamp((pp.z - hp.z) * 130 - hv.z * 8, -220, 220);
       head.applyImpulse({ x: fx * dt, y: fy * dt, z: fz * dt }, true);
       // Tronco acompanha
       const torso = this.parts.torso;
       const tp = torso.translation();
       const tv = torso.linvel();
-      const ty = clamp((pp.y + 0.34 - tp.y) * 380 - tv.y * 30, -100, 420);
+      const ty = clamp((pp.y + 0.34 - tp.y) * 240 - tv.y * 16, -100, 420);
       torso.applyImpulse({ x: 0, y: ty * dt, z: 0 }, true);
       // Torque que segura o corpo na vertical (senão tomba pro lado)
       for (const bname of ['pelvis', 'torso']) {
         const b = this.parts[bname];
         const up = qrot(b.rotation(), [0, 1, 0]);
         const av2 = b.angvel();
-        const tx = clamp((up[1] >= 0 ? 1 : 0.3) * (-up[2] * 24) - av2.x * 3, -13, 13);
-        const tz = clamp((up[1] >= 0 ? 1 : 0.3) * (up[0] * 24) - av2.z * 3, -13, 13);
+        const tx = clamp((up[1] >= 0 ? 1 : 0.3) * (-up[2] * 15) - av2.x * 1.9, -13, 13);
+        const tz = clamp((up[1] >= 0 ? 1 : 0.3) * (up[0] * 15) - av2.z * 1.9, -13, 13);
         b.applyTorqueImpulse({ x: tx * dt, y: 0, z: tz * dt }, true);
       }
     }
@@ -247,11 +469,20 @@ export class Ragdoll {
       const mx = input.move.x, mz = input.move.z;
       const mlen = Math.hypot(mx, mz);
       if (mlen > 0.01) {
-        this.heading = Math.atan2(mx, mz);
-        const nx = mx / mlen, nz = mz / mlen;
+        let nx = mx / mlen, nz = mz / mlen;
+        // 🧱 CAMBALEIO: com muito dano o boneco anda torto (sway senoidal) —
+        // todo mundo vê de longe quem está quase caindo, e fugir cambaleando é cômico
+        let grogue = 1;
+        if (this.dano >= DANO_KO * 0.6) {
+          const s = Math.sin(now * 6.5 + (this._seedCamb ??= Math.random() * 6.3)) * 0.4 * Math.min(1, (this.dano - DANO_KO * 0.55) / (DANO_KO * 0.4));
+          const px = nx - nz * s, pz = nz + nx * s, pl = Math.hypot(px, pz) || 1;
+          nx = px / pl; nz = pz / pl;
+          grogue = 0.9;
+        }
+        this.heading = Math.atan2(nx, nz);
         const speedAlong = pv.x * nx + pv.z * nz;
-        if (speedAlong < 3.6) {
-          const tr = 220 * this.controle;
+        if (speedAlong < 1.7) {
+          const tr = 220 * grogue * this.controle * (this.buffVel || 1) * (this._carga > 0.1 ? 0.55 : 1);
           pelvis.applyImpulse({ x: nx * tr * dt, y: 0, z: nz * tr * dt }, true);
           this.parts.torso.applyImpulse({ x: nx * tr * 0.4 * dt, y: 0, z: nz * tr * 0.4 * dt }, true);
         }
@@ -273,29 +504,58 @@ export class Ragdoll {
         const t2 = clamp(e2 * (forte ? 5 : 1.6) - av2b.y * (forte ? 1.2 : 0.4), -7, 7);
         b.applyTorqueImpulse({ x: 0, y: t2 * dt, z: 0 }, true);
       }
-      // Passinhos: parado os pés plantam no chão sob o quadril;
-      // andando eles alternam passadas (ergue, avança, apoia)
+      // 🦿 PERNAS POR MOTOR DE JUNTA, no esquema do SIMBICON (SIGGRAPH 2007;
+      // referência de código: mfirmin/SimbiconJS).
+      //
+      // O que havia antes: mola empurrando o PÉ pra uma coordenada do mundo. Não
+      // fecha — mola não garante posição, e o pé de apoio escorregava a 81% da
+      // velocidade do corpo com qualquer ajuste que eu tentasse (cadência,
+      // gatilho por distância, controle de coxa: todos medidos, todos piores).
+      //
+      // Agora: máquina de estados de marcha (uma perna apoia, a outra balança) e
+      // ÂNGULO de quadril/joelho imposto por motor de junta, que é o que o
+      // esqueleto entrega de verdade. O alvo do quadril que balança leva a
+      // realimentação de equilíbrio do SIMBICON:  alvo = base + cd*d + cv*v
+      // com d = distância do centro de massa ao pé de apoio, medida no eixo de
+      // marcha, e v = velocidade do centro de massa no mesmo eixo. É isso que faz
+      // o pé pousar onde MANTÉM O CORPO EM PÉ, em vez de num offset chutado.
       if (standing) {
         const andando = mlen > 0.01;
-        this.gaitT += dt * (andando ? 8 : 0);
+        const vel = Math.hypot(pv.x, pv.z);
         const fwdX = Math.sin(this.heading), fwdZ = Math.cos(this.heading);
-        const latX = Math.cos(this.heading), latZ = -Math.sin(this.heading);
-        for (let lado = 0; lado < 2; lado++) {
-          const calf = this.parts[lado === 0 ? 'calfL' : 'calfR'];
-          const fase = this.gaitT + (lado === 0 ? 0 : Math.PI);
-          const passo = andando ? Math.cos(fase) * 0.2 : 0;
-          const ergue = andando ? Math.max(0, Math.sin(fase)) * 0.1 : 0;
-          const alvoX = pp.x + latX * (lado === 0 ? -0.11 : 0.11) + fwdX * passo;
-          const alvoZ = pp.z + latZ * (lado === 0 ? -0.11 : 0.11) + fwdZ * passo;
-          const alvoY = surfaceY + 0.14 + ergue;
-          const cp = calf.translation();
-          const ponta = qrot(calf.rotation(), [0, -0.17, 0]);
-          const cv = calf.linvel();
-          const fx2 = clamp((alvoX - (cp.x + ponta[0])) * 26 - cv.x * 3, -18, 18);
-          const fy2 = clamp((alvoY - (cp.y + ponta[1])) * 22 - cv.y * 4, -10, 14);
-          const fz2 = clamp((alvoZ - (cp.z + ponta[2])) * 26 - cv.z * 3, -18, 18);
-          calf.applyImpulse({ x: fx2 * dt, y: fy2 * dt, z: fz2 * dt }, true);
+        let mTot = 0, cmF = 0, cvF = 0;
+        for (const spec of PARTS) {
+          const b = this.parts[spec.name], t = b.translation(), v2 = b.linvel();
+          mTot += spec.mass;
+          cmF += (t.x * fwdX + t.z * fwdZ) * spec.mass;
+          cvF += (v2.x * fwdX + v2.z * fwdZ) * spec.mass;
         }
+        cmF /= mTot; cvF /= mTot;
+        const PASSO_T = clamp(SIMB.passo - vel * 0.06, 0.20, 0.46);
+        this._simT = (this._simT ?? 0) + (andando ? dt : 0);
+        if (!andando) { this._simT = 0; this._simLado = 0; }
+        else if (this._simT >= PASSO_T) { this._simT -= PASSO_T; this._simLado = 1 - (this._simLado ?? 0); }
+        const bal = this._simLado ?? 0;
+        const apoioCalf = this.parts[bal === 0 ? 'calfR' : 'calfL'];
+        const ac = apoioCalf.translation();
+        const d = cmF - (ac.x * fwdX + ac.z * fwdZ);
+        const fb = andando ? (SIMB.cd * d + SIMB.cv * cvF) : 0;
+        const mot = (chave, alvo, k) => {
+          const j = this.juntas?.[chave];
+          if (j && j.configureMotorPosition) j.configureMotorPosition(alvo, k, k * SIMB.amort);
+        };
+        const L = bal === 0, s0 = L ? 'L' : 'R', s1 = L ? 'R' : 'L';
+        if (andando) {
+          const t01 = this._simT / PASSO_T;                 // 0..1 dentro do passo
+          const arco = Math.sin(Math.PI * t01);             // sobe e desce no balanço
+          mot(`pelvis>thigh${s0}`, SIMB.qBal * arco + fb, SIMB.kQ);   // quadril que balança
+          mot(`thigh${s0}>calf${s0}`, SIMB.jBal * arco, SIMB.kJ);     // joelho dobra no balanço
+          mot(`pelvis>thigh${s1}`, SIMB.qApoio, SIMB.kQ);             // quadril de apoio
+          mot(`thigh${s1}>calf${s1}`, SIMB.jApoio, SIMB.kJ);          // joelho de apoio estende
+        } else {
+          for (const l of ['L', 'R']) { mot(`pelvis>thigh${l}`, 0, SIMB.kQ); mot(`thigh${l}>calf${l}`, SIMB.jApoio, SIMB.kJ); }
+        }
+        this.gaitT += dt * (andando ? clamp(vel * 7.2, 5, 20) : 0); // ritmo dos braços
         // Braços balançam no ritmo da passada (fase oposta à perna do mesmo lado)
         if (andando) {
           for (let lado = 0; lado < 2; lado++) {
@@ -339,56 +599,163 @@ export class Ragdoll {
         pelvis.applyImpulse({ x: 0, y: 20, z: 0 }, true);
         this.parts.torso.applyImpulse({ x: 0, y: 12, z: 0 }, true);
       }
-      // Soco (cansaço: sem fôlego sai fraco e lento; no ar vira voadora)
-      if (input.punch && now >= this.punchReadyAt) {
-        this._socoFraco = this.folego < 0.3;
-        this.folego = Math.max(0, this.folego - 0.34);
-        this._voadora = !grounded;
-        this.punchReadyAt = now + (this._socoFraco ? 1.3 : 0.8);
-        this.punchUntil = now + (this._voadora ? 0.32 : 0.25);
-        this.punchHit = false;
-        this.lastPunchStartAt = now;
-        this.stats.socos++;
+      // Ataques com o botão de soco: CABEÇADA (agarrando), CHUTE (segurando trás) ou SOCO.
+      // Só no APERTO (segurar não repete mais): segurando, carrega o SOCÃO — solta no release.
+      // NOTA DA JANELA DO GOLPE: era 0.25s, calibrado pra um braço de juntas
+      // esféricas que chicoteava sem resistência — o punho chegava no alvo no
+      // frame 3. Com juntas de curso o braço tem inércia e só chega no frame 23,
+      // então a janela fechava ANTES do soco e nada conectava. 0.36s cobre a
+      // viagem real. Se mexer na rigidez das juntas, remeça isto.
+      if (input.punch && !this._punchHeld && now >= this.punchReadyAt) {
         const dir = [Math.sin(this.heading), 0, Math.cos(this.heading)];
-        const forca = this._socoFraco ? 3.5 : 7;
-        for (const h of ['forearmL', 'forearmR']) {
-          this.parts[h].applyImpulse({ x: dir[0] * forca, y: 1.2, z: dir[2] * forca }, true);
-        }
-        if (this._voadora) {
-          // tackle: o corpo inteiro vai junto — e depois desaba (risco × recompensa)
-          this.parts.torso.applyImpulse({ x: dir[0] * 6, y: 0.5, z: dir[2] * 6 }, true);
-          pelvis.applyImpulse({ x: dir[0] * 5, y: 0, z: dir[2] * 5 }, true);
-          this.hoverBlockUntil = Math.max(this.hoverBlockUntil, now + 0.7);
+        const alvoAgarrado = this.grabbedRival();
+        const querChute = grounded && input.move && input.move.z > 0.5; // segurar p/ trás/baixo + soco
+        if (alvoAgarrado) {
+          // CABEÇADA: puxa o inimigo agarrado e dá uma cabeçada (enche o nocaute rápido)
+          this.punchReadyAt = now + 0.6;
+          this.lastCabecadaAt = now;
+          this.folego = Math.max(0, this.folego - 0.15);
+          const mh = this.parts.head.translation();
+          const rb = alvoAgarrado.parts.head, rh = rb.translation();
+          const ddx = rh.x - mh.x, ddz = rh.z - mh.z, dl = Math.hypot(ddx, ddz) || 1;
+          this.parts.head.applyImpulse({ x: (ddx / dl) * 5, y: 1.2, z: (ddz / dl) * 5 }, true);
+          rb.applyImpulse({ x: (ddx / dl) * 7, y: 2.4, z: (ddz / dl) * 7 }, true);
+          alvoAgarrado.dano = Math.min(DANO_KO, alvoAgarrado.dano + 2); // cabeçada dói o dobro
+          alvoAgarrado.stun(now + Math.min(2.6, 1.2 * (1 + alvoAgarrado.dano * (1.4 / DANO_KO))));
+          if (alvoAgarrado.dano >= DANO_KO && !alvoAgarrado.isDowned(now)) alvoAgarrado.knockdown(now);
+          alvoAgarrado.lastHitLandedAt = now;
+          this.stats.acertos++;
+        } else {
+          this._socoFraco = this.folego < 0.3;
+          this.folego = Math.max(0, this.folego - (querChute ? 0.4 : 0.34));
+          this._voadora = !grounded;
+          this._chute = querChute;
+          this.punchReadyAt = now + (this._socoFraco ? 1.3 : querChute ? 0.95 : 0.8);
+          this.punchUntil = now + (this._voadora ? 0.43 : querChute ? 0.41 : 0.36); // ver nota da janela
+          this.punchHit = false;
+          this._cargaGolpe = 0;
+          this.lastPunchStartAt = now;
+          if (querChute) this.lastChuteAt = now;
+          this.stats.socos++;
+          if (querChute) {
+            // CHUTE: joga uma perna pra frente (a janela detecta o pé no rival)
+            this._chutePerna = this._chutePerna === 'calfL' ? 'calfR' : 'calfL';
+            const perna = this.parts[this._chutePerna];
+            perna.applyImpulse({ x: dir[0] * 9, y: 3.2, z: dir[2] * 9 }, true);
+            this.parts.torso.applyImpulse({ x: -dir[0] * 1.5, y: 0, z: -dir[2] * 1.5 }, true);
+          } else {
+            const forca = this._socoFraco ? 3.5 : 7;
+            for (const h of ['forearmL', 'forearmR']) {
+              this.parts[h].applyImpulse({ x: dir[0] * forca, y: 1.2, z: dir[2] * forca }, true);
+            }
+          }
+          if (this._voadora) {
+            // tackle: o corpo inteiro vai junto — e depois desaba (risco × recompensa)
+            this.parts.torso.applyImpulse({ x: dir[0] * 6, y: 0.5, z: dir[2] * 6 }, true);
+            pelvis.applyImpulse({ x: dir[0] * 5, y: 0, z: dir[2] * 5 }, true);
+            this.hoverBlockUntil = Math.max(this.hoverBlockUntil, now + 0.7);
+          }
         }
       }
+      // ---- SOCÃO carregado: continuar segurando (sem rival agarrado/arma) carrega ----
+      const seguraCoisa = this.grabJoints && this.grabJoints.some((g) => g);
+      // carrega já durante o cooldown do soco do toque (só a SOLTURA espera o cooldown);
+      // 0.12s de tolerância pra toque rápido não acender faísca
+      if (input.punch && this._punchHeld && !this.grabbedRival() && !seguraCoisa) {
+        if (this._cargaDesde < 0) this._cargaDesde = now;
+        this._carga = Math.min(1, Math.max(0, now - this._cargaDesde - 0.12) / 0.7);
+      }
+      if (!input.punch && this._punchHeld) {
+        if (this._carga > 0.25 && now >= this.punchReadyAt) {
+          // solta o SOCÃO: pancada com corpo junto, knockback escala com a carga
+          const dir = [Math.sin(this.heading), 0, Math.cos(this.heading)];
+          this._socoFraco = false;
+          this._voadora = !grounded;
+          this._chute = false;
+          this._cargaGolpe = this._carga;
+          this.folego = Math.max(0, this.folego - (0.34 + this._carga * 0.2));
+          this.punchReadyAt = now + 1.05;
+          this.punchUntil = now + 0.30;
+          this.punchHit = false;
+          this.lastPunchStartAt = now;
+          this.stats.socos++;
+          const forca = 7 * (1 + this._carga * 0.9);
+          for (const h of ['forearmL', 'forearmR']) this.parts[h].applyImpulse({ x: dir[0] * forca, y: 1.4, z: dir[2] * forca }, true);
+          this.parts.torso.applyImpulse({ x: dir[0] * 3 * this._carga, y: 0.3, z: dir[2] * 3 * this._carga }, true);
+          pelvis.applyImpulse({ x: dir[0] * 2.5 * this._carga, y: 0, z: dir[2] * 2.5 * this._carga }, true);
+        }
+        this._carga = 0; this._cargaDesde = -1;
+      }
+      this._punchHeld = input.punch;
     }
 
-    // Janela do soco: braços continuam indo pra frente + detecção de acerto
+    // Janela do golpe: o membro continua indo pra frente + detecção de acerto.
+    // Soco = punhos; chute = a perna chutando (this._chutePerna).
     if (now < this.punchUntil) {
       const dir = [Math.sin(this.heading), 0, Math.cos(this.heading)];
-      for (const h of ['forearmL', 'forearmR']) {
-        this.parts[h].applyImpulse({ x: dir[0] * 26 * dt, y: 0, z: dir[2] * 26 * dt }, true);
+      if (this._chute) {
+        this.parts[this._chutePerna].applyImpulse({ x: dir[0] * 30 * dt, y: 2 * dt, z: dir[2] * 30 * dt }, true);
+      } else {
+        for (const h of ['forearmL', 'forearmR']) {
+          this.parts[h].applyImpulse({ x: dir[0] * 26 * dt, y: 0, z: dir[2] * 26 * dt }, true);
+        }
       }
       if (!this.punchHit && this.rivals.length) {
-        outer: for (let side = 0; side < 2; side++) {
-          const tip = this.handTip(side);
+        // pontos que golpeiam: chute = ponta do pé; soco = as duas mãos
+        const tips = this._chute
+          ? [this.footTip(this._chutePerna === 'calfL' ? 0 : 1)]
+          : [this.handTip(0), this.handTip(1)];
+        const alc = this._chute ? 0.56 : 0.48;
+        outer: for (const tip of tips) {
           for (const rival of this.rivals) {
+            if (rival.isEsquivando(now)) continue; // i-frames: o golpe atravessa
             for (const pname of ['head', 'torso', 'pelvis']) {
               const tb = rival.parts[pname];
               const tp = tb.translation();
               const d = Math.hypot(tip[0] - tp.x, tip[1] - tp.y, tip[2] - tp.z);
-              if (d < 0.48) {
+              if (d < alc) {
+                if (rival.escudo > 0) { // 🛡️ o escudo come o golpe inteiro (uma vez)
+                  rival.escudo = 0;
+                  rival.lastEscudoAt = now;
+                  this.punchHit = true;
+                  break outer;
+                }
                 const strong = pname === 'head';
-                const fator = (this._voadora ? 1.35 : 1) * (this._socoFraco ? 0.55 : 1);
+                // forcaSoco = quão forte ESTE lutador bate; resistencia = quanto o RIVAL aguenta
+                const kb = (this.forcaSoco || 1) * (this.buffForca || 1) * (AJUSTES.forcaSoco || 1) / (rival.resistencia || 1);
+                const fator = (this._voadora ? 1.35 : 1) * (this._socoFraco ? 0.55 : 1) * (this._chute ? 1.3 : 1) * (1 + (this._cargaGolpe || 0) * 1.1) * kb;
+                // 🎯 O empurrão CRESCE COM O DANO do rival (ideia do Smash).
+                // Rival inteiro quase não sai do lugar, então o começo da luta é
+                // trocação de perto em vez de "um soco e já voou pra fora"; quem
+                // está quase nocauteado voa longe, e a queda vira o clímax em vez
+                // de acidente dos 5 primeiros segundos.
+                const escala = 0.95 + (rival.dano / DANO_KO) * 1.6;
+                const emp = fator * escala;
+                rival._freioAte = now + 0.32; // liga o freio de lançamento (ver update)
+                // O empurrão baixo do começo deixava o rival PARADO no golpe —
+                // parecia boneco duro. O tranco de reação vem por TORQUE: torce o
+                // tronco, a cabeça chicoteia, o corpo cambaleia. Como torque não
+                // desloca, dá impacto sem mandar ninguém pra fora da arena.
+                const giro = (strong ? 2.4 : 1.7) * fator;
+                tb.applyTorqueImpulse({ x: dir[2] * giro, y: (strong ? 1.8 : 1.1) * fator, z: -dir[0] * giro }, true);
+                if (pname !== 'head') {
+                  const cab = rival.parts.head;
+                  cab.applyTorqueImpulse({ x: dir[2] * giro * 0.7, y: 0, z: -dir[0] * giro * 0.7 }, true);
+                }
                 tb.applyImpulse({
-                  x: dir[0] * (strong ? 6.5 : 5) * fator,
-                  y: (strong ? 2.2 : 1.5) * fator,
-                  z: dir[2] * (strong ? 6.5 : 5) * fator,
+                  x: dir[0] * (strong ? 4 : 3.2) * emp,
+                  // o y é o que tira o corpo do chão e faz passar por cima da amurada:
+                  // baixo demais o golpe perde peso, alto demais vira ring-out fácil
+                  y: (this._chute ? 0.7 : (strong ? 1.2 : 0.9)) * emp,
+                  z: dir[2] * (strong ? 4 : 3.2) * emp,
                 }, true);
-                // nocaute acumulativo: combo atordoa cada vez mais
-                rival.dano = Math.min(4, rival.dano + 1);
-                const dur = Math.min(2.6, (strong ? 1.35 : 0.4) * (1 + rival.dano * 0.35) * fator);
+                // nocaute acumulativo: combo atordoa cada vez mais (rival mais resistente sobe o dano mais devagar)
+                rival.dano = Math.min(DANO_KO, rival.dano + ((this.forcaSoco || 1) * (1 + (this._cargaGolpe || 0) * 0.8)) / (rival.resistencia || 1));
+                const dur = Math.min(2.6, (strong ? 1.35 : 0.4) * (1 + rival.dano * (1.4 / DANO_KO)) * fator);
                 rival.stun(now + dur);
+                rival._agr = this; rival._agrAt = now; // quem bateu por último (pra "melhor jogada")
+                // Encheu o dano => NOCAUTE: desaba mole (dá pra agarrar e arrastar)
+                if (rival.dano >= DANO_KO && !rival.isDowned(now)) rival.knockdown(now);
                 rival.lastHitLandedAt = now;
                 this.stats.acertos++;
                 this.punchHit = true;
@@ -396,7 +763,7 @@ export class Ragdoll {
               }
             }
           }
-          // Objetos da arena também levam soco
+          // Objetos da arena também levam o golpe
           for (const pb of this.props) {
             const tp = pb.translation();
             const d = Math.hypot(tip[0] - tp.x, tip[1] - tp.y, tip[2] - tp.z);
@@ -414,29 +781,48 @@ export class Ragdoll {
     if (input.grab && !stunned) {
       const rivalGrab = this.rivals.length ? this.nearestRival() : null;
       const ot = rivalGrab ? rivalGrab.parts.torso.translation() : null;
+      const alvoCaido = !!(rivalGrab && rivalGrab.isDowned(now)); // alcance maior p/ pegar o corpo mole no chão
       const situacaoBeirada = toi === null || pp.y < 0.55;
       for (let side = 0; side < 2; side++) {
         if (this.grabJoints[side]) continue;
         const tip = this.handTip(side);
-        let best = null, bestD = 0.5;
+        let best = null, bestD = alvoCaido ? 1.0 : 0.5, bestRival = null;
         for (const rival of this.rivals) {
           for (const pname of ['head', 'torso', 'pelvis', 'upperArmL', 'upperArmR', 'forearmL', 'forearmR']) {
             const tb = rival.parts[pname];
             const tp = tb.translation();
             const d = Math.hypot(tip[0] - tp.x, tip[1] - tp.y, tip[2] - tp.z);
-            if (d < bestD) { bestD = d; best = tb; }
+            if (d < bestD) { bestD = d; best = tb; bestRival = rival; }
           }
         }
-        // Objetos da arena também são agarráveis (caixote, bola…)
+        // Objetos da arena (caixote, bola, ARMAS…): íman de pickup — alcance bem
+        // maior que agarrar rival, pra pegar arma do chão sem precisar mirar fino.
         for (const pb of this.props) {
           const tp = pb.translation();
-          const d = Math.hypot(tip[0] - tp.x, tip[1] - tp.y, tip[2] - tp.z) - 0.25;
-          if (d < bestD) { bestD = d; best = pb; }
+          const d = Math.hypot(tip[0] - tp.x, tip[1] - tp.y, tip[2] - tp.z) - 0.35;
+          const lim = best ? bestD : 1.0; // sem rival por perto, agarra prop até ~1m
+          if (d < lim) { bestD = d; best = pb; bestRival = null; }
         }
         const hand = this.parts[side === 0 ? 'forearmL' : 'forearmR'];
         if (best) {
-          const data = this.R.JointData.spherical({ x: 0, y: -0.12, z: 0 }, { x: 0, y: 0, z: 0 });
-          this.grabJoints[side] = { j: this.world.createImpulseJoint(data, hand, best, true), body: best, chao: false };
+          // 🫱 CARREGAR NO OMBRO: rival NOCAUTEADO prende no TRONCO de quem
+          // carrega, à frente e acima — não pendurado na mão. Pendurado na mão
+          // o corpo era arrastado ATRÁS, e chegar na beirada e largar não
+          // servia de nada: o alvo continuava pra dentro. À frente, largar na
+          // corda tomba ele pra fora sozinho.
+          // Junta FIXA (não esférica): esférica prende um ponto só e o corpo
+          // pendura. E mesmo fixa não basta — o nocauteado está com as molas de
+          // postura desligadas, então são ~30 kg de peso morto numa junta só.
+          // O que segura é a antigravidade aplicada nele enquanto carregado,
+          // logo abaixo em update(). Junta segura a posição, antigrav o peso.
+          const noOmbro = bestRival && bestRival.isDowned(now);
+          const base = noOmbro ? this.parts.torso : hand;
+          const anc = noOmbro ? { x: 0, y: 0.20, z: 0.30 } : { x: 0, y: -0.12, z: 0 };
+          const alvoB = noOmbro ? bestRival.parts.torso : best;
+          const data = noOmbro
+            ? this.R.JointData.fixed(anc, { x: 0, y: 0, z: 0, w: 1 }, { x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 0, w: 1 })
+            : this.R.JointData.spherical(anc, { x: 0, y: 0, z: 0 });
+          this.grabJoints[side] = { j: this.world.createImpulseJoint(data, base, alvoB, true), body: alvoB, chao: false, rival: bestRival, ombro: !!noOmbro };
           this.lastGrabAt = now;
         } else if (situacaoBeirada && this.world.projectPoint) {
           // Caindo perto da plataforma: a mão gruda na beirada
@@ -490,6 +876,7 @@ export class Ragdoll {
   }
 
   reset() {
+    this.escudo = 0;
     this.releaseGrabs();
     for (const spec of PARTS) {
       const b = this.parts[spec.name];
@@ -499,10 +886,13 @@ export class Ragdoll {
       b.setAngvel({ x: 0, y: 0, z: 0 }, true);
     }
     this.stunUntil = 0;
+    this.downUntil = 0;
+    this.dano = 0;
     this.punchReadyAt = 0;
     this.punchUntil = 0;
     this.punchHit = true;
     this.heading = this.heading0;
     this.gaitT = 0;
+    this._pegada = [null, null]; // pegadas cravadas no mundo: some no reset
   }
 }
