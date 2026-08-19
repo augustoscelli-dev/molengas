@@ -53,7 +53,10 @@ export const ARENA = { halfX: 5.5, halfZ: 4.0 };
 
 // Dano acumulado que derruba (nocaute). Estava espalhado como "4" em 17 lugares
 // entre cliente e servidor; virou constante pra os dois não descolarem. Subir
-// este número = luta mais longa. Calibrado por simulação: 26 dá rodada de ~34s.
+// RECALIBRADO depois das pernas motorizadas: com o corpo mais estável o dano
+// acumulava muito mais devagar, e com 26 o nocaute levava 78s. Como o jogo é
+// "nocauteia -> agarra -> carrega -> joga fora", nocaute raro = a jogada
+// central quase não acontece. Com 8 o nocaute vem a cada ~16s.
 // O dano decai 0.12/s: trocação parada não acumula, precisa de pressão contínua.
 // Ganhos do controlador de marcha (ver bloco das pernas em update()). Ficam
 // juntos aqui porque são varridos como conjunto: mexer num sem medir os outros
@@ -67,7 +70,7 @@ export const SIMB = {
   passo: 0.46,
 };
 
-export const DANO_KO = 26;
+export const DANO_KO = 8;
 
 // Fração do peso de cada parte que é "segurada" pela marionete enquanto em pé.
 const ANTIGRAV = {

@@ -4,3 +4,8 @@ servidor/node_modules
 *.log
 docs
 *.md
+
+# 7.4 MB que o jogo NUNCA carrega: é o original de alta densidade do qual saiu o
+# jaeger-low (ver docs/auditoria-ip.md). Fica no repo como fonte, mas não vai
+# pra imagem de deploy — sozinho é 37% da pasta de assets.
+assets/modelos/jaeger.glb

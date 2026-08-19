@@ -69,7 +69,9 @@ function addOutline(model){
 window.setOutline = (on)=>{ outlineMeshes.forEach(m=>m.visible=on); };
 
 const Q = new URLSearchParams(location.search);
-const MODEL = Q.get('m') || './assets/modelos/jaeger.glb';
+// aponta pro -low: o jaeger.glb original tem 7.4 MB e era a ÚNICA coisa no
+// projeto que ainda o referenciava. O jogo nunca carregou ele.
+const MODEL = Q.get('m') || './assets/modelos/jaeger-low.glb';
 const CENA = Q.has('cena'); // enquadra a cena/diorama inteiro (nao personagem)
 if (CENA) { ground.visible = false; gridRing.visible = false; }
 const loader = new GLTFLoader();

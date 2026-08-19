@@ -423,6 +423,12 @@ function host() { return [...jogadores.values()].sort((a, b) => a.slot - b.slot)
 // ---------- Rounds ----------
 let estado = 'lobby'; // lobby | intro | luta | ponto | fim
 let estadoAte = 0;
+let lutaDesde = 0;
+// ⏱️ RELÓGIO DE ROUND. A rodada só fecha quando alguém é ARREMESSADO pra fora
+// (é o desenho: nocauteia, agarra, joga). Mas se ninguém acertar o arremesso a
+// rodada não termina sozinha — e com 6 ou 8 pessoas isso trava a festa. Estourou
+// o relógio, cai quem está com MAIS dano: ele perdeu a luta nos pontos.
+const ROUND_MAX = 90;
 let introStep = 0;
 let msg = '';
 let now = 0;
@@ -493,7 +499,7 @@ function rounds() {
   if (estado === 'intro') {
     if (now > estadoAte) {
       if (introStep === 0) { introStep = 1; estadoAte = now + 0.6; msg = 'LUTEM! 🥊'; ev('lutem'); }
-      else { msg = ''; estado = 'luta'; }
+      else { msg = ''; estado = 'luta'; lutaDesde = now; }
     }
     return;
   }
@@ -506,6 +512,19 @@ function rounds() {
         ev('queda', j.slot); // slot: chorinho com o timbre do caído
         cairam.push(j);
         refazerRivais();
+      }
+    }
+    // relógio estourou: elimina quem está mais machucado (decisão nos pontos)
+    if (lutaDesde && now - lutaDesde > ROUND_MAX) {
+      const emPe = [...jogadores.values()].filter((j) => j.vivo);
+      if (emPe.length > 1) {
+        const pior = emPe.reduce((a, b) => (b.rag.dano > a.rag.dano ? b : a));
+        pior.vivo = false;
+        pior.rag.stats.quedas++;
+        ev('queda', pior.slot);
+        cairam.push(pior);
+        refazerRivais();
+        lutaDesde = now; // dá mais uma janela pros que sobraram
       }
     }
     const vivos = [...jogadores.values()].filter((j) => j.vivo);
