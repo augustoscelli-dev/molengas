@@ -124,7 +124,7 @@
       "saida": "bastao-low",
       "polycount": 4000,
       "escala": 0.78,
-      "prompt": "stylized cartoon wooden baseball bat, chunky exaggerated proportions, worn light wood grain with dark grip tape at the handle, small scratches, hand-painted game-ready prop, single object, upright, plain background"
+      "prompt": "a single straight wooden baseball bat standing perfectly vertical, classic baseball bat shape with a thick rounded barrel on top and a thin handle with a knob at the bottom, smooth light wood grain with a dark grip tape wrap on the handle, stylized cartoon proportions, hand-painted game-ready prop, single object, plain background"
     },
     {
       "id": "cano",
@@ -185,6 +185,20 @@
       "saida": "predio-topo",
       "polycount": 6000,
       "prompt": "stylized cartoon skyscraper rooftop block, a single cube-shaped floor section of a skyscraper meant to be stacked into a tower, roughly equal width, depth and height, flat top and bottom, night time with warm yellow glowing windows, flat roof with a water tank, antennas, blinking red beacon, rooftop billboard with abstract neon shapes, same footprint as a floor section, chunky exaggerated proportions, hand-painted game-ready textures, single object, plain background"
+    },
+    {
+      "id": "ilha-gelo",
+      "tipo": "cenario",
+      "saida": "ilha-gelo",
+      "polycount": 20000,
+      "prompt": "stylized cartoon snowy landscape diorama, wide flat frozen lake base with a completely flat empty center, snow banks and snow-covered pine trees around the outer edge, a small igloo and a few ice boulders on one side, soft blue and white palette, low-poly, hand-painted game-ready textures, viewed from above, single object, plain background"
+    },
+    {
+      "id": "ilha-jardim",
+      "tipo": "cenario",
+      "saida": "ilha-jardim",
+      "polycount": 20000,
+      "prompt": "stylized cartoon garden diorama, wide flat base of bright green lawn with a completely flat empty center, white picket fence around the outer edge, round trimmed bushes, colorful flower beds in red yellow and pink, a small tree with pink blossoms in one corner, a stone birdbath, low-poly, hand-painted game-ready textures, viewed from above, single object, plain background"
     }
   ]
 }

@@ -527,6 +527,7 @@ function resetCaixotes(m) {
 const ARMAS_DEF = {
   bastao: {
     icone: '🏏',
+    glb: 'bastao-low', escala: 0.78, // modelo Meshy (ferramentas/meshy.mjs)
     y0: 0.55, massa: 2.6, alcance: 0.72, forca: 7,
     collider: () => RAPIER.ColliderDesc.capsule(0.32, 0.06),
     mesh: () => {
@@ -539,6 +540,7 @@ const ARMAS_DEF = {
   },
   cano: {
     icone: '🔧',
+    glb: 'cano-low', escala: 0.84, // modelo Meshy (ferramentas/meshy.mjs)
     y0: 0.5, massa: 3.2, alcance: 0.66, forca: 8,
     collider: () => RAPIER.ColliderDesc.capsule(0.36, 0.05),
     mesh: () => {
@@ -552,6 +554,7 @@ const ARMAS_DEF = {
   },
   martelo: {
     icone: '🔨',
+    glb: 'martelo-low', escala: 0.82, // modelo Meshy (ferramentas/meshy.mjs)
     y0: 0.6, massa: 4.6, alcance: 0.82, forca: 10, // pesadão: swing lento, tranco forte sem virar ring-out automático
     collider: () => RAPIER.ColliderDesc.capsule(0.3, 0.09),
     mesh: () => {
@@ -564,6 +567,7 @@ const ARMAS_DEF = {
   },
   bomba: {
     icone: '💣',
+    glb: 'bomba-low', escala: 0.36, // modelo Meshy (ferramentas/meshy.mjs)
     y0: 0.4, massa: 2.0, alcance: 0.5, forca: 4,
     bomba: true, fuse: 3.2, raio: 2.5, forcaExpl: 9, // acende ao pegar; joga no rival antes de estourar
     collider: () => RAPIER.ColliderDesc.ball(0.17),
@@ -602,6 +606,7 @@ const ARMAS_DEF = {
   // 🪝 GANCHO: soco com ele na mão ARPOA o rival mais próximo à frente e o PUXA.
   gancho: {
     icone: '🪝',
+    glb: 'gancho-low', escala: 0.5, // modelo Meshy (ferramentas/meshy.mjs)
     y0: 0.4, massa: 1.6, alcance: 0.45, forca: 4,
     puxa: true, alcancePuxa: 4.5, cadencia: 1.2,
     collider: () => RAPIER.ColliderDesc.capsule(0.18, 0.07),
@@ -847,6 +852,24 @@ function chaoFixo(m, hx, hz, mat, atrito = 0.8, cordas = false) {
   m._deck = deck; // referência pro online (variantes de arena mudam o chão)
   baseArena(m, hx, hz);
   return g;
+}
+
+// Diorama de base (assets/modelos/<nome>.glb, gerado por ferramentas/meshy.mjs): paisagem
+// cartoon emoldurando a plataforma, sem física — mesmo enquadramento do morro do RIO.
+// largura = maior lado em metros · chaoY = altura do chão do diorama (a base da
+// plataforma termina em -2.1, então -2.4 encosta logo abaixo) · z/x = deslocamento
+function dioramaBase(m, nome, { largura = 16, chaoY = -2.4, z = -2, x = 0 } = {}) {
+  new GLTFLoader().load(ASSET('assets/modelos/' + nome + '.glb'), (gltf) => {
+    if (m._dead) return; // trocou de mapa antes do GLB chegar
+    const s = gltf.scene;
+    const box = new THREE.Box3().setFromObject(s);
+    const size = new THREE.Vector3(); box.getSize(size);
+    s.scale.setScalar(largura / (Math.max(size.x, size.z) || 1));
+    const b2 = new THREE.Box3().setFromObject(s);
+    s.position.set(x, chaoY - b2.min.y, z);
+    s.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+    scene.add(s); m.meshes.push(s);
+  }, undefined, () => {}); // sem o arquivo: mapa fica como era
 }
 
 const texGelo = (() => {
@@ -1143,11 +1166,13 @@ const MAPAS = [
     desc: 'escorrega que é uma beleza',
     fundoTex: FUNDOS.aurora,
     amb: 'neve',
+    semHolofotes: true, // neve + holofote = clarão branco
     trilha: 'gelada',
     build(m) {
       climaMapa({ ceu: 0xd8f0ff, chao: 0x1c3a4a, fog: 0x16283a, sol: 0xcfe8ff, solInt: 1.35, expo: 1.05 }); // frio azulado
       // Pista escorregadia: atrito quase zero + tração reduzida
       chaoFixo(m, 5.5, 4, new THREE.MeshStandardMaterial({ map: texGelo, roughness: 0.15 }), 0.03);
+      dioramaBase(m, 'ilha-gelo', { largura: 22, chaoY: -2.4, z: -1 }); // lago congelado + pinheiros + iglu
       m.controle = 0.35;
       fazerCaixote(m, -2.8, 2.2);
       fazerCaixote(m, 2.8, -2.2);
@@ -2049,6 +2074,7 @@ const MAPAS = [
         return t;
       })();
       chaoFixo(m, 5.5, 4, new THREE.MeshStandardMaterial({ map: texGrama, roughness: 0.95 }));
+      dioramaBase(m, 'ilha-jardim', { largura: 22, chaoY: -2.4, z: -1 }); // gramado com cerca, arbustos e flores
       // 2600 lâminas AFILADAS (afunilam e inclinam pra ponta — receita da
       // campina estilizada), vento no VERTEX SHADER (CPU não recompõe matriz
       // nenhuma pra balançar) e gradiente raiz-escura/ponta-clara no fragment.
