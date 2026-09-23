@@ -144,15 +144,17 @@ function gltfTransform(argsCli) {
 }
 
 function otimizar(entrada, saida, id, { texturas = 1024 } = {}) {
-  const tmp = saida + '.tmp.glb';
+  const tmp = saida + '.tmp.glb', tmp2 = saida + '.tmp2.glb';
   try {
-    log(id, `🔧 otimizando (texturas ≤ ${texturas}px + quantização)…`);
+    log(id, `🔧 otimizando (texturas ≤ ${texturas}px em WebP + quantização)…`);
     gltfTransform(['resize', entrada, tmp, '--width', String(texturas), '--height', String(texturas)]);
-    gltfTransform(['quantize', tmp, saida]);
-    fs.rmSync(tmp, { force: true });
+    // WebP q82: -60% no arquivo, diferença visual < 1/255 por canal (medido no Brasa)
+    gltfTransform(['webp', tmp, tmp2, '--quality', '82']);
+    gltfTransform(['quantize', tmp2, saida]);
+    fs.rmSync(tmp, { force: true }); fs.rmSync(tmp2, { force: true });
     log(id, `   ${kb(fs.statSync(entrada).size)} → ${kb(fs.statSync(saida).size)}`);
   } catch (e) {
-    fs.rmSync(tmp, { force: true });
+    fs.rmSync(tmp, { force: true }); fs.rmSync(tmp2, { force: true });
     log(id, `⚠️ otimização falhou, usando o arquivo bruto. ${e.message.split('\n')[0]}`);
     fs.copyFileSync(entrada, saida);
   }
