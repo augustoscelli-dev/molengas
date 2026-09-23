@@ -1118,6 +1118,8 @@ const MAPAS = [
   {
     nome: 'GANGORRA',
     desc: 'a arena inclina com o peso',
+    fundo: 'assets/fundo-gangorra.jpg', // pintado na Higgsfield (GPT Image 2.5)
+    fundoY: -6,
     build(m) {
       climaMapa({ ceu: 0xffd8e8, chao: 0x4a2a3a, fog: 0x2a1435, sol: 0xffd0b0, solInt: 1.45 }); // entardecer rosa
       // Plataforma inteira apoiada num eixo central — o peso inclina
@@ -1162,6 +1164,8 @@ const MAPAS = [
   {
     nome: 'QUEIJO',
     desc: 'buracos — cuidado onde pisa',
+    fundo: 'assets/fundo-queijo.jpg', // pintado na Higgsfield (GPT Image 2.5)
+    fundoY: -6,
     build(m) {
       climaMapa({ ceu: 0xfff3c0, chao: 0x5a4410, fog: 0x3a2c0e, sol: 0xffe28a, solInt: 1.5 }); // banho de queijo
       // Ilhas com buracos entre elas — cuidado onde pisa
@@ -1245,6 +1249,8 @@ const MAPAS = [
   {
     nome: 'MORTE SÚBITA',
     desc: 'a plataforma encolhe a cada round',
+    fundo: 'assets/fundo-morte.jpg', // pintado na Higgsfield (GPT Image 2.5)
+    fundoY: -6,
     build(m) {
       climaMapa({ ceu: 0xffb0a0, chao: 0x401010, fog: 0x330d0d, sol: 0xff8a70, solInt: 1.4, expo: 1.08 }); // vermelho tenso
       // A plataforma encolhe a cada round
@@ -1352,6 +1358,8 @@ const MAPAS = [
   {
     nome: 'SUMÔ',
     desc: 'sem soco: empurra e arremessa',
+    fundo: 'assets/fundo-sumo.jpg', // pintado na Higgsfield (GPT Image 2.5)
+    fundoY: -6,
     semSoco: true,
     build(m) {
       climaMapa({ ceu: 0xffe2b0, chao: 0x3a2a10, fog: 0x2e2410, sol: 0xffd080, solInt: 1.5 }); // templo dourado
@@ -1695,7 +1703,8 @@ const MAPAS = [
   {
     nome: 'ESTEIRAS',
     desc: 'o chão te leva — ande contra!',
-    fundoTex: FUNDOS.fabrica,
+    fundo: 'assets/fundo-esteiras.jpg', // pintado na Higgsfield (GPT Image 2.5)
+    fundoY: -6,
     build(m) {
       // Duas esteiras rolantes em direções opostas — parou de andar, foi levado pra fora
       const texEst = (dir) => {
@@ -1822,7 +1831,8 @@ const MAPAS = [
   {
     nome: 'CHÃO QUENTE',
     desc: 'placas esquentam e caem',
-    fundoTex: FUNDOS.vulcao,
+    fundo: 'assets/fundo-chaoquente.jpg', // pintado na Higgsfield (GPT Image 2.5)
+    fundoY: -6,
     amb: 'lava',
     trilha: 'quente',
     build(m) {
@@ -1891,7 +1901,8 @@ const MAPAS = [
   {
     nome: 'TRAMPOLIM',
     desc: 'todo mundo quica — voadora!',
-    fundoTex: FUNDOS.circo,
+    fundo: 'assets/fundo-trampolim.jpg', // pintado na Higgsfield (GPT Image 2.5)
+    fundoY: -6,
     build(m) {
       // Chão elástico: todo mundo quica — a voadora vira a arma principal
       const texTramp = (() => {
@@ -2051,7 +2062,8 @@ const MAPAS = [
   {
     nome: 'ABISMO',
     desc: 'sem chão — arrasta o rival pro buraco',
-    fundoTex: FUNDOS.noite,
+    fundo: 'assets/fundo-abismo.jpg', // pintado na Higgsfield (GPT Image 2.5)
+    fundoY: -6,
     amb: 'vento',
     trilha: 'tensa',
     pontes: true,       // bots andam eixo por eixo (diagonal = queda no vão)
