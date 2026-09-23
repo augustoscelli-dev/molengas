@@ -157,6 +157,34 @@
       "polycount": 4000,
       "escala": 0.5,
       "prompt": "stylized cartoon grappling hook on a short wooden handle, chunky proportions, three curved steel prongs, worn metal with scratches, brown leather-wrapped grip, hand-painted game-ready prop, single object, upright, plain background"
+    },
+    {
+      "id": "predio-a",
+      "tipo": "cenario",
+      "saida": "predio-a",
+      "polycount": 6000,
+      "prompt": "stylized cartoon cyberpunk office tower block, a single cube-shaped floor section of a skyscraper meant to be stacked into a tower, roughly equal width, depth and height, flat top and bottom, night time with warm yellow glowing windows, dark blue glass facade with cyan neon strip lights on the edges, chunky exaggerated proportions, hand-painted game-ready textures, single object, plain background"
+    },
+    {
+      "id": "predio-b",
+      "tipo": "cenario",
+      "saida": "predio-b",
+      "polycount": 6000,
+      "prompt": "stylized cartoon old brick apartment block, a single cube-shaped floor section of a skyscraper meant to be stacked into a tower, roughly equal width, depth and height, flat top and bottom, night time with warm yellow glowing windows, red brick walls, air conditioners, pink and orange neon shop sign, small balconies, chunky exaggerated proportions, hand-painted game-ready textures, single object, plain background"
+    },
+    {
+      "id": "predio-c",
+      "tipo": "cenario",
+      "saida": "predio-c",
+      "polycount": 6000,
+      "prompt": "stylized cartoon futuristic tower block, a single cube-shaped floor section of a skyscraper meant to be stacked into a tower, roughly equal width, depth and height, flat top and bottom, night time with warm yellow glowing windows, white and purple metal panels, holographic magenta neon advertisement strip, round windows, chunky exaggerated proportions, hand-painted game-ready textures, single object, plain background"
+    },
+    {
+      "id": "predio-topo",
+      "tipo": "cenario",
+      "saida": "predio-topo",
+      "polycount": 6000,
+      "prompt": "stylized cartoon skyscraper rooftop block, a single cube-shaped floor section of a skyscraper meant to be stacked into a tower, roughly equal width, depth and height, flat top and bottom, night time with warm yellow glowing windows, flat roof with a water tank, antennas, blinking red beacon, rooftop billboard with abstract neon shapes, same footprint as a floor section, chunky exaggerated proportions, hand-painted game-ready textures, single object, plain background"
     }
   ]
 }

@@ -944,6 +944,55 @@ function resetBlocos(m) {
     b.setAngvel({ x: 0, y: 0, z: 0 }, true);
   }
 }
+// Geometria + material (com textura) de um GLB do Meshy, centralizado — cache por nome.
+const geoGLBcache = {};
+function carregarGeoGLB(nome) {
+  if (geoGLBcache[nome]) return geoGLBcache[nome];
+  return (geoGLBcache[nome] = new Promise((res) => {
+    new GLTFLoader().load(ASSET('assets/modelos/' + nome + '.glb'), (g) => {
+      let mesh = null; g.scene.updateMatrixWorld(true);
+      g.scene.traverse((o) => { if (o.isMesh && !mesh) mesh = o; });
+      if (!mesh) { res(null); return; }
+      const geo = mesh.geometry.clone(); geo.applyMatrix4(mesh.matrixWorld); geo.center(); geo.computeBoundingBox();
+      const size = new THREE.Vector3(); geo.boundingBox.getSize(size);
+      const src = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+      const mat = (src && src.map) ? src.clone() : new THREE.MeshStandardMaterial({ color: 0xb9bcc8, roughness: 0.8 });
+      res({ geo, mat, size });
+    }, undefined, () => res(null));
+  }));
+}
+// Prédio de blocos GLB (assets/modelos/predio-*.glb, gerados por ferramentas/meshy.mjs):
+// mesma física do predio() — 2 colunas × alt andares, cada bloco um corpo dinâmico
+// que desaba e vira arma — mas com fachada cartoon de verdade e um topo com caixa d'água.
+function predioGLB(m, px, pz, alt, blocos, topo) {
+  const L = 0.56; // largura do bloco (casa com o predio() procedural)
+  // Cada GLB é um prediozinho inteiro (~0.9 m depois de escalado), não um andar de 0.44:
+  // converte "alt andares" numa quantidade de blocos que dê altura parecida (5 andares ≈ 3 blocos)
+  const hMedia = blocos.reduce((a, it) => a + it.size.y * (L / Math.max(it.size.x, it.size.z)), 0) / blocos.length;
+  const nBlocos = Math.max(2, Math.round((alt * 0.6) / hMedia));
+  for (let col = 0; col < 2; col++) {
+    const x = px + (col - 0.5) * 0.57;
+    let y = 0;
+    for (let andar = 0; andar < nBlocos; andar++) {
+      const n = blocos.length, k = (((andar + col * 2 + Math.round(px + pz)) % n) + n) % n;
+      const it = (andar === nBlocos - 1 && topo) ? topo : blocos[k];
+      const esc = L / Math.max(it.size.x, it.size.z), h = it.size.y * esc;
+      const yy = y + h / 2;
+      const b = world.createRigidBody(
+        RAPIER.RigidBodyDesc.dynamic().setTranslation(x, yy, pz).setLinearDamping(0.15).setAngularDamping(0.35),
+      );
+      world.createCollider(
+        RAPIER.ColliderDesc.cuboid(L / 2, h / 2, L / 2).setMass(3).setFriction(0.7).setCollisionGroups(PROP_GROUPS),
+        b,
+      );
+      const me = new THREE.Mesh(it.geo, it.mat);
+      me.scale.setScalar(esc); me.castShadow = true; me.receiveShadow = true;
+      scene.add(me);
+      m.bodies.push(b); m.meshes.push(me); m.syncPairs.push([b, me]); m.props.push(b); m._blocos.push([b, x, yy, pz]);
+      y += h;
+    }
+  }
+}
 
 const MAPAS = [
   {
@@ -1377,9 +1426,15 @@ const MAPAS = [
         return t;
       })();
       chaoFixo(m, 6, 4.5, new THREE.MeshStandardMaterial({ map: asfalto, roughness: 0.92 }));
-      for (const [bx, bz, alt] of [[-4.4, -3, 5], [4.4, -3, 5], [-4.4, 3, 4], [4.4, 3, 4], [0, -3.6, 3]]) {
-        predio(m, bx, bz, alt);
-      }
+      const posPredios = [[-4.4, -3, 5], [4.4, -3, 5], [-4.4, 3, 4], [4.4, 3, 4], [0, -3.6, 3]];
+      // Prédios: blocos cartoon do Meshy (predio-a/b/c + topo); sem os arquivos, caixas procedurais
+      Promise.all(['predio-a', 'predio-b', 'predio-c', 'predio-topo'].map(carregarGeoGLB)).then(([a, b, c, topo]) => {
+        if (m._dead) return; // trocou de mapa enquanto carregava
+        const blocos = [a, b, c].filter(Boolean);
+        for (const [bx, bz, alt] of posPredios) {
+          if (blocos.length) predioGLB(m, bx, bz, alt, blocos, topo); else predio(m, bx, bz, alt);
+        }
+      });
       m.reset = () => resetBlocos(m);
     },
   },
