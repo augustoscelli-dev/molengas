@@ -135,6 +135,8 @@ export const MUSC = {
   volta: 8,           // velocidade com que a força volta depois do golpe (1/s)
   giro: 1.8,          // multiplicador do torque de virar (física nova)
   reto: 2.5,          // multiplicador do torque que endireita quadril/tronco (física nova)
+  kSoco: 2,           // impulso do soco de um braço (a atual usa dois braços com 1)
+  alcSoco: 0.48,      // raio de acerto da mão (física nova)
 };
 
 export class Ragdoll {
@@ -436,6 +438,10 @@ export class Ragdoll {
       if (sw > WMAX) { const k = WMAX / sw; b.setAngvel({ x: w.x * k, y: w.y * k, z: w.z * k }, true); }
     }
   }
+  // 🥊 Física nova: soco com UM braço, alternando (jab/direto); a atual usa os dois.
+  _comecaSoco() { if (AJUSTES.fisica === 'nova') this._bracoSoco = this._bracoSoco === 'L' ? 'R' : 'L'; }
+  _maosSoco() { return AJUSTES.fisica === 'nova' && this._bracoSoco ? ['forearm' + this._bracoSoco] : ['forearmL', 'forearmR']; }
+  _kSoco() { return AJUSTES.fisica === 'nova' ? MUSC.kSoco : 1; } // força do soco de um braço só
   // Músculo PD entre pai e filho: puxa a rotação RELATIVA do filho pra qAlvo.
   _musculo(pai, filho, qAlvo, g, forca, dt) {
     const P = this.parts[pai], C = this.parts[filho];
@@ -490,6 +496,7 @@ export class Ragdoll {
       }
     }
     // coluna e pescoço: retos em relação ao quadril / tronco (ou curvados pra alcançar)
+    if (socando && !curva) curva = 0.22; // inclina pra dentro do soco (peso do corpo no golpe)
     this._musculo('pelvis', 'torso', curva > 0 ? qEixo(1, 0, 0, curva) : ident, MUSC.coluna, f, dt);
     this._musculo('torso', 'head', ident, MUSC.pescoco, f, dt);
     const qTi = qConj(this.parts.torso.rotation());
@@ -524,7 +531,8 @@ export class Ragdoll {
         cot = 0.1;
       }
       if (emote) { frente = 2.9; abre = 0.35; cot = 0.2; }
-      if (socando) { frente = 1.55; abre = -0.1; cot = 0.02; g = MUSC.ombroSoco; }
+      if (socando && (!this._bracoSoco || this._bracoSoco === l)) { frente = 1.55; abre = -0.18; cot = 0.02; g = MUSC.ombroSoco; }
+      else if (socando) { frente = 0.7; abre = -0.22; cot = 2.25; } // o outro punho protege o queixo
       this._musculo('torso', `upperArm${l}`, poseBraco(l, frente, abre), g, fBraco, dt);
       this.juntas?.[`upperArm${l}>forearm${l}`]?.configureMotorPosition?.(cot, MUSC.cotovelo * fBraco, MUSC.cotovelo * 0.08 * fBraco);
     }
@@ -839,8 +847,9 @@ export class Ragdoll {
             perna.applyImpulse({ x: dir[0] * 9, y: 3.2, z: dir[2] * 9 }, true);
             this.parts.torso.applyImpulse({ x: -dir[0] * 1.5, y: 0, z: -dir[2] * 1.5 }, true);
           } else {
-            const forca = this._socoFraco ? 3.5 : 7;
-            for (const h of ['forearmL', 'forearmR']) {
+            const forca = (this._socoFraco ? 3.5 : 7) * this._kSoco();
+            this._comecaSoco();
+            for (const h of this._maosSoco()) {
               this.parts[h].applyImpulse({ x: dir[0] * forca, y: 1.2, z: dir[2] * forca }, true);
             }
           }
@@ -874,8 +883,9 @@ export class Ragdoll {
           this.punchHit = false;
           this.lastPunchStartAt = now;
           this.stats.socos++;
-          const forca = 7 * (1 + this._carga * 0.9);
-          for (const h of ['forearmL', 'forearmR']) this.parts[h].applyImpulse({ x: dir[0] * forca, y: 1.4, z: dir[2] * forca }, true);
+          const forca = 7 * (1 + this._carga * 0.9) * this._kSoco();
+          this._comecaSoco();
+          for (const h of this._maosSoco()) this.parts[h].applyImpulse({ x: dir[0] * forca, y: 1.4, z: dir[2] * forca }, true);
           this.parts.torso.applyImpulse({ x: dir[0] * 3 * this._carga, y: 0.3, z: dir[2] * 3 * this._carga }, true);
           pelvis.applyImpulse({ x: dir[0] * 2.5 * this._carga, y: 0, z: dir[2] * 2.5 * this._carga }, true);
         }
@@ -891,16 +901,16 @@ export class Ragdoll {
       if (this._chute) {
         this.parts[this._chutePerna].applyImpulse({ x: dir[0] * 30 * dt, y: 2 * dt, z: dir[2] * 30 * dt }, true);
       } else {
-        for (const h of ['forearmL', 'forearmR']) {
-          this.parts[h].applyImpulse({ x: dir[0] * 26 * dt, y: 0, z: dir[2] * 26 * dt }, true);
+        for (const h of this._maosSoco()) {
+          this.parts[h].applyImpulse({ x: dir[0] * 26 * this._kSoco() * dt, y: 0, z: dir[2] * 26 * this._kSoco() * dt }, true);
         }
       }
       if (!this.punchHit && this.rivals.length) {
         // pontos que golpeiam: chute = ponta do pé; soco = as duas mãos
         const tips = this._chute
           ? [this.footTip(this._chutePerna === 'calfL' ? 0 : 1)]
-          : [this.handTip(0), this.handTip(1)];
-        const alc = this._chute ? 0.56 : 0.48;
+          : this._maosSoco().map((h) => this.handTip(h === 'forearmL' ? 0 : 1));
+        const alc = this._chute ? 0.56 : (AJUSTES.fisica === 'nova' ? MUSC.alcSoco : 0.48);
         outer: for (const tip of tips) {
           for (const rival of this.rivals) {
             if (rival.isEsquivando(now)) continue; // i-frames: o golpe atravessa

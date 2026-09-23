@@ -1,6 +1,6 @@
 import * as THREE from '../libs/three.module.js';
 import * as RAPIER from '../libs/rapier3d.es.js';
-import { Ragdoll, PARTS, ARENA, DANO_KO } from './ragdoll.js';
+import { Ragdoll, PARTS, ARENA, DANO_KO, MUSC } from './ragdoll.js';
 import { MAPS, readInput, isDown } from './input.js';
 import { SKINS, getFaceTexture, toonMat, addOutline, vinilMat } from './skins.js';
 import { som, initSom } from './som.js';
@@ -111,6 +111,10 @@ const world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
 if (new URLSearchParams(location.search).get('fisica') === 'nova') {
   AJUSTES.fisica = 'nova';
   world.integrationParameters.numSolverIterations = 8; // juntas firmes: menos borracha
+  // &musc=kSoco:1.4,giro:2 — ajusta ganhos da física nova ao vivo (testes e calibragem)
+  for (const kv of (new URLSearchParams(location.search).get('musc') || '').split(',').filter(Boolean)) {
+    const [k, v] = kv.split(':'); if (k in MUSC && typeof MUSC[k] === 'number' && Number.isFinite(+v)) MUSC[k] = +v;
+  }
 }
 const GROUND_GROUPS = (0x0001 << 16) | 0xffff;
 const PLAYER_BITS = [0x0002, 0x0004, 0x0020, 0x0040];
