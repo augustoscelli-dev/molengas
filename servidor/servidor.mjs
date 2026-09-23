@@ -147,7 +147,7 @@ function aplicarControleArena() { // tração por variante (gelo derrapa)
   for (const j of jogadores.values()) j.rag.controle = c;
 }
 function montarArena(scale) {
-  for (const b of [chao, ancora, bola, ...caixotes]) if (b) world.removeRigidBody(b);
+  for (const b of [chao, ancora, bola, ...caixotes]) if (b) { soltarAgarroesS(b); world.removeRigidBody(b); }
   caixotes = [];
   chaoCols = [];
   escalaEncolhe = 1;
@@ -218,8 +218,12 @@ function soltarArmaS(tipo, x, z) {
   atualizarPropsDosRags();
   return arma;
 }
+// Solta mãos presas ao corpo ANTES de removê-lo (senão o ragdoll lê um corpo morto
+// e o Rapier entra em pânico, derrubando a sala inteira).
+function soltarAgarroesS(body) { for (const j of jogadores.values()) j.rag && j.rag.soltarCorpo(body); }
 function removerArmaS(arma) {
   const i = armas.indexOf(arma); if (i >= 0) armas.splice(i, 1);
+  soltarAgarroesS(arma.body);
   try { world.removeRigidBody(arma.body); } catch {}
   atualizarPropsDosRags();
 }

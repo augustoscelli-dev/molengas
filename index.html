@@ -533,6 +533,21 @@
   function mostrarErro(txt) {
     var d = document.getElementById('carregando');
     if (!d) return;
+    // Pânico do motor de física (Rapier/wasm): o mundo fica inutilizável, mas
+    // recarregar resolve. Em vez de tela congelada, avisa e volta pro menu —
+    // no máximo 2 vezes por minuto, pra nunca entrar em loop de recarga.
+    if (/unreachable|recursive use of an object/.test(String(txt))) {
+      var k = 'wob_recarga', agora = Date.now(), h = [];
+      try { h = JSON.parse(sessionStorage.getItem(k) || '[]').filter(function (x) { return agora - x < 60000; }); } catch (e) {}
+      if (h.length < 2) {
+        h.push(agora);
+        try { sessionStorage.setItem(k, JSON.stringify(h)); } catch (e) {}
+        d.style.display = 'flex'; d.style.fontSize = '24px'; d.style.color = '#fff';
+        d.innerHTML = '🤕 A física tropeçou… recarregando!';
+        setTimeout(function () { location.reload(); }, 1400); // mantém a URL: online reconecta no mesmo slot
+        return;
+      }
+    }
     d.style.display = 'flex';
     d.style.fontSize = '16px';
     d.style.color = '#ff9090';

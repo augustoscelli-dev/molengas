@@ -113,5 +113,45 @@ function check(name, cond, extra = '') {
   check('reset em pé no lugar', Math.abs(pp.x + 2.2) < 0.6 && pp.y > 0.7, fmt(pp));
 }
 
+// --- Cenário 7: corpo segurado é REMOVIDO do mundo (arma que cai no abismo,
+// chão que encolhe, rival que desconecta). Antes o ragdoll lia/empurrava o corpo
+// morto e o Rapier entrava em pânico ("unreachable" → "recursive use of an object").
+{
+  const { world, p1, p2 } = makeWorld();
+  step(world, p1, p2, IDLE, IDLE, 60);
+  const arma = () => {
+    const b = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(-2.2, 1.0, 0.4));
+    world.createCollider(RAPIER.ColliderDesc.capsule(0.3, 0.06).setMass(2), b);
+    const j = world.createImpulseJoint(RAPIER.JointData.spherical({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 0 }), p1.parts.forearmR, b, true);
+    p1.grabJoints[1] = { j, body: b, chao: false };
+    return b;
+  };
+  let ok = true, msg = '';
+  try {
+    // (a) sem avisar o ragdoll: a rede de segurança por frame tem que pegar
+    const b1 = arma(); step(world, p1, p2, IDLE, IDLE, 5);
+    world.removeRigidBody(b1);
+    p1.parts.pelvis.setAngvel({ x: 0, y: 6, z: 0 }, true); // giro de arremesso
+    p1.releaseGrabs(true);
+    step(world, p1, p2, IDLE, IDLE, 60);
+    // (b) fluxo certo: soltarCorpo antes de remover
+    const b2 = arma(); step(world, p1, p2, IDLE, IDLE, 5);
+    p1.soltarCorpo(b2); world.removeRigidBody(b2);
+    step(world, p1, p2, { ...IDLE, grab: true }, IDLE, 60);
+    // (c) rival agarrado é destruído no meio do agarrão (desconexão no online)
+    p1.releaseGrabs();
+    const j = world.createImpulseJoint(RAPIER.JointData.spherical({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 0 }), p1.parts.forearmL, p2.parts.torso, true);
+    p1.grabJoints[0] = { j, body: p2.parts.torso, chao: false, rival: p2, ombro: true };
+    p1.rivals = [];
+    p2.destroy();
+    for (let i = 0; i < 60; i++) { p1.update(1 / 60, 10 + i / 60, IDLE); world.step(); }
+    p1.releaseGrabs(true);
+    const pp = p1.parts.pelvis.translation();
+    if (!Number.isFinite(pp.x + pp.y + pp.z)) { ok = false; msg = 'NaN'; }
+  } catch (e) { ok = false; msg = String(e).slice(0, 90); }
+  check('corpo segurado removido não derruba a física', ok, msg);
+  check('mãos livres depois', p1.grabJoints[0] === null && p1.grabJoints[1] === null);
+}
+
 console.log(fail === 0 ? '\nTUDO OK' : `\n${fail} FALHAS`);
 process.exit(fail === 0 ? 0 : 1);

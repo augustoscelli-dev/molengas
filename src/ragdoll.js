@@ -203,6 +203,7 @@ export class Ragdoll {
   isStunned(now) { return now < this.stunUntil; }
 
   destroy() {
+    this._destruido = true;
     this.releaseGrabs();
     for (const spec of PARTS) this.world.removeRigidBody(this.parts[spec.name]);
     this.parts = {};
@@ -226,12 +227,43 @@ export class Ragdoll {
 
   // arremesso=true (soltou de propósito): girando rápido, o que estava
   // agarrado sai voando com força extra proporcional ao giro.
+  // 🛡️ Corpo/junta ainda existem no mundo? Ler ou empurrar um corpo que o mapa já
+  // removeu (arma que caiu no abismo, chão que encolheu, rival que desconectou)
+  // faz o Rapier entrar em pânico ("unreachable") e o mundo inteiro morre
+  // ("recursive use of an object"). Reproduzido isolado: body.translation()
+  // depois de world.removeRigidBody(body).
+  _existe(b) { return !!b && this.world.bodies.contains(b.handle); }
+  _juntaExiste(j) { return !!j && this.world.impulseJoints.contains(j.handle); }
+  _grabValido(g) {
+    if (!this._existe(g.body)) return false;
+    if (g.rival && (g.rival._destruido || !this._existe(g.rival.parts.torso))) return false;
+    return true;
+  }
+  // Solta (sem arremesso) qualquer mão presa a este corpo — chamar ANTES de removê-lo.
+  soltarCorpo(body) {
+    for (let i = 0; i < 2; i++) {
+      const g = this.grabJoints[i];
+      if (!g || g.body !== body) continue;
+      if (this._juntaExiste(g.j)) this.world.removeImpulseJoint(g.j, true);
+      this.grabJoints[i] = null;
+    }
+  }
+  // Descarta agarrões cujo alvo sumiu (rede de segurança por frame).
+  _limparGrabsMortos() {
+    for (let i = 0; i < 2; i++) {
+      const g = this.grabJoints[i];
+      if (!g || this._grabValido(g)) continue;
+      if (this._juntaExiste(g.j)) this.world.removeImpulseJoint(g.j, true);
+      this.grabJoints[i] = null;
+    }
+  }
   releaseGrabs(arremesso = false) {
+    this._limparGrabsMortos();
     const spin = Math.min(Math.abs(this.parts.pelvis.angvel().y), 8);
     for (let i = 0; i < 2; i++) {
       const g = this.grabJoints[i];
       if (!g) continue;
-      this.world.removeImpulseJoint(g.j, true);
+      if (this._juntaExiste(g.j)) this.world.removeImpulseJoint(g.j, true);
       if (arremesso && spin > 1.0 && g.body && !g.chao) {
         // 🥊 ARREMESSO POR CIMA DA CORDA. Com o ringue fechado, esta é a única
         // forma de tirar o rival da arena — então o lançamento precisa vencer
@@ -257,7 +289,7 @@ export class Ragdoll {
         const dono = g.body.__rag ?? null;
         const alvos = dono ? ['torso', 'pelvis', 'head'].map((n) => dono.parts[n]) : [g.body];
         for (const b of alvos) {
-          if (!b) continue;
+          if (!this._existe(b)) continue;
           b.applyImpulse({ x: dirA[0] * k, y: alto, z: dirA[1] * k }, true);
         }
         this.lastThrowAt = this._now ?? 0;
@@ -350,8 +382,27 @@ export class Ragdoll {
     p.applyTorqueImpulse({ x: dz * 3, y: 0, z: -dx * 3 }, true); // giro de rolamento
   }
 
+  // 🧯 Freio de emergência numérico. Impulsos empilhados (bomba + martelo + queda
+  // no mesmo passo) às vezes jogam um membro a 100+ m/s: a junta estica, o solver
+  // "explode" o boneco e ele atravessa o chão. Nenhum golpe do jogo passa de ~15 m/s,
+  // então 40 m/s / 60 rad/s só pegam defeito, não jogada. NaN = reset na hora
+  // (NaN dentro do Rapier derruba o mundo inteiro).
+  _sanear() {
+    const VMAX = 40, WMAX = 60;
+    for (const spec of PARTS) {
+      const b = this.parts[spec.name]; if (!b) continue;
+      const t = b.translation(), v = b.linvel(), w = b.angvel();
+      if (!Number.isFinite(t.x + t.y + t.z + v.x + v.y + v.z + w.x + w.y + w.z)) { this.reset(); this.stats.saneado = (this.stats.saneado || 0) + 1; return; }
+      const sv = Math.hypot(v.x, v.y, v.z);
+      if (sv > VMAX) { const k = VMAX / sv; b.setLinvel({ x: v.x * k, y: v.y * k, z: v.z * k }, true); }
+      const sw = Math.hypot(w.x, w.y, w.z);
+      if (sw > WMAX) { const k = WMAX / sw; b.setAngvel({ x: w.x * k, y: w.y * k, z: w.z * k }, true); }
+    }
+  }
   update(dt, now, input) {
     this._now = now;
+    this._limparGrabsMortos();
+    this._sanear();
     const stunned = this.isStunned(now);
     // Buffs de power-up expiram
     // Peso do corpo que está no ombro: sem isto a junta não segura os ~30 kg de

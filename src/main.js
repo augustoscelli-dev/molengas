@@ -774,8 +774,12 @@ function atualizarSight(s, rag, arma) {
   s.ponto.position.set(0, len, 0);
   s.linha.material.color.setHex(arma.quente ? 0xff4030 : 0x66f0ff);
 }
+// Solta todas as mãos presas a um corpo — SEMPRE antes de world.removeRigidBody
+// dele, senão o ragdoll lê/empurra um corpo morto e o Rapier entra em pânico.
+function soltarAgarroes(body) { for (const l of lutadores) l.rag && l.rag.soltarCorpo(body); }
 function removerArma(m, arma) {
   const i = (m.armas || []).indexOf(arma); if (i >= 0) m.armas.splice(i, 1);
+  soltarAgarroes(arma.body);
   world.removeRigidBody(arma.body);
   scene.remove(arma.mesh);
   const pi = m.props.indexOf(arma.body); if (pi >= 0) m.props.splice(pi, 1);
@@ -1229,6 +1233,7 @@ const MAPAS = [
       let fator = 1;
       const criar = () => {
         if (chao) {
+          soltarAgarroes(chao); // quem estava pendurado na beirada solta antes do chão sumir
           world.removeRigidBody(chao);
           m.bodies.splice(m.bodies.indexOf(chao), 1);
         }
@@ -1333,6 +1338,7 @@ const MAPAS = [
       let fator = 1;
       const criar = () => {
         if (chao) {
+          soltarAgarroes(chao); // quem estava pendurado na beirada solta antes do chão sumir
           world.removeRigidBody(chao);
           m.bodies.splice(m.bodies.indexOf(chao), 1);
         }
@@ -2524,7 +2530,7 @@ let mapa = null;
 function setMapa(idx) {
   if (mapa) {
     mapa._dead = true; // loaders assíncronos do mapa antigo desistem (senão vazam mesh/física)
-    for (const b of mapa.bodies) world.removeRigidBody(b);
+    for (const b of mapa.bodies) { soltarAgarroes(b); world.removeRigidBody(b); }
     for (const me of mapa.meshes) scene.remove(me);
   }
   mapaIdx = ((idx % MAPAS.length) + MAPAS.length) % MAPAS.length;
@@ -3095,14 +3101,39 @@ function registrarFlashMats(meshes) {
   meshes._flashOn = false;
 }
 
-function syncVisual(rag, meshes, now) {
+// 🎞️ INTERPOLAÇÃO DE RENDER. A física anda em passos fixos de 1/60 s, mas a tela
+// não: num monitor de 144 Hz o boneco repetia a mesma pose 2-3 quadros seguidos, e
+// a 60 Hz com oscilação alternava 0 e 2 passos por quadro (tremidinha). Guarda a pose
+// de cada corpo ANTES de cada passo e desenha a mistura anterior→atual pela fração
+// de tempo que sobrou no acumulador (Gaffer on Games, "Fix Your Timestep!").
+const _posePrev = new WeakMap(); // body -> { x, y, z, qx, qy, qz, qw }
+function guardarPose(b) {
+  const t = b.translation(), r = b.rotation();
+  let p = _posePrev.get(b);
+  if (!p) { p = {}; _posePrev.set(b, p); }
+  p.x = t.x; p.y = t.y; p.z = t.z; p.qx = r.x; p.qy = r.y; p.qz = r.z; p.qw = r.w;
+}
+function guardarPoses() {
+  for (const l of lutadores) for (const spec of PARTS) { const b = l.rag.parts[spec.name]; if (b) guardarPose(b); }
+  for (const [b] of mapa.syncPairs) guardarPose(b);
+}
+const _qA = new THREE.Quaternion(), _qB = new THREE.Quaternion();
+// Copia a pose (interpolada por `a` ∈ [0,1]) de um corpo pra um Object3D.
+function poseInterp(b, obj, a) {
+  const t = b.translation(), r = b.rotation(), p = a < 1 ? _posePrev.get(b) : null;
+  // sem pose anterior, ou teleporte (reset/respawn): não arrasta um rastro pela tela
+  if (!p || (t.x - p.x) ** 2 + (t.y - p.y) ** 2 + (t.z - p.z) ** 2 > 1.0) {
+    obj.position.set(t.x, t.y, t.z); obj.quaternion.set(r.x, r.y, r.z, r.w); return;
+  }
+  obj.position.set(p.x + (t.x - p.x) * a, p.y + (t.y - p.y) * a, p.z + (t.z - p.z) * a);
+  _qA.set(p.qx, p.qy, p.qz, p.qw); _qB.set(r.x, r.y, r.z, r.w);
+  obj.quaternion.copy(_qA.slerp(_qB, a));
+}
+function syncVisual(rag, meshes, now, alpha = 1) {
   for (const spec of PARTS) {
     const b = rag.parts[spec.name];
     const m = meshes[spec.name];
-    const t = b.translation();
-    const r = b.rotation();
-    m.position.set(t.x, t.y, t.z);
-    m.quaternion.set(r.x, r.y, r.z, r.w);
+    poseInterp(b, m, alpha);
   }
   // Respiração + squash & stretch no corpo
   const desdeHit = now - rag.lastHitLandedAt;
@@ -5448,21 +5479,19 @@ function frame(t) {
       l._inp = inp; // hazards leem o input do frame (ex.: se firmar no VAGALHÃO)
       l.rag.update(FIXED_DT, simNow, inp);
     }
+    guardarPoses();
     world.step();
     if (state === 'luta') gravarReplay();
     handleRounds(simNow);
   }
   menuGamepad();
 
-  for (const l of lutadores) syncVisual(l.rag, l.meshes, simNow);
+  // fração do próximo passo já decorrida; no freeze-frame mostra a pose atual
+  const alphaR = hitStop > 0 ? 1 : Math.min(1, acc / FIXED_DT);
+  for (const l of lutadores) syncVisual(l.rag, l.meshes, simNow, alphaR);
 
   // Objetos do mapa seguem a física
-  for (const [body, mesh] of mapa.syncPairs) {
-    const tp = body.translation();
-    const rp = body.rotation();
-    mesh.position.set(tp.x, tp.y, tp.z);
-    mesh.quaternion.set(rp.x, rp.y, rp.z, rp.w);
-  }
+  for (const [body, mesh] of mapa.syncPairs) poseInterp(body, mesh, alphaR);
   mapa.update?.(simNow);
 
   // Bolada: bola de demolição em velocidade atordoa quem ela atropela
@@ -5788,6 +5817,7 @@ function frame(t) {
     spread = Math.min(Math.hypot(maxX - minX, maxZ - minZ), 12);
   }
   if (PARAMS.has('debug') && lutadores[0]) {
+    window.__wob ??= { get lutadores() { return lutadores; } }; // medição (testes)
     const q = lutadores[0].rag.parts.pelvis.rotation();
     const yawQ = (r) => Math.atan2(2 * (r.x * r.z + r.w * r.y), 1 - 2 * (r.x * r.x + r.y * r.y)).toFixed(2);
     const d = $('debug');
