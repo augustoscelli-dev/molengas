@@ -1,0 +1,12 @@
+# Render.com — MOLENGAS servidor online
+# No painel: New > Blueprint, aponte pro repo. Render injeta PORT automaticamente.
+services:
+  - type: web
+    name: molengas
+    runtime: node
+    plan: free
+    buildCommand: npm install --omit=dev --no-fund --no-audit
+    startCommand: node servidor/servidor.mjs
+    envVars:
+      - key: NODE_VERSION
+        value: "20"

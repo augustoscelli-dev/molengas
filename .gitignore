@@ -1,0 +1,9 @@
+node_modules/
+servidor/node_modules/
+*.log
+.DS_Store
+.env
+.fly/
+servidor/placar-noite.json
+desktop/node_modules/
+desktop/dist/
