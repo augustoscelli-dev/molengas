@@ -7,3 +7,7 @@ servidor/node_modules/
 servidor/placar-noite.json
 desktop/node_modules/
 desktop/dist/
+
+# automação Meshy (ferramentas/meshy.mjs)
+assets/meshy-brutos/
+ferramentas/.meshy-estado.json

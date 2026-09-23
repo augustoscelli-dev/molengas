@@ -7,7 +7,8 @@
   },
   "scripts": {
     "start": "node servidor/servidor.mjs",
-    "test": "node testes/rodar.mjs"
+    "test": "node testes/rodar.mjs",
+    "meshy": "node ferramentas/meshy.mjs"
   },
   "dependencies": {
     "ws": "^8.18.0"

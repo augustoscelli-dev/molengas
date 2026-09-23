@@ -1,0 +1,125 @@
+{
+  "_leia": "Manifesto da automação Meshy (ferramentas/meshy.mjs). Cada item vira um GLB em assets/modelos/<saida>.glb. Prompts originais, sem marcas/filmes (docs/auditoria-ip.md). Edite à vontade: novos ids entram no jogo sozinhos.",
+  "opcoes": {
+    "modeloIA": "latest",
+    "resolucaoTextura": "2k",
+    "polycount": 30000,
+    "pbr": true
+  },
+  "itens": [
+    {
+      "id": "jaeger",
+      "tipo": "retexture",
+      "entrada": "assets/modelos/jaeger-rigado.glb",
+      "saida": "jaeger-rigado",
+      "altura": 1.9,
+      "anguloRetrato": -28,
+      "prompt": "Giant original battle mech robot, worn navy-blue and gunmetal steel armor plating with brushed metal texture, glowing cyan visor and chest reactor, cyan energy lines along the limbs, scratched paint and battle damage on the edges, orange warning stripes on the shoulders, dark rubber joints, clean sci-fi military look, PBR game-ready textures"
+    },
+    {
+      "id": "kaiju",
+      "tipo": "retexture",
+      "entrada": "assets/modelos/kaiju-rigado.glb",
+      "saida": "kaiju-rigado",
+      "altura": 1.9,
+      "anguloRetrato": 28,
+      "prompt": "Giant original monster creature, thick reptilian scaly skin in deep teal and charcoal, rough armored plates on the back and shoulders, rows of dorsal spines glowing bright orange, lighter sand-colored belly scales, dark claws, fierce glowing orange eyes, subtle battle scars, wet skin sheen, PBR game-ready textures"
+    },
+
+    {
+      "id": "rochedo",
+      "tipo": "lutador",
+      "nome": "ROCHEDO",
+      "saida": "rochedo-rigado",
+      "altura": 1.9,
+      "cores": { "head": "8a8f96", "torso": "7d8289", "pelvis": "5f646b", "arms": "7d8289", "legs": "5f646b" },
+      "prompt": "stylized low-poly cartoon stone golem, bipedal humanoid proportions, chunky rounded boulders body, mossy cracks, small glowing eyes, standing T-pose, symmetrical, game-ready character, full body, no weapons, plain background"
+    },
+    {
+      "id": "gelado",
+      "tipo": "lutador",
+      "nome": "GELADO",
+      "saida": "gelado-rigado",
+      "altura": 1.9,
+      "cores": { "head": "eef6ff", "torso": "e4eefb", "pelvis": "b9d6f5", "arms": "e4eefb", "legs": "b9d6f5" },
+      "prompt": "stylized low-poly cartoon yeti, bipedal humanoid proportions, fluffy white fur, big friendly jaw, ice-blue hands and feet, standing T-pose, symmetrical, game-ready character, full body, no weapons, plain background"
+    },
+    {
+      "id": "brasa",
+      "tipo": "lutador",
+      "nome": "BRASA",
+      "saida": "brasa-rigado",
+      "altura": 1.9,
+      "cores": { "head": "ff7a2a", "torso": "f06a1f", "pelvis": "b84a12", "arms": "f06a1f", "legs": "b84a12" },
+      "prompt": "stylized low-poly cartoon fire dragon warrior, bipedal humanoid proportions, ember-orange scales, small wings folded on back, standing T-pose, symmetrical, game-ready character, full body, no weapons, plain background"
+    },
+    {
+      "id": "prisma",
+      "tipo": "lutador",
+      "nome": "PRISMA",
+      "saida": "prisma-rigado",
+      "altura": 1.9,
+      "cores": { "head": "b48cff", "torso": "9a6cff", "pelvis": "6f47c9", "arms": "9a6cff", "legs": "6f47c9" },
+      "prompt": "stylized low-poly cartoon crystal alien, bipedal humanoid proportions, translucent geometric gem body, glowing core in chest, standing T-pose, symmetrical, game-ready character, full body, no weapons, plain background"
+    },
+    {
+      "id": "barao",
+      "tipo": "lutador",
+      "nome": "BARÃO TUBARÃO",
+      "saida": "barao-rigado",
+      "altura": 1.9,
+      "cores": { "head": "8fa4b8", "torso": "7d93a8", "pelvis": "5b6f82", "arms": "7d93a8", "legs": "5b6f82" },
+      "prompt": "stylized low-poly cartoon muscular shark wrestler, bipedal humanoid proportions, grey shark head with big grin, athletic body, standing T-pose, symmetrical, game-ready character, full body, no weapons, plain background"
+    },
+    {
+      "id": "capitao",
+      "tipo": "lutador",
+      "nome": "CAPITÃO POLVO",
+      "saida": "capitao-rigado",
+      "altura": 1.9,
+      "cores": { "head": "9b5de5", "torso": "8747d1", "pelvis": "5f2f9e", "arms": "8747d1", "legs": "5f2f9e" },
+      "prompt": "stylized low-poly cartoon octopus-headed brawler, bipedal humanoid proportions, purple octopus head with big eyes, tentacle beard, standing T-pose, symmetrical, game-ready character, full body, no weapons, plain background"
+    },
+
+    {
+      "id": "bastao",
+      "tipo": "arma",
+      "saida": "bastao-low",
+      "polycount": 4000,
+      "escala": 0.78,
+      "prompt": "stylized cartoon wooden baseball bat, chunky exaggerated proportions, worn light wood grain with dark grip tape at the handle, small scratches, hand-painted game-ready prop, single object, upright, plain background"
+    },
+    {
+      "id": "cano",
+      "tipo": "arma",
+      "saida": "cano-low",
+      "polycount": 4000,
+      "escala": 0.84,
+      "prompt": "stylized cartoon rusty metal pipe with a threaded coupling ring near one end, chunky proportions, dull grey steel with orange rust spots and scratches, hand-painted game-ready prop, single object, upright, plain background"
+    },
+    {
+      "id": "martelo",
+      "tipo": "arma",
+      "saida": "martelo-low",
+      "polycount": 5000,
+      "escala": 0.82,
+      "prompt": "stylized cartoon oversized sledgehammer, chunky exaggerated proportions, dark wooden handle with leather wrap, big dented iron head with rivets and yellow-black warning stripes, hand-painted game-ready prop, single object, upright, plain background"
+    },
+    {
+      "id": "bomba",
+      "tipo": "arma",
+      "saida": "bomba-low",
+      "polycount": 3000,
+      "escala": 0.36,
+      "prompt": "stylized cartoon round black iron bomb with a short lit fuse on top, glossy black metal with a small skull-free white highlight, tiny orange spark at the fuse tip, chunky proportions, hand-painted game-ready prop, single object, plain background"
+    },
+    {
+      "id": "gancho",
+      "tipo": "arma",
+      "saida": "gancho-low",
+      "polycount": 4000,
+      "escala": 0.5,
+      "prompt": "stylized cartoon grappling hook on a short wooden handle, chunky proportions, three curved steel prongs, worn metal with scratches, brown leather-wrapped grip, hand-painted game-ready prop, single object, upright, plain background"
+    }
+  ]
+}

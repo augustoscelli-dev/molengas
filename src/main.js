@@ -624,7 +624,13 @@ function preloadArmaGLB(def) {
   new GLTFLoader().load(ASSET('assets/modelos/' + def.glb + '.glb'), (g) => {
     const s = g.scene;
     const mat = new THREE.MeshStandardMaterial({ color: def.corMat ?? 0xb8b8c0, metalness: 0.65, roughness: 0.4 });
-    s.traverse((o) => { if (o.isMesh) { o.material = mat; o.castShadow = true; o.receiveShadow = true; } });
+    s.traverse((o) => {
+      if (!o.isMesh) return;
+      const src = Array.isArray(o.material) ? o.material[0] : o.material;
+      // GLB com textura (Meshy refine/retexture): preserva o material; sem textura: cor lisa (corMat)
+      o.material = (src && src.map) ? src : mat;
+      o.castShadow = true; o.receiveShadow = true;
+    });
     // centraliza e escala pra caber na mão
     const box = new THREE.Box3().setFromObject(s), size = new THREE.Vector3(); box.getSize(size);
     s.scale.setScalar((def.escala || 0.5) / (Math.max(size.x, size.y, size.z) || 1));
@@ -3664,10 +3670,11 @@ addEventListener('pointerdown', ligarSom, { once: true });
 addEventListener('keydown', ligarSom, { once: true });
 
 // Configuração da seleção: 4 slots
-// Fantasias jogáveis no menu: só Jaeger e Kaiju (os modelos 3D de verdade).
+// Fantasias jogáveis no menu: todos os lutadores com modelo 3D (Jaeger, Kaiju e os
+// gerados por ferramentas/meshy.mjs, que entram em src/skins.js com `modelo:`).
 const IDX_JAEGER = SKINS.findIndex((s) => s.id === 'jaeger');
 const IDX_KAIJU = SKINS.findIndex((s) => s.id === 'kaiju');
-const MENU_SKINS = [IDX_JAEGER, IDX_KAIJU];
+const MENU_SKINS = SKINS.map((s, i) => (s.modelo ? i : -1)).filter((i) => i >= 0);
 const lerSkin = (k, padrao) => {
   const v = parseInt(store.get(k), 10);
   return MENU_SKINS.includes(v) ? v : padrao; // só aceita as fantasias jogáveis
