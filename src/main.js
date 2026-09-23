@@ -873,6 +873,13 @@ function dioramaBase(m, nome, { largura = 16, chaoY = -2.4, z = -2, x = 0 } = {}
     s.position.set(x, chaoY - b2.min.y, z);
     s.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
     scene.add(s); m.meshes.push(s);
+    // O cenário é CHÃO de verdade: quem é arremessado bate na grama/neve com um
+    // baque em vez de atravessar a paisagem até y=-8. O ponto conta ao passar de
+    // m.foraY (pouco abaixo da borda da plataforma, bem antes de tocar o cenário).
+    const g = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(x, chaoY - 0.25, z));
+    world.createCollider(RAPIER.ColliderDesc.cuboid(largura, 0.25, largura).setFriction(0.9).setRestitution(0.1).setCollisionGroups(GROUND_GROUPS), g);
+    m.bodies.push(g);
+    m.foraY = chaoY + 0.4; // pendurado na beirada a pélvis fica ~-1.3: não pode contar como fora
   }, undefined, () => {}); // sem o arquivo: mapa fica como era
 }
 
@@ -1268,6 +1275,7 @@ const MAPAS = [
     build(m) {
       climaMapa({ ceu: 0xd0b8ff, chao: 0x2a1440, fog: 0x241040, sol: 0xe8d0ff, solInt: 1.45 }); // arcade roxo
       chaoFixo(m, 5.5, 4, new THREE.MeshStandardMaterial({ map: deckTex, roughness: 0.85 }));
+      dioramaBase(m, 'ilha-martelo', { largura: 22, chaoY: -2.4, z: -1 }); // parque de diversões neon
       // Braço giratório varrendo a arena na altura da cintura
       const poste = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, 0, 0));
       world.createCollider(
@@ -1370,6 +1378,7 @@ const MAPAS = [
     build(m) {
       climaMapa({ ceu: 0xffc9a0, chao: 0x3a1c08, fog: 0x2e1608, sol: 0xffa060, solInt: 1.4 }); // alerta laranja
       chaoFixo(m, 4.6, 3.5, new THREE.MeshStandardMaterial({ map: deckTex, roughness: 0.85 }));
+      dioramaBase(m, 'ilha-batata', { largura: 19, chaoY: -2.4, z: -1 }); // pedreira de demolição
       // A bomba passa de mão em mão — some longe dela quando piscar!
       const bomba = world.createRigidBody(
         RAPIER.RigidBodyDesc.dynamic().setTranslation(0, 0.5, 0).setLinearDamping(0.4).setAngularDamping(0.6),
@@ -1717,6 +1726,7 @@ const MAPAS = [
     amb: 'vento',
     build(m) {
       chaoFixo(m, 5.5, 4, new THREE.MeshStandardMaterial({ map: deckTex, roughness: 0.85 }));
+      dioramaBase(m, 'ilha-vendaval', { largura: 22, chaoY: -2.4, z: -1 }); // penhasco com moinho
       // céu de tempestade
       hemi.color.setHex(0xaebfd0); hemi.groundColor.setHex(0x2e3a3a); hemi.intensity = 0.9;
       sun.color.setHex(0xdfe8ee); sun.intensity = 1.15;
@@ -1940,6 +1950,7 @@ const MAPAS = [
     build(m) {
       climaMapa({ ceu: 0xffe8c8, chao: 0x3a2c18, fog: 0x2c2010, sol: 0xffd894, solInt: 1.5 }); // fim de tarde dourado
       chaoFixo(m, 5.5, 4, new THREE.MeshStandardMaterial({ map: deckTex, roughness: 0.85 }));
+      dioramaBase(m, 'ilha-palanque', { largura: 22, chaoY: -2.4, z: -1 }); // praça de festa junina
       // palanque central elevado + 2 rampas (a física adora um morro de verdade)
       const matPal = new THREE.MeshStandardMaterial({ map: deckTex, roughness: 0.8, color: 0xffe2b8 });
       const palco = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, 0.25, 0));
@@ -2184,6 +2195,7 @@ const MAPAS = [
         return t;
       })();
       chaoFixo(m, 5.5, 4, new THREE.MeshStandardMaterial({ map: texTatame, roughness: 0.9 }));
+      dioramaBase(m, 'ilha-dojo', { largura: 22, chaoY: -2.4, z: -1 }); // jardim zen, lanternas, cerejeiras
       for (const [sx, sz] of [[-2.6, -1.6], [0, 2], [2.6, -1.6]]) {
         const anc = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(sx, 3.4, sz));
         const saco = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(sx, 1.5, sz).setLinearDamping(0.5).setAngularDamping(0.7));
@@ -4543,7 +4555,7 @@ function handleRounds(now) {
   if (state === 'luta') {
     const cairam = [];
     for (const l of lutadores) {
-      if (l.vivo && l.rag.parts.pelvis.translation().y < -8) {
+      if (l.vivo && l.rag.parts.pelvis.translation().y < (mapa.foraY ?? -8)) {
         l.vivo = false;
         l.rag.stats.quedas++;
         som.queda();
@@ -5517,7 +5529,7 @@ function frame(t) {
   // menos quem está segurando a arma. Some da arena => é removida (libera vaga).
   for (const arma of (mapa.armas || []).slice()) {
     const ap = arma.body.translation();
-    if (ap.y < -6) { removerArma(mapa, arma); continue; }
+    if (ap.y < (mapa.foraY ?? -6)) { removerArma(mapa, arma); continue; } // caiu da plataforma
     // Bomba 💣: acende o pavio ao ser pega; explode quando o tempo acaba (batata quente)
     if (arma.bomba) {
       const segurada = lutadores.some((l) => l.rag.grabJoints.some((g) => g && g.body === arma.body));

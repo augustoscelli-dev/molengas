@@ -199,6 +199,41 @@
       "saida": "ilha-jardim",
       "polycount": 20000,
       "prompt": "stylized cartoon garden diorama, wide flat base of bright green lawn with a completely flat empty center, white picket fence around the outer edge, round trimmed bushes, colorful flower beds in red yellow and pink, a small tree with pink blossoms in one corner, a stone birdbath, low-poly, hand-painted game-ready textures, viewed from above, single object, plain background"
+    },
+    {
+      "id": "ilha-dojo",
+      "tipo": "cenario",
+      "saida": "ilha-dojo",
+      "polycount": 20000,
+      "prompt": "stylized cartoon japanese zen garden diorama, wide flat base of raked white gravel and moss with a completely flat empty center, stone lanterns, small pink cherry blossom trees, a tiny red wooden bridge over a koi pond, bamboo fence around the outer edge, low-poly, hand-painted game-ready textures, viewed from above, single object, plain background"
+    },
+    {
+      "id": "ilha-martelo",
+      "tipo": "cenario",
+      "saida": "ilha-martelo",
+      "polycount": 20000,
+      "prompt": "stylized cartoon neon amusement park diorama at night, wide flat base, around the outer edge a small ferris wheel with purple and pink lights, a striped carousel tent, arcade booths with glowing signs, string lights, with a completely flat empty center area, low-poly, hand-painted game-ready textures, viewed from above, single object, plain background"
+    },
+    {
+      "id": "ilha-palanque",
+      "tipo": "cenario",
+      "saida": "ilha-palanque",
+      "polycount": 20000,
+      "prompt": "stylized cartoon brazilian festa junina town square diorama at golden sunset, wide flat dirt base, around the outer edge colorful wooden stalls, a small bonfire, strings of triangular colorful paper flags, straw bales, with a completely flat empty center area, low-poly, hand-painted game-ready textures, viewed from above, single object, plain background"
+    },
+    {
+      "id": "ilha-vendaval",
+      "tipo": "cenario",
+      "saida": "ilha-vendaval",
+      "polycount": 20000,
+      "prompt": "stylized cartoon windy clifftop diorama, wide flat rocky grass base, around the outer edge a wooden windmill, trees bent sideways by the wind, a small lighthouse, jagged cliff edges, stormy muted green and grey palette, with a completely flat empty center area, low-poly, hand-painted game-ready textures, viewed from above, single object, plain background"
+    },
+    {
+      "id": "ilha-batata",
+      "tipo": "cenario",
+      "saida": "ilha-batata",
+      "polycount": 20000,
+      "prompt": "stylized cartoon quarry demolition site diorama, wide flat dusty orange ground, around the outer edge stacks of red dynamite crates, warning signs, a small excavator, rock piles, orange traffic cones, with a completely flat empty center area, low-poly, hand-painted game-ready textures, viewed from above, single object, plain background"
     }
   ]
 }
