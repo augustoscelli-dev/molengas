@@ -869,8 +869,22 @@ function dioramaBase(m, nome, { largura = 16, chaoY = -2.4, z = -2, x = 0 } = {}
     const box = new THREE.Box3().setFromObject(s);
     const size = new THREE.Vector3(); box.getSize(size);
     s.scale.setScalar(largura / (Math.max(size.x, size.z) || 1));
+    s.updateMatrixWorld(true);
     const b2 = new THREE.Box3().setFromObject(s);
-    s.position.set(x, chaoY - b2.min.y, z);
+    // Alinha a SUPERFÍCIE do centro (o "palco" vazio do diorama) em chaoY, não o
+    // fundo do modelo: num penhasco/planalto o fundo fica dezenas de metros abaixo
+    // do topo, e a câmera acabava dentro da rocha. Raio de cima pra baixo em 5
+    // pontos perto do centro; fica com a mediana (ignora um arbusto no meio).
+    const ray = new THREE.Raycaster(), baixo = new THREE.Vector3(0, -1, 0), hs = [];
+    const r0 = (b2.max.x - b2.min.x) * 0.06;
+    for (const [dx, dz] of [[0, 0], [r0, 0], [-r0, 0], [0, r0], [0, -r0]]) {
+      ray.set(new THREE.Vector3(dx, b2.max.y + 1, dz), baixo);
+      const hit = ray.intersectObject(s, true)[0];
+      if (hit) hs.push(hit.point.y);
+    }
+    hs.sort((a, b) => a - b);
+    const chaoModelo = hs.length ? hs[hs.length >> 1] : b2.min.y;
+    s.position.set(x, chaoY - chaoModelo, z);
     s.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
     scene.add(s); m.meshes.push(s);
     // O cenário é CHÃO de verdade: quem é arremessado bate na grama/neve com um
