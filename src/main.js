@@ -654,7 +654,11 @@ function preloadArmaGLB(def) {
     armaGLBcache[def.glb] = g2;
   });
 }
-for (const d of Object.values(ARMAS_DEF)) if (d.glb) preloadArmaGLB(d);
+// Modelos de arma (~2 MB) só depois que a tela inicial ficou pronta: a primeira
+// arma cai ~5 s depois do começo da luta e, se chegar antes do GLB, usa a forma
+// procedural de reserva. Antes eram 25% do que a página baixava ao abrir.
+const carregarArmas = () => { for (const d of Object.values(ARMAS_DEF)) if (d.glb) preloadArmaGLB(d); };
+if ('requestIdleCallback' in window) requestIdleCallback(carregarArmas, { timeout: 4000 }); else setTimeout(carregarArmas, 2500);
 
 // Índice de tipo de arma no protocolo online (espelha ARMA_TIPOS do servidor)
 const ARMA_TIPOS_CLI = ['bastao', 'cano', 'martelo', 'laser', 'bomba'];
