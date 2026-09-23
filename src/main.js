@@ -1286,6 +1286,8 @@ const MAPAS = [
   {
     nome: 'MARTELO',
     desc: 'braço giratório varre a arena',
+    fundo: 'assets/fundo-martelo.jpg', // pintado na Higgsfield (GPT Image 2.5)
+    fundoY: -6,
     build(m) {
       climaMapa({ ceu: 0xd0b8ff, chao: 0x2a1440, fog: 0x241040, sol: 0xe8d0ff, solInt: 1.45 }); // arcade roxo
       chaoFixo(m, 5.5, 4, new THREE.MeshStandardMaterial({ map: deckTex, roughness: 0.85 }));
@@ -1389,6 +1391,8 @@ const MAPAS = [
   {
     nome: 'BATATA QUENTE',
     desc: 'a bomba pula de mão em mão',
+    fundo: 'assets/fundo-batata.jpg', // pintado na Higgsfield (GPT Image 2.5)
+    fundoY: -6,
     build(m) {
       climaMapa({ ceu: 0xffc9a0, chao: 0x3a1c08, fog: 0x2e1608, sol: 0xffa060, solInt: 1.4 }); // alerta laranja
       chaoFixo(m, 4.6, 3.5, new THREE.MeshStandardMaterial({ map: deckTex, roughness: 0.85 }));
@@ -1961,6 +1965,8 @@ const MAPAS = [
   {
     nome: 'PALANQUE',
     desc: 'suba no centro — quem tá em cima manda',
+    fundo: 'assets/fundo-palanque.jpg', // pintado na Higgsfield (GPT Image 2.5)
+    fundoY: -6,
     build(m) {
       climaMapa({ ceu: 0xffe8c8, chao: 0x3a2c18, fog: 0x2c2010, sol: 0xffd894, solInt: 1.5 }); // fim de tarde dourado
       chaoFixo(m, 5.5, 4, new THREE.MeshStandardMaterial({ map: deckTex, roughness: 0.85 }));
@@ -2194,6 +2200,8 @@ const MAPAS = [
   {
     nome: 'DOJO',
     desc: 'treino livre — sacos de pancada',
+    fundo: 'assets/fundo-dojo.jpg', // pintado na Higgsfield (GPT Image 2.5)
+    fundoY: -6,
     build(m) {
       // Tatame zen com 3 sacos de pancada pendurados por mola: teste golpes,
       // socão e tintas sem pressão (dá pra jogar partida normal aqui também).
@@ -2570,6 +2578,7 @@ function setMapa(idx) {
   mapa.semSoco = !!MAPAS[mapaIdx].semSoco;
   if (MAPAS[mapaIdx].fundoTex) setFundoTex(MAPAS[mapaIdx].fundoTex());
   else setFundo(MAPAS[mapaIdx].fundo ?? 'assets/fundo.jpg');
+  backMesh.position.y = MAPAS[mapaIdx].fundoY ?? 6; // pintura com horizonte baixo desce o painel
   som.ambiente(MAPAS[mapaIdx].amb || null); // camada sonora da arena (vento/lava/neve/água)
   for (const h of holofotes) h.visible = !MAPAS[mapaIdx].semHolofotes;
   for (const l of lutadores) {
