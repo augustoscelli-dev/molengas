@@ -8,7 +8,8 @@
   "scripts": {
     "start": "node servidor/servidor.mjs",
     "test": "node testes/rodar.mjs",
-    "meshy": "node ferramentas/meshy.mjs"
+    "meshy": "node ferramentas/meshy.mjs",
+    "higgs": "node ferramentas/higgsfield.mjs"
   },
   "dependencies": {
     "ws": "^8.18.0"
