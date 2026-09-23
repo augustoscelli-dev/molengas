@@ -106,6 +106,12 @@ const PARAMS = new URLSearchParams(location.search);
 
 // ---------- Física ----------
 const world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
+// 💪 ?fisica=nova — ragdoll ativo com músculos (ver MUSC em ragdoll.js). Lado a lado
+// com a física atual até ser aprovada; o servidor online segue na atual.
+if (new URLSearchParams(location.search).get('fisica') === 'nova') {
+  AJUSTES.fisica = 'nova';
+  world.integrationParameters.numSolverIterations = 8; // juntas firmes: menos borracha
+}
 const GROUND_GROUPS = (0x0001 << 16) | 0xffff;
 const PLAYER_BITS = [0x0002, 0x0004, 0x0020, 0x0040];
 const TODOS_PLAYERS = 0x0066;
@@ -6273,5 +6279,5 @@ for (let i = 0; i < avancar * 60; i++) {
 }
 
 document.getElementById('carregando').style.display = 'none';
-document.getElementById('versao').textContent = VERSAO;
+document.getElementById('versao').textContent = VERSAO + (AJUSTES.fisica === 'nova' ? ' · 💪 FÍSICA NOVA' : '');
 requestAnimationFrame(frame);

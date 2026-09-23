@@ -3,12 +3,16 @@ import * as RAPIER from './libs/rapier3d.es.js';
 import { Ragdoll, ARENA } from './src/ragdoll.js';
 
 await RAPIER.init();
+// FISICA=nova node teste-fisica.js  → roda os mesmos cenários na física nova
+const { AJUSTES } = await import('./src/ajustes.js');
+if (process.env.FISICA === 'nova') AJUSTES.fisica = 'nova';
 
 const DT = 1 / 60;
 const IDLE = { move: { x: 0, z: 0 }, punch: false, grab: false, jump: false };
 
 function makeWorld() {
   const world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
+  if (process.env.FISICA === 'nova') world.integrationParameters.numSolverIterations = 8;
   world.timestep = DT;
   const ground = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, -0.3, 0));
   world.createCollider(
