@@ -385,4 +385,34 @@ export const SKINS = [
     cores: { head: 0x7bbf86, torso: 0x6fae7a, pelvis: 0x568a60, arms: 0x6fae7a, legs: 0x568a60 },
     face: 'normal', extras() {},
   },
+  {
+    id: 'rochedo', nome: 'ROCHEDO', modelo: 'rochedo-rigado',
+    cores: { head: 0x8a8f96, torso: 0x7d8289, pelvis: 0x5f646b, arms: 0x7d8289, legs: 0x5f646b },
+    face: 'normal', extras() {},
+  },
+  {
+    id: 'barao', nome: 'BARÃO TUBARÃO', modelo: 'barao-rigado',
+    cores: { head: 0x8fa4b8, torso: 0x7d93a8, pelvis: 0x5b6f82, arms: 0x7d93a8, legs: 0x5b6f82 },
+    face: 'normal', extras() {},
+  },
+  {
+    id: 'capitao', nome: 'CAPITÃO POLVO', modelo: 'capitao-rigado',
+    cores: { head: 0x9b5de5, torso: 0x8747d1, pelvis: 0x5f2f9e, arms: 0x8747d1, legs: 0x5f2f9e },
+    face: 'normal', extras() {},
+  },
+  {
+    id: 'prisma', nome: 'PRISMA', modelo: 'prisma-rigado',
+    cores: { head: 0xb48cff, torso: 0x9a6cff, pelvis: 0x6f47c9, arms: 0x9a6cff, legs: 0x6f47c9 },
+    face: 'normal', extras() {},
+  },
+  {
+    id: 'brasa', nome: 'BRASA', modelo: 'brasa-rigado',
+    cores: { head: 0xff7a2a, torso: 0xf06a1f, pelvis: 0xb84a12, arms: 0xf06a1f, legs: 0xb84a12 },
+    face: 'normal', extras() {},
+  },
+  {
+    id: 'gelado', nome: 'GELADO', modelo: 'gelado-rigado',
+    cores: { head: 0xeef6ff, torso: 0xe4eefb, pelvis: 0xb9d6f5, arms: 0xe4eefb, legs: 0xb9d6f5 },
+    face: 'normal', extras() {},
+  },
 ];

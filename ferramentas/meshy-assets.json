@@ -25,14 +25,19 @@
       "anguloRetrato": 28,
       "prompt": "Giant original monster creature, thick reptilian scaly skin in deep teal and charcoal, rough armored plates on the back and shoulders, rows of dorsal spines glowing bright orange, lighter sand-colored belly scales, dark claws, fierce glowing orange eyes, subtle battle scars, wet skin sheen, PBR game-ready textures"
     },
-
     {
       "id": "rochedo",
       "tipo": "lutador",
       "nome": "ROCHEDO",
       "saida": "rochedo-rigado",
       "altura": 1.9,
-      "cores": { "head": "8a8f96", "torso": "7d8289", "pelvis": "5f646b", "arms": "7d8289", "legs": "5f646b" },
+      "cores": {
+        "head": "8a8f96",
+        "torso": "7d8289",
+        "pelvis": "5f646b",
+        "arms": "7d8289",
+        "legs": "5f646b"
+      },
       "prompt": "stylized low-poly cartoon stone golem, bipedal humanoid proportions, chunky rounded boulders body, mossy cracks, small glowing eyes, standing T-pose, symmetrical, game-ready character, full body, no weapons, plain background"
     },
     {
@@ -41,8 +46,15 @@
       "nome": "GELADO",
       "saida": "gelado-rigado",
       "altura": 1.9,
-      "cores": { "head": "eef6ff", "torso": "e4eefb", "pelvis": "b9d6f5", "arms": "e4eefb", "legs": "b9d6f5" },
-      "prompt": "stylized low-poly cartoon yeti, bipedal humanoid proportions, fluffy white fur, big friendly jaw, ice-blue hands and feet, standing T-pose, symmetrical, game-ready character, full body, no weapons, plain background"
+      "cores": {
+        "head": "eef6ff",
+        "torso": "e4eefb",
+        "pelvis": "b9d6f5",
+        "arms": "e4eefb",
+        "legs": "b9d6f5"
+      },
+      "prompt": "stylized cartoon yeti character, clearly humanoid body with human proportions, two long separate arms stretched out horizontally in T-pose, two separate legs standing apart, distinct head and neck, short white fur, ice-blue hands and feet, big friendly jaw, symmetrical, game-ready character, full body, no weapons, plain background",
+      "pose": "t-pose"
     },
     {
       "id": "brasa",
@@ -50,8 +62,15 @@
       "nome": "BRASA",
       "saida": "brasa-rigado",
       "altura": 1.9,
-      "cores": { "head": "ff7a2a", "torso": "f06a1f", "pelvis": "b84a12", "arms": "f06a1f", "legs": "b84a12" },
-      "prompt": "stylized low-poly cartoon fire dragon warrior, bipedal humanoid proportions, ember-orange scales, small wings folded on back, standing T-pose, symmetrical, game-ready character, full body, no weapons, plain background"
+      "cores": {
+        "head": "ff7a2a",
+        "torso": "f06a1f",
+        "pelvis": "b84a12",
+        "arms": "f06a1f",
+        "legs": "b84a12"
+      },
+      "prompt": "stylized cartoon fire dragon warrior, clearly humanoid body with human proportions, two long separate arms stretched out horizontally in T-pose, two separate legs standing apart, distinct head and neck, ember-orange scales, tiny wings folded flat on the back, thin tail, symmetrical, game-ready character, full body, no weapons, plain background",
+      "pose": "t-pose"
     },
     {
       "id": "prisma",
@@ -59,8 +78,15 @@
       "nome": "PRISMA",
       "saida": "prisma-rigado",
       "altura": 1.9,
-      "cores": { "head": "b48cff", "torso": "9a6cff", "pelvis": "6f47c9", "arms": "9a6cff", "legs": "6f47c9" },
-      "prompt": "stylized low-poly cartoon crystal alien, bipedal humanoid proportions, translucent geometric gem body, glowing core in chest, standing T-pose, symmetrical, game-ready character, full body, no weapons, plain background"
+      "cores": {
+        "head": "b48cff",
+        "torso": "9a6cff",
+        "pelvis": "6f47c9",
+        "arms": "9a6cff",
+        "legs": "6f47c9"
+      },
+      "prompt": "stylized cartoon crystal alien character, clearly humanoid body with human proportions, two long separate arms stretched out horizontally in T-pose, two separate legs standing apart, distinct head and neck, faceted purple gem skin, glowing core in chest, symmetrical, game-ready character, full body, no weapons, plain background",
+      "pose": "t-pose"
     },
     {
       "id": "barao",
@@ -68,7 +94,13 @@
       "nome": "BARÃO TUBARÃO",
       "saida": "barao-rigado",
       "altura": 1.9,
-      "cores": { "head": "8fa4b8", "torso": "7d93a8", "pelvis": "5b6f82", "arms": "7d93a8", "legs": "5b6f82" },
+      "cores": {
+        "head": "8fa4b8",
+        "torso": "7d93a8",
+        "pelvis": "5b6f82",
+        "arms": "7d93a8",
+        "legs": "5b6f82"
+      },
       "prompt": "stylized low-poly cartoon muscular shark wrestler, bipedal humanoid proportions, grey shark head with big grin, athletic body, standing T-pose, symmetrical, game-ready character, full body, no weapons, plain background"
     },
     {
@@ -77,10 +109,15 @@
       "nome": "CAPITÃO POLVO",
       "saida": "capitao-rigado",
       "altura": 1.9,
-      "cores": { "head": "9b5de5", "torso": "8747d1", "pelvis": "5f2f9e", "arms": "8747d1", "legs": "5f2f9e" },
+      "cores": {
+        "head": "9b5de5",
+        "torso": "8747d1",
+        "pelvis": "5f2f9e",
+        "arms": "8747d1",
+        "legs": "5f2f9e"
+      },
       "prompt": "stylized low-poly cartoon octopus-headed brawler, bipedal humanoid proportions, purple octopus head with big eyes, tentacle beard, standing T-pose, symmetrical, game-ready character, full body, no weapons, plain background"
     },
-
     {
       "id": "bastao",
       "tipo": "arma",
