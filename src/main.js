@@ -208,7 +208,18 @@ if (USA_BLOOM) {
   smaaPass = new SMAAPass(innerWidth, innerHeight); // anti-serrilhado (bordas limpas)
   composer.addPass(smaaPass);
 }
-function renderCena() { if (composer && qualidade.nivel < 3) composer.render(); else r3.render(scene, camera); }
+// O painel pintado gira em volta da arena acompanhando pra onde a câmera olha: no
+// replay/cutscene a câmera vira de lado e antes aparecia a borda do painel.
+const _dirCam = new THREE.Vector3();
+function alinharFundo() {
+  camera.getWorldDirection(_dirCam);
+  if (Math.hypot(_dirCam.x, _dirCam.z) < 0.05) return; // olhando reto pra baixo: mantém
+  const yaw = Math.atan2(_dirCam.x, -_dirCam.z);
+  backMesh.position.x = Math.sin(yaw) * 42;
+  backMesh.position.z = -Math.cos(yaw) * 42;
+  backMesh.rotation.y = -yaw;
+}
+function renderCena() { alinharFundo(); if (composer && qualidade.nivel < 3) composer.render(); else r3.render(scene, camera); }
 
 // ---------- 📉 QUALIDADE AUTOMÁTICA ----------
 // Celular/notebook fraco: mede o tempo médio de quadro durante o jogo e, se ficar
@@ -2101,7 +2112,7 @@ const MAPAS = [
         const mesh = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.6, 1.9), new THREE.MeshStandardMaterial({ map: texMetal, roughness: 0.7 }));
         mesh.receiveShadow = true; scene.add(mesh); m.meshes.push(mesh);
         m.syncPairs.push([body, mesh]);
-        plats.push({ body, lado, seed: lado * Math.PI * 0.5 });
+        plats.push({ body, lado, seed: lado > 0 ? 0 : Math.PI }); // sin(seed)=0: nasce centrada sob o spawn (±π/2 punha a plataforma 1,7 m fora e os lutadores 1 e 2 caíam no LUTEM)
       }
       // nuvens passeando abaixo da arena (sensação de altitude)
       const nuvens = [];
