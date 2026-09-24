@@ -7,7 +7,7 @@ await RAPIER.init(); AJUSTES.fisica = process.env.F || 'classica';
 const { Ragdoll, ARENA, MUSC } = await import('../src/ragdoll.js');
 for (const kv of (process.env.M || '').split(',').filter(Boolean)) { const [k, v] = kv.split('='); MUSC[k] = +v; }
 const CORDA = 0.9, hx = ARENA.halfX, hz = ARENA.halfZ;
-let sai = 0, pegou = 0; const N = +(process.env.N || 12);
+let sai = 0, pegou = 0; const spins = []; const N = +(process.env.N || 12);
 for (let tent = 0; tent < N; tent++) {
   const w = new RAPIER.World({ x: 0, y: -9.81, z: 0 }); w.timestep = 1 / 60; if (AJUSTES.fisica === 'nova') w.integrationParameters.numSolverIterations = 8;
   const chao = w.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(0, -0.3, 0));
@@ -26,10 +26,12 @@ for (let tent = 0; tent < N; tent++) {
   passo({ ...IDLE, grab: true }, 20); if (a.grabbedRival()) pegou++;
   // gira segurando (como os clientes do teste online) e solta encarando a corda
   const giro = 20 + (tent % 4) * 10;
+  // gira segurando e SOLTA NO MEIO DO GIRO (é o que o jogador e os clientes do
+  // teste online fazem); o arremesso usa o giro do quadril no instante de soltar
   for (let i = 0; i < giro; i++) { const ang = i * 0.3; passo({ ...IDLE, grab: true, move: { x: Math.sin(ang), z: Math.cos(ang) } }, 1); }
-  a.heading = Math.PI / 2; passo({ ...IDLE, grab: true, move: { x: 1, z: 0 } }, 6);
+  spins.push(Math.abs(a.parts.pelvis.angvel().y));
   passo(IDLE, 150);
   const p = b.parts.pelvis.translation();
   if (Math.abs(p.x) > hx + 0.2 || Math.abs(p.z) > hz + 0.2) sai++;
 }
-console.log(AJUSTES.fisica.padEnd(9), `agarrou ${pegou}/${N}, saiu do ringue ${sai}/${N}`);
+console.log(AJUSTES.fisica.padEnd(9), `agarrou ${pegou}/${N}, saiu do ringue ${sai}/${N}, giro médio ao soltar ${(spins.reduce((x, y) => x + y, 0) / spins.length).toFixed(1)} rad/s`);

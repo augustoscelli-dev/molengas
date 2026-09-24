@@ -140,6 +140,8 @@ export const MUSC = {
   ombroVel: 1.5,      // m/s com que o corpo agarrado desliza até o ombro
   ombroArremessa: 0,  // 1 = soltar quem está no ombro sempre arremessa
   stunArremesso: 0,   // 1 = quem é arremessado fica mole 0.7 s
+  agarrado: 1,        // fração do equilíbrio/músculos de quem está SENDO agarrado
+  bracoSegurando: 0.5, // força do braço enquanto segura um rival pela mão
 };
 
 export class Ragdoll {
@@ -454,6 +456,8 @@ export class Ragdoll {
   _comecaSoco() { if (AJUSTES.fisica === 'nova') this._bracoSoco = this._bracoSoco === 'L' ? 'R' : 'L'; }
   _maosSoco() { return AJUSTES.fisica === 'nova' && this._bracoSoco ? ['forearm' + this._bracoSoco] : ['forearmL', 'forearmR']; }
   _kSoco() { return AJUSTES.fisica === 'nova' ? MUSC.kSoco : 1; } // força do soco de um braço só
+  // Alguém está me segurando (mão ou ombro)?
+  _sendoAgarrado() { return this.rivals.some((r) => r.grabJoints && r.grabJoints.some((g) => g && g.rival === this)); }
   // Músculo PD entre pai e filho: puxa a rotação RELATIVA do filho pra qAlvo.
   _musculo(pai, filho, qAlvo, g, forca, dt) {
     const P = this.parts[pai], C = this.parts[filho];
@@ -476,6 +480,7 @@ export class Ragdoll {
     const downed = this.isDowned(now), stun = this.isStunned(now);
     const desdeGolpe = now - (this._levouEm ?? -10);
     let alvo = downed ? 0 : stun ? MUSC.frouxoStun : 1;
+    if (this._agarradoAgora) alvo *= MUSC.agarrado; // puxado pelo rival: perde o equilíbrio
     if (desdeGolpe < 0.22) alvo *= MUSC.frouxoGolpe; // absorve a pancada e volta
     this._musc = (this._musc ?? 1) + (alvo - (this._musc ?? 1)) * Math.min(1, dt * (alvo > (this._musc ?? 1) ? MUSC.volta : 14));
     const f = this._musc;
@@ -523,7 +528,7 @@ export class Ragdoll {
     // Carregando no ombro, o corpo carregado fica PRESO no tronco: braço com músculo
     // empurrando através dele vira um laço junta↔contato que cria energia (os dois
     // subiam a 12 m). Aí o braço relaxa. Segurando pela mão, metade da força.
-    const fBraco = carregando ? 0 : this.grabbedRival() ? f * 0.5 : f;
+    const fBraco = carregando ? 0 : this.grabbedRival() ? f * MUSC.bracoSegurando : f;
     for (const l of ['L', 'R']) {
       if (fBraco <= 0) { this.juntas?.[`upperArm${l}>forearm${l}`]?.configureMotorPosition?.(0, 0, 0); continue; }
       let frente = 0.12, abre = 0.18, cot = 0.25, g = MUSC.ombro;
@@ -639,6 +644,7 @@ export class Ragdoll {
       }
     }
     const nova = AJUSTES.fisica === 'nova';
+    this._agarradoAgora = nova && this._sendoAgarrado();
     const mar = nova ? MUSC.marionete : 1; // física nova: músculos no lugar das cordas
     if (standing) {
       for (const [name, a] of Object.entries(ANTIGRAV)) {
@@ -671,7 +677,7 @@ export class Ragdoll {
         const b = this.parts[bname];
         const up = qrot(b.rotation(), [0, 1, 0]);
         const av2 = b.angvel();
-        const rk = nova ? MUSC.reto : 1;
+        const rk = nova ? MUSC.reto * (this._agarradoAgora ? MUSC.agarrado : 1) : 1;
         const tx = clamp((up[1] >= 0 ? 1 : 0.3) * (-up[2] * 15 * rk) - av2.x * 1.9 * Math.sqrt(rk), -13 * rk, 13 * rk);
         const tz = clamp((up[1] >= 0 ? 1 : 0.3) * (up[0] * 15 * rk) - av2.z * 1.9 * Math.sqrt(rk), -13 * rk, 13 * rk);
         b.applyTorqueImpulse({ x: tx * dt, y: 0, z: tz * dt }, true);
@@ -706,7 +712,7 @@ export class Ragdoll {
       const yaw = Math.atan2(fwd[0], fwd[2]);
       const err = wrapPi(this.heading - yaw);
       const av = pelvis.angvel();
-      const gi = AJUSTES.fisica === 'nova' ? MUSC.giro : 1;
+      const gi = AJUSTES.fisica === 'nova' ? MUSC.giro * (this._agarradoAgora ? MUSC.agarrado : 1) : 1;
       const tq = clamp(err * 14 * gi - av.y * 3.5 * Math.sqrt(gi), -18 * gi, 18 * gi);
       pelvis.applyTorqueImpulse({ x: 0, y: tq * dt, z: 0 }, true);
       // Tronco e cabeça acompanham a direção (suave — soco ainda gira a cabeça)
