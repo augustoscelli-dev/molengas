@@ -1229,6 +1229,7 @@ const MAPAS = [
     fundo: 'assets/fundo-queijo.jpg', // pintado na Higgsfield (GPT Image 2.5)
     fundoY: -6,
     build(m) {
+      dioramaBase(m, 'ilha-queijo', { largura: 22, chaoY: -2.4, z: -1 }); // fazenda de queijo
       climaMapa({ ceu: 0xfff3c0, chao: 0x5a4410, fog: 0x3a2c0e, sol: 0xffe28a, solInt: 1.5 }); // banho de queijo
       // Ilhas com buracos entre elas — cuidado onde pisa
       const matQ = new THREE.MeshStandardMaterial({ map: texQueijo, roughness: 0.8 });
@@ -1424,6 +1425,7 @@ const MAPAS = [
     fundoY: -6,
     semSoco: true,
     build(m) {
+      dioramaBase(m, 'ilha-sumo', { largura: 20, chaoY: -2.4, z: -1 }); // pátio de templo
       climaMapa({ ceu: 0xffe2b0, chao: 0x3a2a10, fog: 0x2e2410, sol: 0xffd080, solInt: 1.5 }); // templo dourado
       // Ringue redondo que encolhe — sem soco: empurra, agarra e arremessa
       const mat = new THREE.MeshStandardMaterial({ map: texSumo, roughness: 0.8 });
@@ -1768,6 +1770,7 @@ const MAPAS = [
     fundo: 'assets/fundo-esteiras.jpg', // pintado na Higgsfield (GPT Image 2.5)
     fundoY: -6,
     build(m) {
+      dioramaBase(m, 'ilha-esteiras', { largura: 22, chaoY: -2.4, z: -1 }); // chão de fábrica
       // Duas esteiras rolantes em direções opostas — parou de andar, foi levado pra fora
       const texEst = (dir) => {
         const c = document.createElement('canvas'); c.width = c.height = 256;
@@ -1966,6 +1969,7 @@ const MAPAS = [
     fundo: 'assets/fundo-trampolim.jpg', // pintado na Higgsfield (GPT Image 2.5)
     fundoY: -6,
     build(m) {
+      dioramaBase(m, 'ilha-trampolim', { largura: 22, chaoY: -2.4, z: -1 }); // picadeiro de circo
       // Chão elástico: todo mundo quica — a voadora vira a arma principal
       const texTramp = (() => {
         const c = document.createElement('canvas'); c.width = c.height = 512;

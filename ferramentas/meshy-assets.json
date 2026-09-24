@@ -234,6 +234,34 @@
       "saida": "ilha-batata",
       "polycount": 20000,
       "prompt": "stylized cartoon quarry demolition site diorama, wide flat dusty orange ground, around the outer edge stacks of red dynamite crates, warning signs, a small excavator, rock piles, orange traffic cones, with a completely flat empty center area, low-poly, hand-painted game-ready textures, viewed from above, single object, plain background"
+    },
+    {
+      "id": "ilha-queijo",
+      "tipo": "cenario",
+      "saida": "ilha-queijo",
+      "polycount": 20000,
+      "prompt": "stylized cartoon alpine cheese farm diorama, wide flat green meadow base, around the outer edge a small wooden barn, stacks of giant yellow cheese wheels, a couple of cartoon cows, wooden fences and flowers, with a completely flat empty center area, low-poly, hand-painted game-ready textures, viewed from above, single object, plain background"
+    },
+    {
+      "id": "ilha-sumo",
+      "tipo": "cenario",
+      "saida": "ilha-sumo",
+      "polycount": 20000,
+      "prompt": "stylized cartoon japanese temple courtyard diorama, wide flat stone-paved base, around the outer edge red torii gates, stone lanterns, small bonsai pine trees, paper lanterns on poles, golden temple roof fragments, with a completely flat empty center area, low-poly, hand-painted game-ready textures, viewed from above, single object, plain background"
+    },
+    {
+      "id": "ilha-trampolim",
+      "tipo": "cenario",
+      "saida": "ilha-trampolim",
+      "polycount": 20000,
+      "prompt": "stylized cartoon circus arena floor diorama, wide round red and yellow circus ring floor, around the outer edge striped ring barriers, circus pedestals, big striped balls, hoops, a popcorn cart, with a completely flat empty center area, low-poly, hand-painted game-ready textures, viewed from above, single object, plain background"
+    },
+    {
+      "id": "ilha-esteiras",
+      "tipo": "cenario",
+      "saida": "ilha-esteiras",
+      "polycount": 20000,
+      "prompt": "stylized cartoon toy factory floor diorama, wide flat industrial floor, around the outer edge conveyor belts, stacked wooden crates, big gears, teal pipes, yellow and black hazard stripes, with a completely flat empty center area, low-poly, hand-painted game-ready textures, viewed from above, single object, plain background"
     }
   ]
 }
