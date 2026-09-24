@@ -125,11 +125,12 @@ const qEixo = (ax, ay, az, ang) => { const s = Math.sin(ang / 2); return { x: ax
 const poseBraco = (lado, frente, abre) => qMul(qEixo(0, 0, 1, lado === 'L' ? -abre : abre), qEixo(1, 0, 0, -frente));
 // ganhos PD por músculo (kp em N·m/rad, kd em N·m·s/rad) e teto de torque
 export const MUSC = {
-  coluna: { kp: 70, kd: 7, max: 60 },
-  pescoco: { kp: 22, kd: 2.2, max: 25 },
+  coluna: { kp: 38, kd: 4.5, max: 45 },   // mais mole: tronco balança (70 deixava o boneco duro como estátua)
+  pescoco: { kp: 9, kd: 1.1, max: 12 },    // cabeça bamboleia
+  vida: 1,            // amplitude do balanço da guarda/ociosidade (0 = pose fixa)
   ombro: { kp: 26, kd: 2.6, max: 30 },
   ombroSoco: { kp: 80, kd: 4.5, max: 70 },
-  cotovelo: 900,      // rigidez do motor da dobradiça (revolute já tem motor nativo)
+  cotovelo: 260,      // rigidez do motor da dobradiça (900 travava o braço)
   frouxoGolpe: 0.3,   // fração da força logo após levar golpe
   frouxoStun: 0.15, marionete: 0.35, antigravBraco: 0,
   volta: 8,           // velocidade com que a força volta depois do golpe (1/s)
@@ -532,8 +533,13 @@ export class Ragdoll {
     for (const l of ['L', 'R']) {
       if (fBraco <= 0) { this.juntas?.[`upperArm${l}>forearm${l}`]?.configureMotorPosition?.(0, 0, 0); continue; }
       let frente = 0.12, abre = 0.18, cot = 0.25, g = MUSC.ombro;
+      const fase = now * 4.2 + (l === 'L' ? 0 : 1.9) + (this.spawn.x + this.spawn.z) * 0.9; // balanço vivo (cada boneco num ritmo)
       if (andando && standing) { frente = 0.1 + Math.sin(this.gaitT + (l === 'L' ? Math.PI : 0)) * 0.55; cot = 0.5; }
-      if (guarda) { frente = 0.7; abre = -0.22; cot = 2.25; } // punhos no queixo: não empurra o rival pelos braços
+      else { frente += Math.sin(fase * 0.5) * 0.14 * MUSC.vida; cot += (1 + Math.sin(fase * 0.5 + 1)) * 0.2 * MUSC.vida; }
+      if (guarda) { // punhos no queixo (não empurra o rival pelos braços), gingando como boxeador
+        frente = 0.7 + Math.sin(fase) * 0.22 * MUSC.vida; abre = -0.22 + Math.sin(fase * 0.7) * 0.1 * MUSC.vida;
+        cot = 2.1 + Math.sin(fase + 1.3) * 0.3 * MUSC.vida;
+      }
       if (agarrando || carregando) { frente = carregando ? 2.5 : 1.45; abre = -0.05; cot = 0.25; }
       if (agarrando && !standing && !carregando) { frente = 2.7; abre = 0.1; cot = 0.15; } // no ar: braços pra cima pegam a beirada
       if (mira) {
