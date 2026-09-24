@@ -14,6 +14,11 @@ import { networkInterfaces } from 'node:os';
 import { WebSocketServer } from 'ws';
 import * as RAPIER from '../libs/rapier3d.es.js';
 import { Ragdoll, PARTS, ARENA, DANO_KO } from '../src/ragdoll.js';
+import { AJUSTES } from '../src/ajustes.js';
+// 💪 Física: o online segue na CLÁSSICA até a nova igualar o teste de partida
+// online (testes/online.mjs: clássica 8/8, nova 5/8 em 2026-09-23).
+// FISICA=nova node servidor.mjs liga a nova.
+AJUSTES.fisica = process.env.FISICA === 'nova' ? 'nova' : 'classica';
 
 await RAPIER.init();
 
@@ -66,6 +71,7 @@ const ownerByHandle = new Map(); // handle do collider -> id do dono (pro filtro
 // ---------- Física ----------
 const world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
 world.timestep = DT;
+if (AJUSTES.fisica === 'nova') world.integrationParameters.numSolverIterations = 8;
 const filaEventos = new RAPIER.EventQueue(true);
 const hooks = {
   filterContactPair: (c1, c2) => {
@@ -600,6 +606,11 @@ function enviarMelhor() {
   for (const j of jogadores.values()) if (j.ws.readyState === 1) j.ws.send(pkt);
 }
 
+// WOB_STATS=1: imprime a cada 10 s o que cada jogador fez (diagnóstico de testes)
+if (process.env.WOB_STATS) setInterval(() => {
+  const l = [...jogadores.values()].map((j) => { const st = j.rag.stats; return `s${j.slot}: soco ${st.socos} acerto ${st.acertos} ko ${j.rag._kos || 0} ombro ${j.rag._ombros || 0} arremesso ${st.arremessos} queda ${st.quedas} pts ${j.score}`; });
+  if (l.length) console.log('STATS', l.join(' | '));
+}, 10000);
 const _tick = setInterval(() => {
   now += DT;
   tick++;

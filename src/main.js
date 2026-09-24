@@ -49,14 +49,16 @@ function limparAneisTime() {
   for (const a of aneisTime) { scene.remove(a); a.geometry.dispose(); a.material.dispose(); }
   aneisTime = [];
 }
-// Um anel colorido sob cada lutador pra ler os times de longe (só em DUPLAS).
+// Um anel colorido sob cada lutador: em DUPLAS marca o time; senão marca o
+// JOGADOR (as cores do HUD) — no meio da bagunça, dá pra saber quem é quem.
+const CORES_JOGADOR = [0xff5252, 0x40a0ff, 0x7ed957, 0xffd94a];
 function criarAneisTime() {
   limparAneisTime();
-  if (!MODO_TIMES) return;
   for (const l of lutadores) {
+    const cor = MODO_TIMES ? CORES_TIME[timeDe(l)] : CORES_JOGADOR[(l.slot ?? 0) % CORES_JOGADOR.length];
     const anel = new THREE.Mesh(
       new THREE.RingGeometry(0.3, 0.42, 32),
-      new THREE.MeshBasicMaterial({ color: CORES_TIME[timeDe(l)], transparent: true, opacity: 0.75, side: THREE.DoubleSide, depthWrite: false }),
+      new THREE.MeshBasicMaterial({ color: cor, transparent: true, opacity: MODO_TIMES ? 0.75 : 0.6, side: THREE.DoubleSide, depthWrite: false }),
     );
     anel.rotation.x = -Math.PI / 2;
     scene.add(anel);
@@ -106,9 +108,9 @@ const PARAMS = new URLSearchParams(location.search);
 
 // ---------- Física ----------
 const world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
-// 💪 ?fisica=nova — ragdoll ativo com músculos (ver MUSC em ragdoll.js). Lado a lado
-// com a física atual até ser aprovada; o servidor online segue na atual.
-if (new URLSearchParams(location.search).get('fisica') === 'nova') {
+// 💪 Física nova — ragdoll ativo com músculos (ver MUSC em ragdoll.js).
+// Padrão desde 2026-09-23: física nova. ?fisica=classica volta pra antiga.
+if (new URLSearchParams(location.search).get('fisica') !== 'classica') {
   AJUSTES.fisica = 'nova';
   world.integrationParameters.numSolverIterations = 8; // juntas firmes: menos borracha
   // &musc=kSoco:1.4,giro:2 — ajusta ganhos da física nova ao vivo (testes e calibragem)
@@ -2623,7 +2625,7 @@ const holofotes = [];
   const geoCone = new THREE.ConeGeometry(2.4, 15, 20, 1, true);
   geoCone.translate(0, -7.5, 0);
   const matCone = new THREE.MeshBasicMaterial({
-    color: 0xffe9b0, transparent: true, opacity: 0.085,
+    color: 0xffe9b0, transparent: true, opacity: 0.035, // era 0.085: lavava a tela toda
     blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false,
   });
   for (const [tx, ty, tz] of [[-11, 11, -7], [11, 11, -7], [-8, 12, 6], [8, 12, 6]]) {
@@ -4270,6 +4272,29 @@ function updateHudBarras(now) {
     }
   }
 }
+let pularReplayPedido = false;
+addEventListener('keydown', (e) => { if (state === 'replay' && ['Space', 'Enter', 'KeyF', 'KeyK', 'NumpadEnter'].includes(e.code)) pularReplayPedido = true; });
+addEventListener('pointerdown', () => { if (state === 'replay') pularReplayPedido = true; });
+const _gpPularAntes = [true, true, true, true]; // começa "apertado": só conta o próximo aperto
+function gamepadPular() {
+  let pulou = false;
+  for (let g = 0; g < 4; g++) {
+    const gp = readGamepad(g); const agora = !!(gp && (gp.jump || gp.punch));
+    if (agora && !_gpPularAntes[g]) pulou = true;
+    _gpPularAntes[g] = agora;
+  }
+  return pulou;
+}
+// Selo discreto no canto (REPLAY) — o letreiro gigante no meio cobria a ação
+function mostrarSelo(txt) {
+  let el = document.getElementById('selo');
+  if (!el) {
+    el = document.createElement('div'); el.id = 'selo';
+    el.style.cssText = 'position:fixed;top:9vh;left:3vw;z-index:30;font:900 clamp(18px,3vw,30px) var(--f-titulo, sans-serif);color:#fff;text-shadow:0 3px 0 #1a1030,0 0 14px rgba(0,0,0,.5);letter-spacing:.04em;pointer-events:none;';
+    document.body.appendChild(el);
+  }
+  el.textContent = txt; el.style.display = txt ? 'block' : 'none';
+}
 function showMsg(txt, sub = '') {
   $('msg').innerHTML = txt + (sub ? `<div class="sub">${sub}</div>` : '');
   $('msg').style.display = txt ? 'block' : 'none';
@@ -4568,6 +4593,21 @@ function camCineDirigida(ct, midX, midZ, spread = 0) {
   camera.position.copy(camPos);
   camera.lookAt(midX * 0.6, 0.95, midZ * 0.3);
 }
+const clampCam = (v, lim) => Math.max(-lim, Math.min(lim, v));
+// Foco do replay: média das pélvis PRESA à arena (o replay mostra a saída do
+// ringue, não o boneco sumindo no vazio) e altura mínima na borda.
+let replayFoco = null; // quem saiu da arena neste round (a estrela do replay)
+function focoReplay() {
+  let mx = 0, mz = 0, n = 0, minX = 1e9, maxX = -1e9, minZ = 1e9, maxZ = -1e9;
+  for (const l of lutadores) {
+    const p = l.meshes.pelvis.position;
+    const x = clampCam(p.x, ARENA.halfX + 1.5), z = clampCam(p.z, ARENA.halfZ + 1.5);
+    const w = replayFoco && replayFoco.includes(l) ? 3 : 1; // peso 3 em quem está saindo
+    mx += x * w; mz += z * w; n += w;
+    minX = Math.min(minX, x); maxX = Math.max(maxX, x); minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z);
+  }
+  return n ? [mx / n, mz / n, Math.min(Math.hypot(maxX - minX, maxZ - minZ), 10)] : [0, 0, 4];
+}
 // Média das pélvis de uma lista de {meshes} — foco das câmeras dirigidas
 function meioDe(iteravel) {
   let mx = 0, mz = 0, n = 0;
@@ -4662,7 +4702,11 @@ function handleRounds(now) {
       if (replayBuf.length > 20) {
         state = 'replay';
         replayT = 0;
-        showMsg('📹 REPLAY');
+        replayFoco = cairam.length ? cairam : null; // o replay acompanha quem saiu
+        showMsg('');
+        $('msg').classList.remove('canto');
+        mostrarSelo('📹 REPLAY · aperte pra pular');
+        _gpPularAntes.fill(true);
       } else {
         fecharRound();
       }
@@ -4684,6 +4728,7 @@ function handleRounds(now) {
 function fecharRound() {
   const winner = pendente;
   pendente = null;
+  mostrarSelo(''); replayFoco = null;
   if (winner && winner.score >= WIN_SCORE) {
     iniciarSequenciaFinal(winner); // melhor jogada -> cutscene -> vitória
   } else {
@@ -5472,13 +5517,22 @@ function frame(t) {
   }
 
   if (state === 'replay') {
-    replayT += fdt * 0.4; // câmera lenta
+    // ⏭️ pular o replay: soco/pulo/Enter, clique/toque ou A/X do controle
+    // (só vale depois de 0.35 s, pra não pular sem querer com o soco que fechou o round)
+    if (replayT > 0.35 * 0.5 && (pularReplayPedido || gamepadPular())) { pularReplayPedido = false; fecharRound(); return; }
+    pularReplayPedido = false;
+    replayT += fdt * 0.5; // câmera lenta (era 0.4: ~6 s parado a cada ponto)
     const idx = Math.floor(replayT * 60);
     if (idx >= replayBuf.length) {
       fecharRound();
     } else {
       aplicarReplay(idx);
     }
+    // câmera dirigida no replay (antes o return acima pulava a câmera e ela
+    // ficava congelada olhando o vazio por onde o arremessado tinha caído)
+    const [rmx, rmz, rsp] = focoReplay();
+    camCineDirigida(replayT, rmx, rmz, rsp);
+    aplicarCine(true);
     updateEfeitos(fdt);
     mirarHolofotes(simNow);
     cairConfetes(fdt, simNow);
@@ -5726,7 +5780,7 @@ function frame(t) {
     const p = l.rag;
     if (l._anelTime) { // anel do time acompanha o lutador (some quando ele cai)
       const pt = p.parts.pelvis.translation();
-      l._anelTime.position.set(pt.x, 0.04, pt.z);
+      l._anelTime.position.set(pt.x, Math.max(0.04, pt.y - 0.9), pt.z); // acompanha pisos altos (gangorra, palanque)
       l._anelTime.visible = l.vivo && pt.y > -1.5;
     }
     // 🧭 Manômetro do SOCÃO: pressão subindo sobre a cabeça enquanto carrega
@@ -5868,10 +5922,16 @@ function frame(t) {
   const vv = lutadores.length ? (vivos().length ? vivos() : lutadores) : null;
   if (vv) {
     let minX = 1e9, maxX = -1e9, minZ = 1e9, maxZ = -1e9;
-    for (const l of vv) {
+    // 🎥 Quem já está CAINDO (abaixo da borda) não puxa mais o enquadramento, e
+    // ninguém arrasta a câmera pra fora da arena: antes ela seguia o arremessado
+    // voando e o ringue ia parar no canto da tela, com o resto preto.
+    const noAr = (l) => l.rag.parts.pelvis.translation().y < -1.2; // abaixo da borda = saindo
+    const firmes = vv.filter((l) => !noAr(l));
+    for (const l of (firmes.length ? firmes : vv)) {
       const p = l.rag.parts.pelvis.translation();
-      minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
-      minZ = Math.min(minZ, p.z); maxZ = Math.max(maxZ, p.z);
+      const x = clampCam(p.x, ARENA.halfX + 1.2), z = clampCam(p.z, ARENA.halfZ + 1.2);
+      minX = Math.min(minX, x); maxX = Math.max(maxX, x);
+      minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z);
     }
     midX = (minX + maxX) / 2;
     midZ = (minZ + maxZ) / 2;
@@ -5905,7 +5965,7 @@ function frame(t) {
     // CÂMERA DIRIGIDA no replay: órbita lenta na altura do ombro + dolly-in
     camCineDirigida(replayT, midX, midZ, spread);
   } else {
-    const target = new THREE.Vector3(midX * 0.6, 3.9 + spread * 0.3, 6.6 + spread * 0.55);
+    const target = new THREE.Vector3(midX * 0.6, 3.3 + spread * 0.3, 5.6 + spread * 0.55); // mais perto: bonecos maiores na tela
     camPos.lerp(target, 0.05);
     camera.position.copy(camPos);
     camera.lookAt(midX * 0.6, 0.8, midZ * 0.3);
@@ -6262,6 +6322,7 @@ if (PARAMS.has('servidor')) {
   if (PARAMS.has('cpu')) { configs[0].tipo = 'cpu'; configs[1].tipo = 'cpu'; }
   for (let i = 0; i < nBots; i++) configs.push({ tipo: 'cpu', skin: (4 + i * 3) % SKINS.length });
   montarLutadores(configs.slice(0, 4));
+  criarAneisTime();
   if (PARAMS.get('win')) WIN_SCORE = Math.max(1, parseInt(PARAMS.get('win'), 10) || 5); // dev: encurta a partida
   updateScore();
   state = 'luta';
@@ -6287,5 +6348,5 @@ for (let i = 0; i < avancar * 60; i++) {
 }
 
 document.getElementById('carregando').style.display = 'none';
-document.getElementById('versao').textContent = VERSAO + (AJUSTES.fisica === 'nova' ? ' · 💪 FÍSICA NOVA' : '');
+document.getElementById('versao').textContent = VERSAO + (AJUSTES.fisica === 'nova' ? '' : ' · física clássica');
 requestAnimationFrame(frame);

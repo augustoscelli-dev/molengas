@@ -137,6 +137,9 @@ export const MUSC = {
   reto: 2.5,          // multiplicador do torque que endireita quadril/tronco (física nova)
   kSoco: 2,           // impulso do soco de um braço (a atual usa dois braços com 1)
   alcSoco: 0.48,      // raio de acerto da mão (física nova)
+  ombroVel: 1.5,      // m/s com que o corpo agarrado desliza até o ombro
+  ombroArremessa: 0,  // 1 = soltar quem está no ombro sempre arremessa
+  stunArremesso: 0,   // 1 = quem é arremessado fica mole 0.7 s
 };
 
 export class Ragdoll {
@@ -258,6 +261,7 @@ export class Ragdoll {
 
   // NOCAUTE: desaba mole por um tempão (o oponente pode agarrar e arrastar).
   knockdown(now, dur = 3.6) {
+    this._kos = (this._kos || 0) + 1;
     this.downUntil = Math.max(this.downUntil, now + dur);
     this.stunUntil = Math.max(this.stunUntil, this.downUntil); // fica mole o tempo todo
     this.lastKnockdownAt = now;
@@ -303,7 +307,11 @@ export class Ragdoll {
       const g = this.grabJoints[i];
       if (!g) continue;
       if (this._juntaExiste(g.j)) this.world.removeImpulseJoint(g.j, true);
-      if (arremesso && spin > 1.0 && g.body && !g.chao) {
+      // Física nova: soltar quem está NO OMBRO sempre arremessa (o giro só dá
+      // alcance extra). Carregando 30 kg rígidos o giro fica lento e muitas vezes
+      // não passava de 1 rad/s — soltar largava o corpo no chão, sem ring-out.
+      const doOmbro = g.ombro && AJUSTES.fisica === 'nova' && MUSC.ombroArremessa > 0;
+      if (arremesso && (spin > 1.0 || doOmbro) && g.body && !g.chao) {
         // 🥊 ARREMESSO POR CIMA DA CORDA. Com o ringue fechado, esta é a única
         // forma de tirar o rival da arena — então o lançamento precisa vencer
         // uma corda de 0.9 m. Medido no harness: impulso vertical ~22 é o
@@ -326,6 +334,10 @@ export class Ragdoll {
         const k = Math.min(6 + spin * 1.8, 16);
         const alto = 12 + Math.min(spin, 8) * 1.6;
         const dono = g.body.__rag ?? null;
+        // Física nova: quem é ARREMESSADO perde o controle por um instante e voa
+        // mole. Sem isso os músculos e o controle de equilíbrio dele seguravam o
+        // corpo no ar e arremessar alguém de pé não tirava ninguém do ringue.
+        if (dono && AJUSTES.fisica === 'nova' && MUSC.stunArremesso > 0) dono.stun(Math.max(dono.stunUntil, (this._now ?? 0) + 0.7));
         const alvos = dono ? ['torso', 'pelvis', 'head'].map((n) => dono.parts[n]) : [g.body];
         for (const b of alvos) {
           if (!this._existe(b)) continue;
@@ -549,7 +561,7 @@ export class Ragdoll {
       if (!g || !g.ancAtual || !g.j.setAnchor1) continue;
       const a0 = g.ancAtual, a1 = g.ancAlvo, dx = a1.x - a0.x, dy = a1.y - a0.y, dz = a1.z - a0.z, d = Math.hypot(dx, dy, dz);
       if (d < 1e-3) continue;
-      const k = Math.min(1, (1.5 * dt) / d); // 1.5 m/s até o ombro
+      const k = Math.min(1, (MUSC.ombroVel * dt) / d); // velocidade até o ombro
       a0.x += dx * k; a0.y += dy * k; a0.z += dz * k;
       g.j.setAnchor1({ x: a0.x, y: a0.y, z: a0.z });
     }
@@ -1039,6 +1051,7 @@ export class Ragdoll {
             : this.R.JointData.spherical(anc, { x: 0, y: 0, z: 0 });
           this.grabJoints[side] = { j: this.world.createImpulseJoint(data, base, alvoB, true), body: alvoB, chao: false, rival: bestRival, ombro: !!noOmbro,
             ancAtual: noOmbro ? { ...ancIni } : null, ancAlvo: noOmbro ? anc : null };
+          if (noOmbro) this._ombros = (this._ombros || 0) + 1;
           this.lastGrabAt = now;
         } else if (situacaoBeirada && this.world.projectPoint) {
           // Caindo perto da plataforma: a mão gruda na beirada
