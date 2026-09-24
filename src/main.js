@@ -2077,8 +2077,10 @@ const MAPAS = [
   {
     nome: 'PLATAFORMAS',
     desc: 'ilhas móveis sobre o abismo',
-    fundoTex: FUNDOS.ceuAberto,
+    fundo: 'assets/fundo-plataformas.jpg', // pintado na Higgsfield (GPT Image 2.5)
+    fundoY: -6,
     build(m) {
+      scene.background = new THREE.Color(0xd6e4ff); // mar de nuvens embaixo do painel pintado (senão aparece o breu)
       // Ilha central + duas plataformas que passeiam sobre o abismo
       const matIlha = new THREE.MeshStandardMaterial({ map: deckTex, roughness: 0.85 });
       chaoFixo(m, 1.35, 3.2, matIlha); // faixa central cobre os spawns de cima/baixo
