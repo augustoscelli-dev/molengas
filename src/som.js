@@ -32,6 +32,33 @@ export function initSom() {
   src.start();
   musicaAplicar(); // se a música foi pedida antes do som ligar, começa agora
   ambienteAplicar(); // idem pro ambiente da arena
+  carregarNarrador();
+}
+
+// ---------- Narrador (falas gravadas, ~40 KB no total) ----------
+// Baixa em segundo plano depois que o som liga; fala que ainda não chegou só é pulada.
+const FALAS = ['lutem', 'ponto', 'prafora', 'nocaute', 'vitoria', 'empate', 'rodadafinal'];
+const falaBuf = {};
+let narrador = null; // fonte tocando agora (uma fala corta a anterior)
+let narradorAte = 0;
+function carregarNarrador() {
+  for (const nome of FALAS) {
+    fetch(`assets/voz/${nome}.mp3`).then((r) => (r.ok ? r.arrayBuffer() : Promise.reject()))
+      .then((b) => ctx.decodeAudioData(b)).then((buf) => { falaBuf[nome] = buf; }).catch(() => {});
+  }
+}
+// prioridade: fala importante (vitória, ponto) interrompe; secundária (nocaute) espera a atual acabar
+function narrar(nome, { prioridade = 1, vol = 1 } = {}) {
+  if (!pronto() || !falaBuf[nome]) return;
+  const agora = ctx.currentTime;
+  if (agora < narradorAte && prioridade < 2) return;
+  if (narrador) try { narrador.stop(); } catch { /* já parou */ }
+  const src = ctx.createBufferSource();
+  src.buffer = falaBuf[nome];
+  const g = ctx.createGain(); g.gain.value = 2.2 * vol;
+  src.connect(g).connect(master);
+  src.start();
+  narrador = src; narradorAte = agora + src.buffer.duration + 0.25;
 }
 
 function getNoise() {
@@ -246,5 +273,6 @@ export const som = {
   overheat() { sopro(0.3, { freq: 2600, slideTo: 700, vol: 0.18, type: 'highpass' }); tom(180, 0.18, { type: 'square', vol: 0.1, slideTo: 90 }); }, // chiado de superaquecido
   selecionar() { tom(600, 0.06, { vol: 0.15 }); },
   confirmar() { tom(700, 0.09, { vol: 0.2 }); tom(1050, 0.12, { vol: 0.2, delay: 0.08 }); },
+  narrar,
   lutem() { [392, 523, 659].forEach((f, i) => tom(f, 0.12, { vol: 0.3, delay: i * 0.06 })); },
 };

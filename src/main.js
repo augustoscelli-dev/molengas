@@ -4216,6 +4216,7 @@ function startIntro(roundN) {
   // Round decisivo: alguém (ou uma dupla) está a 1 ponto de fechar a partida
   const decisivo = WIN_SCORE > 1 && lutadores.some((l) => l.score === WIN_SCORE - 1);
   showMsg('ROUND ' + roundN, decisivo ? '🔥 ROUND DECISIVO!' : '');
+  if (decisivo) { som.narrar('rodadafinal', { prioridade: 2 }); stateUntil += 0.3; } // dá tempo da fala antes do LUTEM
 }
 function iniciarLuta() {
   $('selecao').style.display = 'none';
@@ -4599,7 +4600,7 @@ function aplicarClipe(frames, idx) {
 // Sequência de final: MELHOR JOGADA (replay em câmera lenta) -> cutscene do vencedor -> vitória
 function iniciarSequenciaFinal(winner) {
   finalWinner = winner;
-  som.vitoria();
+  som.vitoria(); som.narrar('vitoria', { prioridade: 2 });
   som.vozYay(VOZES[winner.slot]);
   // 🪙 partida fechada por gente de verdade: bônus da loja. O prêmio ESCALA com
   // o tamanho do modo (5 + 5×pontos) — morte súbita paga 10, melhor de 5 paga 30 —
@@ -4690,7 +4691,7 @@ function handleRounds(now) {
         introStep = 1;
         stateUntil = now + 0.6;
         showMsg('LUTEM! 🥊');
-        som.lutem();
+        som.lutem(); som.narrar('lutem', { prioridade: 2 });
       } else {
         showMsg('');
         state = 'luta';
@@ -4706,6 +4707,7 @@ function handleRounds(now) {
         l.rag.stats.quedas++;
         som.queda();
         som.vozChoro(VOZES[l.slot]);
+        som.narrar('prafora');
         fogosFx(); // a plateia celebra o ring-out 🎆
         trauma = 1; hitStop = Math.max(hitStop, 0.11); // baque forte no nocaute/ring-out
         l.rag.rivals = [];
@@ -4789,7 +4791,7 @@ function fecharRound() {
   if (winner && winner.score >= WIN_SCORE) {
     iniciarSequenciaFinal(winner); // melhor jogada -> cutscene -> vitória
   } else {
-    som.ponto();
+    som.ponto(); som.narrar(winner ? 'ponto' : 'empate', { prioridade: 2 });
     state = 'ponto';
     stateUntil = simNow + 1.4;
     showMsg(winner ? (MODO_TIMES ? 'PONTO DA DUPLA ' + NOMES_TIME[timeDe(winner)] + '!' : 'PONTO DO ' + SKINS[winner.cfg.skin].nome + '!') : 'EMPATE!');
@@ -5347,10 +5349,10 @@ function receberSnap(m) {
     else if (tipo === 'pulo') som.pulo();
     else if (tipo === 'esquiva') som.esquiva?.();
     else if (tipo === 'dash') som.arremesso();
-    else if (tipo === 'lutem') { som.lutem(); som.musica('luta'); }
-    else if (tipo === 'ponto') { som.ponto(); som.torcidaOh(); }
-    else if (tipo === 'queda') { som.queda(); if (evn[1] != null) som.vozChoro(VOZES[evn[1] % VOZES.length]); }
-    else if (tipo === 'vitoria') { som.vitoria(); som.musica('menu'); }
+    else if (tipo === 'lutem') { som.lutem(); som.narrar('lutem', { prioridade: 2 }); som.musica('luta'); }
+    else if (tipo === 'ponto') { som.ponto(); som.narrar('ponto', { prioridade: 2 }); som.torcidaOh(); }
+    else if (tipo === 'queda') { som.queda(); som.narrar('prafora'); if (evn[1] != null) som.vozChoro(VOZES[evn[1] % VOZES.length]); }
+    else if (tipo === 'vitoria') { som.vitoria(); som.narrar('vitoria', { prioridade: 2 }); som.musica('menu'); }
     else if (tipo === 'bolada') som.bolada();
     else if (tipo === 'power') { const pos = { x: evn[1], y: evn[2], z: evn[3] }; powFx(pos); burstEstrelas(pos); som.ponto?.(); }
     else if (tipo === 'laser') { // [_, fx,fy,fz, ex,ey,ez]
@@ -5889,6 +5891,7 @@ function frame(t) {
       p._sKO = p.lastKnockdownAt;
       const hp = p.parts.head.translation();
       burstEstrelas(hp); powFx(hp); som.bolada(); som.vozChoro(VOZES[l.slot]);
+      if (state === 'luta' || online) som.narrar('nocaute', { prioridade: 0 });
       trauma = 1; hitStop = Math.max(hitStop, 0.1);
       if (state === 'luta') considerarHighlight(l, 'ko', false); // candidato a melhor jogada
     }
