@@ -64,6 +64,11 @@ function criarAneisTime() {
     scene.add(anel);
     l._anelTime = anel;
     aneisTime.push(anel);
+    // sombra simples (círculo escuro) — só aparece quando a qualidade automática
+    // desliga as sombras de verdade; sem ela o boneco parece flutuar
+    const blob = new THREE.Mesh(new THREE.CircleGeometry(0.38, 20), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.32, depthWrite: false }));
+    blob.rotation.x = -Math.PI / 2; blob.renderOrder = -1; scene.add(blob);
+    l._sombraBlob = blob; aneisTime.push(blob);
   }
 }
 // Dificuldade dos bots: reação, agressividade e mira mudam com o nível.
@@ -203,7 +208,47 @@ if (USA_BLOOM) {
   smaaPass = new SMAAPass(innerWidth, innerHeight); // anti-serrilhado (bordas limpas)
   composer.addPass(smaaPass);
 }
-function renderCena() { if (composer) composer.render(); else r3.render(scene, camera); }
+function renderCena() { if (composer && qualidade.nivel < 3) composer.render(); else r3.render(scene, camera); }
+
+// ---------- 📉 QUALIDADE AUTOMÁTICA ----------
+// Celular/notebook fraco: mede o tempo médio de quadro durante o jogo e, se ficar
+// lento de forma CONTÍNUA (média > ~21 ms por 1,5 s), desce UM degrau e espera 2 s
+// antes de avaliar de novo. Nunca sobe (evita ficar piscando entre níveis).
+//   0 cheio · 1 resolução ≤1,5× · 2 sem sombras (quase dobra o FPS) · 3 sem bloom/grade/SMAA · 4 resolução 1×
+// ?qualidade=N força um nível. Toque (celular) já começa no 1.
+const qualidade = { nivel: 0, ema: 16.7, lentoDesde: -1, esperaAte: 0 };
+function aplicarQualidade(n) {
+  qualidade.nivel = Math.max(0, Math.min(4, n));
+  const dpr = Math.min(devicePixelRatio, qualidade.nivel >= 4 ? 1 : qualidade.nivel >= 1 ? 1.5 : 2);
+  r3.setPixelRatio(dpr); composer?.setPixelRatio(dpr);
+  r3.setSize(innerWidth, innerHeight); composer?.setSize(innerWidth, innerHeight);
+  // sem o composer quem faz o tone map é o próprio renderer
+  r3.toneMapping = THREE.ACESFilmicToneMapping;
+  const sombra = qualidade.nivel < 2;
+  if (r3.shadowMap.enabled !== sombra) {
+    r3.shadowMap.enabled = sombra;
+    scene.traverse((o) => { if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => { m.needsUpdate = true; }); });
+  }
+}
+{
+  const q = parseInt(PARAMS.get('qualidade'), 10);
+  if (Number.isFinite(q)) { aplicarQualidade(q); qualidade.fixa = true; }
+  else if (matchMedia('(pointer: coarse)').matches) aplicarQualidade(1);
+}
+function vigiarQualidade(fdt, agoraMs, jogando) {
+  if (qualidade.fixa || qualidade.nivel >= 4 || !jogando) { qualidade.lentoDesde = -1; return; }
+  const ms = Math.min(fdt * 1000, 100);
+  qualidade.ema += (ms - qualidade.ema) * 0.08;
+  if (agoraMs < qualidade.esperaAte) return;
+  if (qualidade.ema > 21) {
+    if (qualidade.lentoDesde < 0) qualidade.lentoDesde = agoraMs;
+    else if (agoraMs - qualidade.lentoDesde > 1500) {
+      aplicarQualidade(qualidade.nivel + 1);
+      window.__wobQ = qualidade.nivel; console.log('qualidade automática → nível', qualidade.nivel, '(média', qualidade.ema.toFixed(1), 'ms)');
+      qualidade.lentoDesde = -1; qualidade.esperaAte = agoraMs + 2000; qualidade.ema = 18;
+    }
+  } else qualidade.lentoDesde = -1;
+}
 
 addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight;
@@ -211,6 +256,7 @@ addEventListener('resize', () => {
   r3.setSize(innerWidth, innerHeight);
   composer?.setSize(innerWidth, innerHeight);
   bloomPass?.setSize(innerWidth, innerHeight);
+  if (qualidade.nivel) aplicarQualidade(qualidade.nivel);
   smaaPass?.setSize(innerWidth, innerHeight);
 });
 
@@ -5509,6 +5555,7 @@ const _v3cam = new THREE.Vector3(); // rascunho da câmera de replay
 function frame(t) {
   requestAnimationFrame(frame);
   const fdt = Math.min((t - last) / 1000, 0.1);
+  vigiarQualidade(fdt, t, state === 'luta' && hitStop <= 0);
   last = t;
 
   if (online) {
@@ -5782,6 +5829,13 @@ function frame(t) {
       const pt = p.parts.pelvis.translation();
       l._anelTime.position.set(pt.x, Math.max(0.04, pt.y - 0.9), pt.z); // acompanha pisos altos (gangorra, palanque)
       l._anelTime.visible = l.vivo && pt.y > -1.5;
+      if (l._sombraBlob) {
+        // encolhe e clareia com a altura (pulo), some sem chão
+        const alt = Math.max(0, pt.y - 0.95), k = Math.max(0.35, 1 - alt * 0.45);
+        l._sombraBlob.position.set(pt.x, 0.03, pt.z); l._sombraBlob.scale.setScalar(k);
+        l._sombraBlob.material.opacity = 0.32 * k;
+        l._sombraBlob.visible = qualidade.nivel >= 2 && pt.y > -1.5;
+      }
     }
     // 🧭 Manômetro do SOCÃO: pressão subindo sobre a cabeça enquanto carrega
     // (vale pros bots também — dá pra ver o pancadão vindo e esquivar!)
@@ -5938,7 +5992,7 @@ function frame(t) {
     spread = Math.min(Math.hypot(maxX - minX, maxZ - minZ), 12);
   }
   if (PARAMS.has('debug') && lutadores[0]) {
-    window.__wob ??= { get lutadores() { return lutadores; } }; // medição (testes)
+    window.__wob ??= { get lutadores() { return lutadores; }, r3, scene }; // medição (testes)
     const q = lutadores[0].rag.parts.pelvis.rotation();
     const yawQ = (r) => Math.atan2(2 * (r.x * r.z + r.w * r.y), 1 - 2 * (r.x * r.x + r.y * r.y)).toFixed(2);
     const d = $('debug');
