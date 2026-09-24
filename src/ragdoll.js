@@ -780,7 +780,16 @@ export class Ragdoll {
           mot(`pelvis>thigh${s1}`, SIMB.qApoio, SIMB.kQ);             // quadril de apoio
           mot(`thigh${s1}>calf${s1}`, SIMB.jApoio, SIMB.kJ);          // joelho de apoio estende
         } else {
-          for (const l of ['L', 'R']) { mot(`pelvis>thigh${l}`, 0, SIMB.kQ); mot(`thigh${l}>calf${l}`, SIMB.jApoio, SIMB.kJ); }
+          if (AJUSTES.fisica === 'nova' && MUSC.vida > 0) {
+            // parado: base de lutador (uma perna à frente) quicando nos joelhos — não fica estátua
+            const q = (0.5 + 0.5 * Math.sin((this._now ?? 0) * 5.5 + this.spawn.x)) * 0.22 * MUSC.vida;
+            for (const l of ['L', 'R']) {
+              const base = l === 'L' ? -0.14 : 0.1;
+              mot(`pelvis>thigh${l}`, base - q * 0.6, SIMB.kQ); mot(`thigh${l}>calf${l}`, SIMB.jApoio + q, SIMB.kJ);
+            }
+          } else {
+            for (const l of ['L', 'R']) { mot(`pelvis>thigh${l}`, 0, SIMB.kQ); mot(`thigh${l}>calf${l}`, SIMB.jApoio, SIMB.kJ); }
+          }
         }
         this.gaitT += dt * (andando ? clamp(vel * 7.2, 5, 20) : 0); // ritmo dos braços
         // Braços balançam no ritmo da passada (fase oposta à perna do mesmo lado)
