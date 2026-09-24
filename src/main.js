@@ -3330,6 +3330,13 @@ function aplicarClasse(rag, meshes) {
   let mul = 1; // fator de tração (agilidade)
   if (/kaiju/i.test(nome)) { rag.forcaSoco = 1.3; rag.resistencia = 1.45; mul = 0.9; }
   else if (/jaeger/i.test(nome)) { mul = 1.08; }
+  // Lutadores gerados no Meshy: cada um com uma identidade (mesmos 3 botões)
+  else if (/rochedo/i.test(nome)) { rag.forcaSoco = 1.2; rag.resistencia = 1.6; mul = 0.82; }  // TANQUE
+  else if (/gelado/i.test(nome)) { rag.resistencia = 1.15; if ((mapa.controle ?? 1) < 0.6) mul = 1.7; } // pé no gelo
+  else if (/brasa/i.test(nome)) { rag.forcaSoco = 1.35; rag.resistencia = 0.9; }               // soco de fogo
+  else if (/prisma/i.test(nome)) { rag.forcaSoco = 0.9; rag.resistencia = 0.88; mul = 1.18; }  // relâmpago
+  else if (/barao/i.test(nome)) { rag.forcaSoco = 1.15; rag.resistencia = 1.2; mul = 0.95; }   // peso-pesado
+  else if (/capitao/i.test(nome)) { rag.forcaSoco = 1.06; rag.resistencia = 1.06; mul = 1.04; } // equilibrado
   rag.controle = (mapa.controle ?? 1) * mul * (AJUSTES.turbo || 1); // recalcula do zero (sem acumular)
 }
 
@@ -4037,7 +4044,7 @@ function trocarSkin(i, dir) {
 
 const ROTULO_J = ['P1', 'P2', 'P3', 'P4'];
 const CORES_J = ['#ff5252', '#40a0ff', '#ffd94a', '#7ed957'];
-const CLASSE_SKIN = { jaeger: 'ÁGIL ⚡', kaiju: 'BRUTAMONTES 💪' };
+const CLASSE_SKIN = { jaeger: 'ÁGIL ⚡', kaiju: 'BRUTAMONTES 💪', rochedo: 'TANQUE 🪨', gelado: 'PÉ NO GELO ❄️', brasa: 'SOCO DE FOGO 🔥', prisma: 'RELÂMPAGO 💎', barao: 'PESO-PESADO 🦈', capitao: 'EQUILIBRADO 🐙' };
 function atualizarSelecao() {
   // Cards do elenco (um por fantasia jogável) com os "cursores" dos jogadores em cima
   MENU_SKINS.forEach((skinIdx, k) => {
