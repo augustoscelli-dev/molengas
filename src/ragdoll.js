@@ -127,7 +127,8 @@ const poseBraco = (lado, frente, abre) => qMul(qEixo(0, 0, 1, lado === 'L' ? -ab
 export const MUSC = {
   coluna: { kp: 38, kd: 4.5, max: 45 },   // mais mole: tronco balança (70 deixava o boneco duro como estátua)
   pescoco: { kp: 9, kd: 1.1, max: 12 },    // cabeça bamboleia
-  vida: 1,            // amplitude do balanço da guarda/ociosidade (0 = pose fixa)
+  vida: 0.5,          // balanço dos braços na guarda/parado (1 atrapalhava a mira: acertos dos bots caíam ~40%)
+  vidaPerna: 1,       // amplitude da base quicando nos joelhos quando parado
   ombro: { kp: 26, kd: 2.6, max: 30 },
   ombroSoco: { kp: 80, kd: 4.5, max: 70 },
   cotovelo: 260,      // rigidez do motor da dobradiça (900 travava o braço)
@@ -780,9 +781,9 @@ export class Ragdoll {
           mot(`pelvis>thigh${s1}`, SIMB.qApoio, SIMB.kQ);             // quadril de apoio
           mot(`thigh${s1}>calf${s1}`, SIMB.jApoio, SIMB.kJ);          // joelho de apoio estende
         } else {
-          if (AJUSTES.fisica === 'nova' && MUSC.vida > 0) {
+          if (AJUSTES.fisica === 'nova' && MUSC.vidaPerna > 0) {
             // parado: base de lutador (uma perna à frente) quicando nos joelhos — não fica estátua
-            const q = (0.5 + 0.5 * Math.sin((this._now ?? 0) * 5.5 + this.spawn.x)) * 0.22 * MUSC.vida;
+            const q = (0.5 + 0.5 * Math.sin((this._now ?? 0) * 5.5 + this.spawn.x)) * 0.22 * MUSC.vidaPerna;
             for (const l of ['L', 'R']) {
               const base = l === 'L' ? -0.14 : 0.1;
               mot(`pelvis>thigh${l}`, base - q * 0.6, SIMB.kQ); mot(`thigh${l}>calf${l}`, SIMB.jApoio + q, SIMB.kJ);
